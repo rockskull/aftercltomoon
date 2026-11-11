@@ -9,6 +9,7 @@ import {
   formatWon,
   isFirstJoin,
   normalizeEmail,
+  priceFor,
   parsePrivate,
   toMember,
   toMembership,
@@ -177,7 +178,7 @@ export function planApplication(
   const ops: Op[] = [];
 
   if (existing) {
-    // joined_at is part of the check: the joining-fee decision must still hold when this is written.
+    // joined_at is part of the check: the first-time-price decision must still hold when this is written.
     checks.push({
       type: "exists",
       table: "Members",
@@ -209,9 +210,8 @@ export function planApplication(
     });
   }
 
-  // First registration pays the one-time joining fee on top of the plan (one deposit, one total).
-  const joiningFee = isFirstJoin(club, existing) ? club.settings.joiningFee : 0;
-  const amount = plan.price + joiningFee;
+  // Someone's very first membership uses the plan's first-time price (1개월: 100,000 → after that 80,000).
+  const { amount, firstPriceApplied } = priceFor(plan, isFirstJoin(club, existing));
 
   const paymentId = newId("PAY", ctx.now);
   const payment: Row = {
@@ -219,7 +219,7 @@ export function planApplication(
     member_id: memberId,
     depositor_name: ctx.input.depositorName,
     amount,
-    joining_fee: joiningFee,
+    first_join: firstPriceApplied,
     plan_id: plan.id,
     status: "pending",
     requested_at: seoulIso(ctx.now),
@@ -241,14 +241,14 @@ export function planApplication(
   const heads = notifyOperators(data, ctx, {
     type: "op_payment_pending",
     title: "입금 확인 대기",
-    body: `${ctx.input.name}(${ctx.input.depositorName}) · ${plan.name} ${formatWon(amount)}${joiningFee ? " (가입비 포함)" : ""}`,
+    body: `${ctx.input.name}(${ctx.input.depositorName}) · ${plan.name} ${formatWon(amount)}${firstPriceApplied ? " (첫 등록)" : ""}`,
     url: "/admin/payments",
     key: `op_payment_pending:${paymentId}`,
   });
   checks.push(...heads.checks);
   ops.push(...heads.ops);
 
-  return { commit: { id: commitId, checks, ops }, result: { paymentId, memberId, amount, joiningFee } };
+  return { commit: { id: commitId, checks, ops }, result: { paymentId, memberId, amount, firstPriceApplied } };
 }
 
 /** An existing member (e.g. registered before the site) confirms they submitted the 회원 등록 동의서. */
@@ -817,7 +817,7 @@ export function planMarkRead(data: Tables, ctx: Ctx & { memberId: string }): Pla
 
 /** Tables each operation needs to read. */
 export const NEEDS = {
-  application: ["Members", "Plans", "Payments", "Memberships", "Notifications", "Settings"],
+  application: ["Members", "Plans", "Payments", "Memberships", "Notifications"],
   approval: ["Members", "Plans", "Payments", "Memberships", "Notifications"],
   payments: ["Payments", "Memberships", "Notifications"],
   membership: ["Memberships"],

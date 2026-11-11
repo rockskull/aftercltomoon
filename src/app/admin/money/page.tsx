@@ -71,7 +71,7 @@ async function Money({ searchParams }: Pick<PageProps<"/admin/money">, "searchPa
       {/* Headline figures (whole history) */}
       <section aria-label="요약" className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="지금 남은 돈" value={overall.balance} hero />
-        <Stat label="총 수입" value={overall.income} note="출자금 · 회비 · 가입비 등" />
+        <Stat label="총 수입" value={overall.income} note="출자금 · 회비 · 일일 이용료 등" />
         <Stat label="총 지출" value={overall.expense} note={`보증금 포함 · 운영비 ${formatWon(overall.operatingExpense)}`} />
         <Stat label="보증금 (돌려받을 돈)" value={overall.refundable} note="계약 종료 시 반환" />
       </section>
@@ -87,7 +87,7 @@ async function Money({ searchParams }: Pick<PageProps<"/admin/money">, "searchPa
             </div>
           </ActionForm>
           <p className="mt-3 text-[12px] text-ink-soft">
-            회비와 가입비는 입금 승인 때 자동으로 수입에 잡혀요. 여기에는 출자금, 일일 이용료, 모든 지출을 적어 주세요.
+            회비는 입금 승인 때 자동으로 수입에 잡혀요. 여기에는 출자금, 일일 이용료, 모든 지출을 적어 주세요.
           </p>
         </Box>
 

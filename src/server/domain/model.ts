@@ -29,6 +29,8 @@ export interface Plan {
   id: string;
   name: string;
   price: number;
+  /** Price for a person's very first membership; 0 = same as `price`. */
+  firstPrice: number;
   durationMonths: number;
   bonusMonths: number;
   active: boolean;
@@ -40,10 +42,10 @@ export interface Payment {
   id: string;
   memberId: string;
   depositorName: string;
-  /** Total to deposit (plan price + joining fee). */
+  /** Amount expected for this membership. */
   amount: number;
-  /** Part of `amount` that is the one-time joining fee (0 if none). */
-  joiningFee: number;
+  /** The first-membership price (Plans.first_price) was applied. */
+  firstJoin: boolean;
   planId: string;
   status: PaymentStatus;
   requestedAt: string;
@@ -118,11 +120,7 @@ export interface ClubSettings {
   applyNotice: string;
   sheetUrl: string;
   consent: ConsentLinks;
-  /** One-time fee added to a member's first application (Settings: joining_fee, 0 = none). */
-  joiningFee: number;
 }
-
-export const DEFAULT_JOINING_FEE = 100_000;
 
 export const DEFAULT_APPLY_NOTICE =
   "회비와 납부 방법은 회원 등록 동의서와 크루 단톡방 안내를 확인해 주세요. 운영진이 확인하면 회원권이 시작되고 알림을 보내드려요.";
@@ -178,6 +176,7 @@ export function toPlan(r: Row): Plan {
     id: text(r.plan_id),
     name: text(r.name),
     price: num(r.price),
+    firstPrice: Math.max(0, num(r.first_price)),
     durationMonths: Math.max(0, Math.round(num(r.duration_months))),
     bonusMonths: Math.max(0, Math.round(num(r.bonus_months))),
     active: bool(r.active, true),
@@ -192,7 +191,7 @@ export function toPayment(r: Row): Payment {
     memberId: text(r.member_id),
     depositorName: text(r.depositor_name),
     amount: num(r.amount),
-    joiningFee: num(r.joining_fee),
+    firstJoin: bool(r.first_join, false),
     planId: text(r.plan_id),
     status: oneOf(r.status, ["pending", "matched", "approved", "rejected", "refunded"] as const, "pending"),
     requestedAt: text(r.requested_at),
@@ -299,22 +298,23 @@ export function toSettings(rows: Row[] | undefined): ClubSettings {
       daily: consentUrl(map.get("consent_daily_url"), CONSENT_DEFAULTS.daily),
       member: consentUrl(map.get("consent_member_url"), CONSENT_DEFAULTS.member),
     },
-    joiningFee: joiningFeeOf(map.get("joining_fee")),
   };
-}
-
-function joiningFeeOf(value: string | undefined): number {
-  if (value === undefined || value.trim() === "") return DEFAULT_JOINING_FEE;
-  const n = Number(value.replace(/[,\s원]/g, ""));
-  if (!Number.isFinite(n)) return DEFAULT_JOINING_FEE;
-  return Math.max(0, Math.round(n));
 }
 
 /**
  * True until the person has ever been a member: no join date, no approved
  * payment and no valid membership. Members registered before the site only
- * need a joined_at in the sheet to never be charged the joining fee.
+ * need a joined_at in the sheet to never get the first-membership price.
  */
+/**
+ * What a membership costs. Someone's first membership uses the plan's
+ * first_price when it has one (e.g. 1개월: first time 100,000, after that 80,000).
+ */
+export function priceFor(plan: Pick<Plan, "price" | "firstPrice">, firstJoin: boolean): { amount: number; firstPriceApplied: boolean } {
+  if (firstJoin && plan.firstPrice > 0) return { amount: plan.firstPrice, firstPriceApplied: true };
+  return { amount: plan.price, firstPriceApplied: false };
+}
+
 export function isFirstJoin(club: Pick<ClubPrivate, "payments" | "memberships">, member: Member | null | undefined): boolean {
   if (!member) return true;
   if (member.joinedAt) return false;

@@ -51,8 +51,9 @@ function baseTables(): Tables {
   return {
     Members: [member("OP", "op@x.dev", "active", "operator"), member("NEW", "new@x.dev", "applicant"), member("OLD", "old@x.dev")],
     Plans: [
-      { plan_id: "1M", name: "1개월", price: 80000, duration_months: 1, bonus_months: 0, active: true, sort_order: 1, description: "" },
-      { plan_id: "6M", name: "6개월", price: 500000, duration_months: 6, bonus_months: 1, active: true, sort_order: 2, description: "" },
+      // 1개월: 100,000 the very first time, 80,000 after that. 6개월 has no first-time price.
+      { plan_id: "1M", name: "1개월", price: 80000, first_price: 100000, duration_months: 1, bonus_months: 0, active: true, sort_order: 1, description: "" },
+      { plan_id: "6M", name: "6개월", price: 500000, first_price: "", duration_months: 6, bonus_months: 1, active: true, sort_order: 2, description: "" },
     ],
     Payments: [payment("P-NEW", "NEW", "1M", 80000), payment("P-OLD-A", "OLD", "1M", 80000), payment("P-OLD-B", "OLD", "6M", 500000)],
     Memberships: [
@@ -203,8 +204,8 @@ describe("application", () => {
     const fresh = club.members.find((m) => m.email === "fresh@x.dev")!;
     expect(fresh.status).toBe("applicant");
     expect(fresh.consentAt).toBe("2026-11-11T12:00:00+09:00");
-    // First registration: 1개월 80,000 + 가입비 100,000 in one deposit.
-    expect(club.payments.find((p) => p.memberId === fresh.id)).toMatchObject({ status: "pending", amount: 180000, joiningFee: 100000 });
+    // First membership: the 1개월 first-time price (100,000), not 80,000 + a fee.
+    expect(club.payments.find((p) => p.memberId === fresh.id)).toMatchObject({ status: "pending", amount: 100000, firstJoin: true });
     expect(club.notifications.filter((n) => n.type === "op_payment_pending").map((n) => n.memberId)).toEqual(["OP"]);
 
     const again = planApplication(store.tables, { now: NOW, actorId: "", email: "fresh@x.dev", input: input(true) });
@@ -227,10 +228,10 @@ describe("application", () => {
     if ("refuse" in confirm) throw new Error(confirm.refuse);
     expect(applyCommit(t, confirm.commit)).toEqual({ ok: true });
     expect(t.AuditLog!.at(-1)).toMatchObject({ action: "member.consent", target_id: "OLD" });
-    // Now an extension goes through without the checkbox, and without a joining fee.
+    // Now an extension goes through without the checkbox, at the regular price.
     const ext = planApplication(t, { now: NOW, actorId: "OLD", email: "old@x.dev", input: input(false) });
     if (!("commit" in ext)) throw new Error("expected a commit");
-    expect(ext.result).toMatchObject({ amount: 80000, joiningFee: 0 });
+    expect(ext.result).toMatchObject({ amount: 80000, firstPriceApplied: false });
     expect(planMemberConsent(t, { now: NOW, actorId: "OLD", memberId: "OLD" })).toEqual({ refuse: "이미 제출을 확인했어요." });
   });
 });
@@ -271,23 +272,32 @@ describe("ledger", () => {
   });
 });
 
-describe("joining fee", () => {
-  const input = { name: "회원", depositorName: "입금자", planId: "6M", requestedStart: null, consentConfirmed: true };
-  const result = (t: Tables, email: string) => {
-    const planned = planApplication(t, { now: NOW, actorId: "", email, input });
+describe("first-time price", () => {
+  const result = (t: Tables, email: string, planId: string) => {
+    const planned = planApplication(t, {
+      now: NOW,
+      actorId: "",
+      email,
+      input: { name: "회원", depositorName: "입금자", planId, requestedStart: null, consentConfirmed: true },
+    });
     if (!("commit" in planned)) throw new Error("refused" in planned ? planned.refuse : "no commit");
-    return planned.result as { amount: number; joiningFee: number };
+    return planned.result as { amount: number; firstPriceApplied: boolean };
   };
 
-  it("is charged until the person has ever been approved", () => {
+  it("first 1개월 is 100,000; a plan without a first-time price keeps its price", () => {
     const t = baseTables();
-    // NEW is an applicant whose earlier request was rejected: still a first join.
-    t.Payments = t.Payments!.map((p) => (p.payment_id === "P-NEW" ? { ...p, status: "rejected" } : p));
-    t.Members = t.Members!.map((m) => (m.member_id === "NEW" ? { ...m, member_consent_at: "2026-11-10T10:00:00+09:00" } : m));
-    expect(result(t, "new@x.dev")).toEqual(expect.objectContaining({ amount: 600000, joiningFee: 100000 }));
+    expect(result(t, "first@x.dev", "1M")).toEqual(expect.objectContaining({ amount: 100000, firstPriceApplied: true }));
+    expect(result(baseTables(), "first6@x.dev", "6M")).toEqual(expect.objectContaining({ amount: 500000, firstPriceApplied: false }));
   });
 
-  it("is never charged to members who joined before the site (joined_at or an existing membership)", () => {
+  it("still applies to someone never approved (e.g. an earlier request was rejected)", () => {
+    const t = baseTables();
+    t.Payments = t.Payments!.map((p) => (p.payment_id === "P-NEW" ? { ...p, status: "rejected" } : p));
+    t.Members = t.Members!.map((m) => (m.member_id === "NEW" ? { ...m, member_consent_at: "2026-11-10T10:00:00+09:00" } : m));
+    expect(result(t, "new@x.dev", "1M")).toEqual(expect.objectContaining({ amount: 100000, firstPriceApplied: true }));
+  });
+
+  it("from the second membership on, 1개월 is 80,000 — also for members who joined before the site", () => {
     const t = baseTables();
     t.Payments = [];
     t.Members = [
@@ -295,16 +305,23 @@ describe("joining fee", () => {
       { member_id: "L2", name: "L2", email: "l2@x", status: "active", role: "member", joined_at: "", member_consent_at: "x" },
     ];
     t.Memberships = [{ membership_id: "ML2", member_id: "L2", plan_id: "1M", start_date: "2026-01-01", end_date: "2026-01-31", status: "active" }];
-    expect(result(t, "l1@x").joiningFee).toBe(0);
-    expect(result(t, "l2@x").joiningFee).toBe(0);
+    expect(result(t, "l1@x", "1M")).toEqual(expect.objectContaining({ amount: 80000, firstPriceApplied: false }));
+    expect(result(t, "l2@x", "1M")).toEqual(expect.objectContaining({ amount: 80000, firstPriceApplied: false }));
   });
 
-  it("follows the Settings tab (other amount, or 0 to turn it off)", () => {
+  it("after the first approval, the next 1개월 is 80,000", () => {
     const t = baseTables();
-    t.Settings = [{ key: "joining_fee", value: "50,000" }];
-    expect(result(t, "a@x.dev")).toEqual(expect.objectContaining({ amount: 550000, joiningFee: 50000 }));
-    t.Settings = [{ key: "joining_fee", value: 0 }];
-    expect(result(t, "b@x.dev")).toEqual(expect.objectContaining({ amount: 500000, joiningFee: 0 }));
+    const first = planApplication(t, {
+      now: NOW,
+      actorId: "",
+      email: "fresh@x.dev",
+      input: { name: "새 회원", depositorName: "새", planId: "1M", requestedStart: null, consentConfirmed: true },
+    });
+    if (!("commit" in first)) throw new Error("no commit");
+    applyCommit(t, first.commit);
+    const paymentId = (first.result as { paymentId: string }).paymentId;
+    applyCommit(t, commitOf(planApproval(t, { now: NOW, actorId: "OP", paymentId })));
+    expect(result(t, "fresh@x.dev", "1M")).toEqual(expect.objectContaining({ amount: 80000, firstPriceApplied: false }));
   });
 });
 

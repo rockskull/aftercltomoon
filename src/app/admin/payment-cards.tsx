@@ -38,7 +38,7 @@ export function PendingPaymentCard({ payment, club, todayKey }: { payment: Payme
           <p className="text-[13px] text-ink-soft">
             입금자명 <strong className="text-midnight">{payment.depositorName}</strong> · {plan?.name ?? payment.planId} ·{" "}
             <span className="font-mono font-semibold text-midnight">{formatWon(payment.amount)}</span>
-            {payment.joiningFee > 0 && <span> (가입비 {formatWon(payment.joiningFee)} 포함)</span>}
+            {payment.firstJoin && <span> (첫 등록 가격)</span>}
           </p>
           <p className="font-mono text-[11px] text-ink-soft">
             {payment.id} · 신청 {when(payment.requestedAt)}
@@ -107,7 +107,7 @@ export function ApprovedPaymentRow({ payment, club }: { payment: Payment; club: 
           <strong className="text-midnight">{member?.name ?? payment.memberId}</strong>{" "}
           <span className="text-ink-soft">
             {club.plans.find((p) => p.id === payment.planId)?.name} · {formatWon(payment.amount)}
-            {payment.joiningFee > 0 && " (가입비 포함)"}
+            {payment.firstJoin && " (첫 등록)"}
           </span>
         </span>
         <span className="font-mono text-[12px] text-ink-soft">

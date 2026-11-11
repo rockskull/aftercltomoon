@@ -4,7 +4,7 @@
  * Two sources, never double-counted:
  *  - Ledger tab: everything entered by the crew (출자금, 일일 이용료, all expenses…)
  *  - Payments tab: approved membership deposits are income automatically
- *    (split into 회비 and 가입비), so nobody types them twice.
+ *    (category 회비), so nobody types them twice.
  */
 
 export const INCOME_CATEGORIES = ["출자금", "일일 이용료", "이벤트 참가비", "기타 수입"] as const;
@@ -21,7 +21,7 @@ export const EXPENSE_CATEGORIES = [
   "기타 지출",
 ] as const;
 /** Categories filled automatically from approved payments (not selectable by hand). */
-export const AUTO_INCOME_CATEGORIES = ["회비", "가입비"] as const;
+export const AUTO_INCOME_CATEGORIES = ["회비"] as const;
 export const METHODS = ["모임통장", "개인 결제", "현금", "기타"] as const;
 
 /** 보증금 comes back when the lease ends: shown apart from running costs. */
@@ -60,26 +60,27 @@ export interface PaymentLike {
   id: string;
   memberId: string;
   amount: number;
-  joiningFee: number;
+  firstJoin: boolean;
   planId: string;
   status: string;
   depositedAt: string;
   approvedAt: string;
 }
 
-/** Approved deposits as income lines: one for the plan (회비), one for the joining fee (가입비). */
+/** Approved deposits as income lines (category 회비); refunded or pending ones don't count. */
 export function entriesFromPayments(
   payments: PaymentLike[],
   names: { member: (id: string) => string; plan: (id: string) => string },
 ): MoneyEntry[] {
-  const out: MoneyEntry[] = [];
-  for (const p of payments) {
-    if (p.status !== "approved" || p.amount <= 0) continue;
-    const date = p.depositedAt || p.approvedAt.slice(0, 10);
-    const fee = Math.min(Math.max(p.joiningFee, 0), p.amount);
-    const base = {
-      date,
+  return payments
+    .filter((p) => p.status === "approved" && p.amount > 0)
+    .map((p) => ({
+      id: `${p.id}:fee`,
+      date: p.depositedAt || p.approvedAt.slice(0, 10),
       kind: "income" as const,
+      category: "회비",
+      description: `${names.plan(p.planId)} 회원권${p.firstJoin ? " (첫 등록)" : ""}`,
+      amount: p.amount,
       person: names.member(p.memberId),
       method: "모임통장",
       receiptUrl: "",
@@ -88,15 +89,7 @@ export function entriesFromPayments(
       paymentId: p.id,
       memberId: p.memberId,
       voided: false,
-    };
-    if (p.amount - fee > 0) {
-      out.push({ ...base, id: `${p.id}:fee`, category: "회비", description: `${names.plan(p.planId)} 회원권`, amount: p.amount - fee });
-    }
-    if (fee > 0) {
-      out.push({ ...base, id: `${p.id}:join`, category: "가입비", description: "첫 등록 가입비", amount: fee });
-    }
-  }
-  return out;
+    }));
 }
 
 export interface CategoryTotal {

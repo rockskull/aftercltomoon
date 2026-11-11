@@ -6,10 +6,12 @@ import { ArrowRight, buttonPrimary, buttonSecondary, cn } from "@/components/ui"
 import { submitProposal } from "./actions";
 import { initialProposalState, MAX_FEE, TEXT_FIELDS, type ProposalField } from "./proposal";
 
+type Defaults = Partial<Record<"proposer" | "contact", string>>;
+
 /** Remounting with a new key gives a fresh form after "send another idea". */
-export function ProposalForm() {
+export function ProposalForm({ defaults = {} }: { defaults?: Defaults }) {
   const [round, setRound] = useState(0);
-  return <ProposalFormRound key={round} onAnother={() => setRound((r) => r + 1)} />;
+  return <ProposalFormRound key={round} defaults={defaults} onAnother={() => setRound((r) => r + 1)} />;
 }
 
 const FIELDS_WITH_HINT = new Set<ProposalField>(["contact"]);
@@ -17,7 +19,7 @@ const FIELDS_WITH_HINT = new Set<ProposalField>(["contact"]);
 const inputClass =
   "block w-full rounded-md border-2 border-midnight/25 bg-ivory px-3.5 py-3 text-[16px] leading-snug text-midnight placeholder:text-ink-soft/55 transition-colors focus:border-midnight focus:outline-none aria-[invalid=true]:border-brown";
 
-function ProposalFormRound({ onAnother }: { onAnother: () => void }) {
+function ProposalFormRound({ onAnother, defaults }: { onAnother: () => void; defaults: Defaults }) {
   const [state, formAction, pending] = useActionState(submitProposal, initialProposalState);
   const values = state.values ?? {};
   const errors = state.fieldErrors ?? {};
@@ -73,7 +75,7 @@ function ProposalFormRound({ onAnother }: { onAnother: () => void }) {
   });
   const text = (name: keyof typeof TEXT_FIELDS) => ({
     ...field(name),
-    defaultValue: values[name] ?? "",
+    defaultValue: values[name] ?? (name === "proposer" || name === "contact" ? defaults[name] : undefined) ?? "",
     maxLength: TEXT_FIELDS[name].max,
     required: TEXT_FIELDS[name].required,
   });

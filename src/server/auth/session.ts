@@ -2,6 +2,7 @@ import "server-only";
 import { jwtVerify, SignJWT, type JWTPayload } from "jose";
 import { cookies } from "next/headers";
 import { storeMode } from "../store";
+import { OAUTH_COOKIE, SESSION_COOKIE } from "./cookie-names";
 
 /**
  * Session = a signed JWT in an httpOnly cookie. It only says *who* signed in
@@ -21,8 +22,7 @@ export interface SessionClaims {
 
 const SESSION_DAYS = 30;
 const secure = process.env.NODE_ENV === "production";
-export const SESSION_COOKIE = secure ? "__Host-acm_session" : "acm_session";
-export const OAUTH_COOKIE = secure ? "__Host-acm_oauth" : "acm_oauth";
+export { OAUTH_COOKIE, SESSION_COOKIE };
 
 function secretKey(): Uint8Array {
   const secret = process.env.AUTH_SECRET;

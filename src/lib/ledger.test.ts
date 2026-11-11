@@ -63,18 +63,19 @@ describe("club money summary", () => {
 describe("membership deposits as income", () => {
   const names = { member: (id: string) => `회원${id}`, plan: () => "1개월" };
 
-  it("splits an approved deposit into 회비 and 가입비, and skips anything not approved", () => {
+  it("counts approved deposits as 회비 (first-time price included as is) and skips anything not approved", () => {
     const lines = entriesFromPayments(
       [
-        { id: "P1", memberId: "1", amount: 180_000, joiningFee: 100_000, planId: "1M", status: "approved", depositedAt: "2026-11-11", approvedAt: "" },
-        { id: "P2", memberId: "2", amount: 80_000, joiningFee: 0, planId: "1M", status: "pending", depositedAt: "", approvedAt: "" },
-        { id: "P3", memberId: "3", amount: 80_000, joiningFee: 0, planId: "1M", status: "refunded", depositedAt: "2026-11-01", approvedAt: "" },
+        { id: "P1", memberId: "1", amount: 100_000, firstJoin: true, planId: "1M", status: "approved", depositedAt: "2026-11-11", approvedAt: "" },
+        { id: "P4", memberId: "1", amount: 80_000, firstJoin: false, planId: "1M", status: "approved", depositedAt: "2026-12-11", approvedAt: "" },
+        { id: "P2", memberId: "2", amount: 80_000, firstJoin: false, planId: "1M", status: "pending", depositedAt: "", approvedAt: "" },
+        { id: "P3", memberId: "3", amount: 80_000, firstJoin: false, planId: "1M", status: "refunded", depositedAt: "2026-11-01", approvedAt: "" },
       ],
       names,
     );
-    expect(lines.map((l) => [l.category, l.amount, l.person, l.date])).toEqual([
-      ["회비", 80_000, "회원1", "2026-11-11"],
-      ["가입비", 100_000, "회원1", "2026-11-11"],
+    expect(lines.map((l) => [l.category, l.amount, l.description, l.date])).toEqual([
+      ["회비", 100_000, "1개월 회원권 (첫 등록)", "2026-11-11"],
+      ["회비", 80_000, "1개월 회원권", "2026-12-11"],
     ]);
     expect(summarize(lines).income).toBe(180_000);
   });

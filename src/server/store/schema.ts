@@ -16,13 +16,14 @@ export const TABLES = {
     "member_consent_at",
     "memo",
   ],
-  Plans: ["plan_id", "name", "price", "duration_months", "bonus_months", "active", "sort_order", "description"],
+  /** first_price: price for someone's very first membership (empty = same as price). */
+  Plans: ["plan_id", "name", "price", "first_price", "duration_months", "bonus_months", "active", "sort_order", "description"],
   Payments: [
     "payment_id",
     "member_id",
     "depositor_name",
     "amount",
-    "joining_fee",
+    "first_join",
     "plan_id",
     "status",
     "requested_at",

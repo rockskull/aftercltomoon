@@ -28,8 +28,8 @@ var TABLES = {
     'review_status', 'review_notes'],
   Members: ['member_id', 'name', 'email', 'depositor_name', 'role', 'status', 'applied_at', 'joined_at',
     'member_consent_at', 'memo'],
-  Plans: ['plan_id', 'name', 'price', 'duration_months', 'bonus_months', 'active', 'sort_order', 'description'],
-  Payments: ['payment_id', 'member_id', 'depositor_name', 'amount', 'joining_fee', 'plan_id', 'status', 'requested_at',
+  Plans: ['plan_id', 'name', 'price', 'first_price', 'duration_months', 'bonus_months', 'active', 'sort_order', 'description'],
+  Payments: ['payment_id', 'member_id', 'depositor_name', 'amount', 'first_join', 'plan_id', 'status', 'requested_at',
     'requested_start', 'deposited_at', 'bank_transaction_id', 'approved_by', 'approved_at', 'note'],
   Memberships: ['membership_id', 'member_id', 'plan_id', 'start_date', 'end_date', 'status', 'source_payment_id',
     'created_at', 'updated_at', 'note'],
@@ -239,7 +239,8 @@ function findIndex_(t, id) {
 function setupSheets() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ss.setSpreadsheetTimeZone(TZ);
-  Object.keys(TABLES).forEach(function (name) { ensureSheet_(ss, name, TABLES[name]); });
+  var added = {};
+  Object.keys(TABLES).forEach(function (name) { added[name] = ensureSheet_(ss, name, TABLES[name]); });
 
   dropdown_(ss, 'Events', 'visibility', ['public', 'private']);
   dropdown_(ss, 'Events', 'status', ['draft', 'published', 'closed', 'canceled']);
@@ -254,13 +255,24 @@ function setupSheets() {
   dropdown_(ss, 'Ledger', 'method', ['모임통장', '개인 결제', '현금', '기타']);
   dropdown_(ss, 'Ledger', 'status', ['active', 'void']);
 
+  // Plans: first_price is the price of someone's very first membership (1개월: 100,000, then 80,000).
   var plans = ss.getSheetByName('Plans');
+  var planSeed = [
+    { plan_id: 'PLAN-1M', name: '1개월', price: 80000, first_price: 100000, duration_months: 1, bonus_months: 0, active: true, sort_order: 1, description: '한 달 동안 이용' },
+    { plan_id: 'PLAN-6M', name: '6개월', price: 500000, first_price: '', duration_months: 6, bonus_months: 1, active: true, sort_order: 2, description: '6개월 + 보너스 1개월' },
+    { plan_id: 'PLAN-12M', name: '12개월', price: 1000000, first_price: '', duration_months: 12, bonus_months: 2, active: true, sort_order: 3, description: '12개월 + 보너스 2개월' },
+  ];
   if (plans.getLastRow() < 2) {
-    plans.getRange(2, 1, 3, 8).setValues([
-      ['PLAN-1M', '1개월', 80000, 1, 0, true, 1, '한 달 동안 이용'],
-      ['PLAN-6M', '6개월', 500000, 6, 1, true, 2, '6개월 + 보너스 1개월'],
-      ['PLAN-12M', '12개월', 1000000, 12, 2, true, 3, '12개월 + 보너스 2개월'],
-    ]);
+    planSeed.forEach(function (p) { plans.appendRow(rowFor_(plans, p)); });
+  } else if (added.Plans.indexOf('first_price') !== -1) {
+    // The column was just added to an existing Plans tab: give the 1-month plan its first-time price.
+    var data = plans.getDataRange().getValues();
+    var hdr = data[0].map(function (h) { return String(h).trim(); });
+    var idCol = hdr.indexOf('plan_id');
+    var fpCol = hdr.indexOf('first_price');
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][idCol]).trim() === 'PLAN-1M' && data[i][fpCol] === '') plans.getRange(i + 1, fpCol + 1).setValue(100000);
+    }
   }
   // Settings: add any key that is missing (existing values are never overwritten).
   var settings = ss.getSheetByName('Settings');
@@ -268,7 +280,6 @@ function setupSheets() {
     ['apply_notice', '회비와 납부 방법은 회원 등록 동의서와 크루 단톡방 안내를 확인해 주세요. 운영진이 확인하면 회원권이 시작되고 알림을 보내드려요.',
       '회원권 신청 후 안내 문구 (계좌번호·금액은 넣지 않기)'],
     ['sheet_url', ss.getUrl(), '운영진용 스프레드시트 링크'],
-    ['joining_fee', 100000, '첫 등록 가입비 (원, 0이면 없음)'],
     ['consent_daily_url', 'https://forms.gle/voZyWWAKs8gUAv949', '일일 이용 동의서 (Google 설문)'],
     ['consent_member_url', 'https://forms.gle/m1ZoK1xUvmktA1kT7', '회원 등록 동의서 (Google 설문)'],
   ];
@@ -353,17 +364,24 @@ function lower_(v) {
   return text_(v).trim().toLowerCase();
 }
 
+/** Creates the tab or appends missing header columns. Returns the headers it added. */
 function ensureSheet_(ss, name, headers) {
   var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
   if (sheet.getLastRow() === 0) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
     sheet.setFrozenRows(1);
-    return sheet;
+    return headers.slice();
   }
   var current = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
   var missing = headers.filter(function (h) { return current.indexOf(h) === -1; });
   if (missing.length) sheet.getRange(1, current.length + 1, 1, missing.length).setValues([missing]).setFontWeight('bold');
-  return sheet;
+  return missing;
+}
+
+/** A row for appendRow, laid out by the sheet's own header order. */
+function rowFor_(sheet, record) {
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+  return headers.map(function (h) { return record[h] === undefined ? '' : record[h]; });
 }
 
 function dropdown_(ss, name, header, options) {

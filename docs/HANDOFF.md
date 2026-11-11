@@ -9,7 +9,7 @@
 |---|---|
 | 사이트 | https://aftercltomoon.vercel.app — **데모 모드** (시트 미연결, 데모 계정으로 회원·운영진 화면 확인 가능) |
 | 코드 | GitHub `rockskull/aftercltomoon` `main` · Vercel이 연결되어 **push하면 자동 배포** |
-| 완료 | 캘린더·이벤트·제안서, Google 로그인 코드, 회원권 기간 계산, 입금 승인, 거래내역 매칭, 알림, PWA, 관리 화면, 동의서, 가입비, 회계 장부, 사이트 결제 요청 제거 |
+| 완료 | 캘린더·이벤트·제안서(로그인 필요), Google 로그인 코드, 회원권 기간 계산, 첫 등록 가격(1개월 10만 원), 입금 승인, 거래내역 매칭, 알림, PWA, 관리 화면, 동의서, 회계 장부, 사이트 결제 요청 제거 |
 | 남은 일 | ① Apps Script로 시트 연결 ② Google 로그인 설정 ③ Vercel 환경변수 ④ 데이터 채우기 |
 
 ---
@@ -50,8 +50,9 @@ npm run dev                                   # http://localhost:3000 (데모 �
 
 | 탭 | 넣을 것 |
 |---|---|
-| **Settings** | `sheet_url`(이 시트 주소) · `joining_fee`(100000, 0이면 없음) · `apply_notice`(신청 후 안내 문구, **계좌번호·금액은 넣지 않기**) · 동의서 주소(기본값 있음) |
-| **Members** | 첫 운영진 한 줄 + 기존 회원. `member_id`는 겹치지 않게(예: `M-001`), `email`은 **Google 로그인 메일**, `role`(member/operator/admin), `status`=`active`, **`joined_at`(가입일)은 꼭** — 비어 있으면 첫 신청 때 가입비가 붙습니다. 동의서를 이미 받았다면 `member_consent_at`에 날짜 |
+| **Settings** | `sheet_url`(이 시트 주소) · `apply_notice`(신청 후 안내 문구, **계좌번호·금액은 넣지 않기**) · 동의서 주소(기본값 있음). 예전 템플릿의 `joining_fee` 행이 있다면 지워도 됩니다(더 이상 쓰지 않음) |
+| **Plans** | `first_price` 열 확인: `PLAN-1M`에 **100000**(처음 등록하는 사람의 1개월권 가격), 나머지는 비워 두기. `setupSheets`가 이 열을 새로 만들 때 1개월권에 자동으로 채워요 |
+| **Members** | 첫 운영진 한 줄 + 기존 회원. `member_id`는 겹치지 않게(예: `M-001`), `email`은 **Google 로그인 메일**, `role`(member/operator/admin), `status`=`active`, **`joined_at`(가입일)은 꼭** — 비어 있으면 첫 신청 때 1개월권이 첫 등록 가격(10만 원)으로 잡힙니다. 동의서를 이미 받았다면 `member_consent_at`에 날짜 |
 | **Memberships** | 기존 회원의 현재 이용 기간: `membership_id`(예: `MS-001`), `member_id`, `plan_id`(`PLAN-1M`/`PLAN-6M`/`PLAN-12M`), `start_date`, `end_date`, `status`=`active` |
 | **Ledger** | `private/ledger-import.xlsx`의 내용을 2행부터 붙여넣기. "계약비"를 보증금으로 분류했고 출자금 날짜는 첫 지출일로 넣었으니 확인 |
 | **Events / Enrollment** | 일정. `status`=`published`, Events는 `visibility`=`public`이어야 공개 |

@@ -69,7 +69,7 @@ export function demoTables(now = Date.now()): Tables {
     member_id: memberId,
     depositor_name: depositor,
     amount,
-    joining_fee: 0,
+    first_join: false,
     plan_id: planId,
     status: "approved",
     requested_at: `${date}T09:00:00+09:00`,
@@ -111,9 +111,9 @@ export function demoTables(now = Date.now()): Tables {
       member("M-DEMO-SUA", "수아", "sua@aftermoon.dev", "김수아", "member", "applicant", ""),
     ],
     Plans: [
-      { plan_id: "PLAN-1M", name: "1개월", price: 80000, duration_months: 1, bonus_months: 0, active: true, sort_order: 1, description: "한 달 동안 이용" },
-      { plan_id: "PLAN-6M", name: "6개월", price: 500000, duration_months: 6, bonus_months: 1, active: true, sort_order: 2, description: "6개월 + 보너스 1개월" },
-      { plan_id: "PLAN-12M", name: "12개월", price: 1000000, duration_months: 12, bonus_months: 2, active: true, sort_order: 3, description: "12개월 + 보너스 2개월" },
+      { plan_id: "PLAN-1M", name: "1개월", price: 80000, first_price: 100000, duration_months: 1, bonus_months: 0, active: true, sort_order: 1, description: "한 달 동안 이용" },
+      { plan_id: "PLAN-6M", name: "6개월", price: 500000, first_price: "", duration_months: 6, bonus_months: 1, active: true, sort_order: 2, description: "6개월 + 보너스 1개월" },
+      { plan_id: "PLAN-12M", name: "12개월", price: 1000000, first_price: "", duration_months: 12, bonus_months: 2, active: true, sort_order: 3, description: "12개월 + 보너스 2개월" },
     ],
     Payments: [
       approved("PAY-DEMO-ADMIN", "M-DEMO-ADMIN", "문운영", 1000000, "PLAN-12M", "2026-01-05"),
@@ -125,8 +125,8 @@ export function demoTables(now = Date.now()): Tables {
         payment_id: "PAY-DEMO-SUA",
         member_id: "M-DEMO-SUA",
         depositor_name: "김수아",
-        amount: 180000, // first registration: 1개월 80,000 + 가입비 100,000
-        joining_fee: 100000,
+        amount: 100000, // first membership: 1개월 first-time price (80,000 from the second time)
+        first_join: true,
         plan_id: "PLAN-1M",
         status: "pending",
         requested_at: at(-1, "21:10"),
@@ -188,7 +188,6 @@ export function demoTables(now = Date.now()): Tables {
         description: "회원권 신청 후 안내 문구 (계좌번호·금액은 넣지 않기)",
       },
       { key: "sheet_url", value: "", description: "운영진용 스프레드시트 링크" },
-      { key: "joining_fee", value: 100000, description: "첫 등록 가입비 (원, 0이면 없음)" },
       { key: "consent_daily_url", value: "https://forms.gle/voZyWWAKs8gUAv949", description: "일일 이용 동의서 (Google 설문)" },
       { key: "consent_member_url", value: "https://forms.gle/m1ZoK1xUvmktA1kT7", description: "회원 등록 동의서 (Google 설문)" },
     ],

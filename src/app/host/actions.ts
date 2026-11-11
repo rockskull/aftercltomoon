@@ -2,6 +2,7 @@
 
 import { updateTag } from "next/cache";
 import { after } from "next/server";
+import { readSession } from "@/server/auth/session";
 import { NEEDS, planProposal } from "@/server/domain/operations";
 import { deliverDue } from "@/server/notify";
 import { PRIVATE_TAG, runCommit, storeMode } from "@/server/store";
@@ -22,6 +23,12 @@ function echo(formData: FormData): Record<string, string> {
  * proposal is ever published; the public feed only reads Events / Enrollment.
  */
 export async function submitProposal(_prev: ProposalFormState, formData: FormData): Promise<ProposalFormState> {
+  // Signed-in people only. Checked here too: the page check alone could be bypassed by posting directly.
+  const session = await readSession();
+  if (!session) {
+    return { status: "error", message: "로그인이 필요해요. 로그인한 뒤 다시 제출해 주세요.", values: echo(formData) };
+  }
+
   // Honeypot: real visitors never see or fill this field.
   const honeypot = formData.get("website");
   if (typeof honeypot === "string" && honeypot.trim() !== "") {
@@ -49,9 +56,9 @@ export async function submitProposal(_prev: ProposalFormState, formData: FormDat
     storeMode() === "demo" ? { ...parsed.data, contact: "(데모 모드: 저장하지 않음)" } : { ...parsed.data };
 
   try {
-    const outcome = await runCommit(NEEDS.proposalSubmit, (data) =>
-      planProposal(data, { now: Date.now(), actorId: "visitor", payload }),
-    );
+    // The audit log records who proposed (the account); the demo keeps no real identity.
+    const actorId = storeMode() === "demo" ? "visitor" : session.email;
+    const outcome = await runCommit(NEEDS.proposalSubmit, (data) => planProposal(data, { now: Date.now(), actorId, payload }));
     if (!outcome.ok) throw new Error(outcome.message);
     updateTag(PRIVATE_TAG);
     after(() => deliverDue(Date.now()).catch((e) => console.error("[notify] immediate delivery failed", e)));

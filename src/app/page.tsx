@@ -205,6 +205,7 @@ function ProposeInvite() {
           Propose an event
           <ArrowRight />
         </Link>
+        <p className="mt-3 text-[13px] text-cream/60">로그인한 뒤 제안할 수 있어요.</p>
       </div>
     </section>
   );
