@@ -90,7 +90,8 @@ Vercel → `aftercltomoon` → **Settings → Environment Variables** → 환경
 - [ ] `/admin/money` 잔액 = 678,492원 + 이후 승인한 회비
 - [ ] **알림** 화면에서 푸시 켜기 (Android Chrome, iPhone은 홈 화면에 설치한 앱에서)
 - [ ] 크론 수동 호출: `curl -H "Authorization: Bearer <CRON_SECRET>" https://aftercltomoon.vercel.app/api/cron/notifications` → `{"ok":true,...}`
-- [ ] Events 탭에 이벤트를 하나 넣고 1~2분 뒤 캘린더에 보인다
+- [x] Events 탭에 이벤트를 하나 넣고 1~2분 뒤 캘린더에 보인다 (2026-11-11 개관식으로 확인)
+- [ ] **ADMIN → 이벤트**에서 이벤트를 등록·수정하면 캘린더에 바로 보인다
 
 ## 막힐 때
 

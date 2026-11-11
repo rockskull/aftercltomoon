@@ -4,6 +4,9 @@ import { normalizeFeed } from "./normalize";
 import { buildSampleData } from "./sample-data";
 import type { ClubData } from "./types";
 
+/** Cache tag of the public schedule feed; editing an event in the admin clears it. */
+export const CLUB_FEED_TAG = "club-feed";
+
 /**
  * The current time for this request. Statuses (OPEN, CLOSED, …) depend on it,
  * so it opts the caller into request-time rendering instead of the static shell.
@@ -46,7 +49,7 @@ export async function getClubData(): Promise<ClubData> {
 async function fetchClubFeed(url: string): Promise<unknown> {
   "use cache: remote";
   cacheLife({ stale: 60, revalidate: 60, expire: 60 * 60 });
-  cacheTag("club-feed");
+  cacheTag(CLUB_FEED_TAG);
 
   const res = await fetch(url, {
     headers: { accept: "application/json" },

@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 import { applyCommit, type Commit } from "../store/commit";
 import { MemoryStore } from "../store/memory";
 import type { Row, Tables } from "../store/schema";
+import type { EventInput } from "./event-input";
 import { parsePrivate } from "./model";
 import {
+  EVENT_CHANGED,
   planApplication,
   planApproval,
   planCancelApproval,
+  planEventCreate,
+  planEventEdit,
   planLedgerAdd,
   planLedgerEdit,
   planLedgerVoid,
@@ -300,5 +304,59 @@ describe("joining fee", () => {
     expect(result(t, "a@x.dev")).toEqual(expect.objectContaining({ amount: 550000, joiningFee: 50000 }));
     t.Settings = [{ key: "joining_fee", value: 0 }];
     expect(result(t, "b@x.dev")).toEqual(expect.objectContaining({ amount: 500000, joiningFee: 0 }));
+  });
+});
+
+describe("events", () => {
+  const input: EventInput = {
+    title: "개관식", short_title: "", description: "", category: "community", start_at: "2026-11-21T16:00:00+09:00", end_at: "",
+    registration_open: "", registration_close: "", capacity: "", public_fee: "", registration_url: "", host: "운영진",
+    audience: "", location: "", notes: "", visibility: "public", status: "published",
+  };
+  const commit = (p: ReturnType<typeof planEventCreate>) => {
+    if (!("commit" in p)) throw new Error("refuse" in p ? p.refuse : "noop");
+    return p.commit;
+  };
+  const created = () => {
+    const t = baseTables();
+    t.Events = [];
+    expect(applyCommit(t, commit(planEventCreate(t, { now: NOW, actorId: "OP", input })))).toEqual({ ok: true });
+    return { t, id: String(t.Events[0].event_id), base: String(t.Events[0].updated_at) };
+  };
+
+  it("creates a row with an id and version, and edits only what changed — all audited", () => {
+    const { t, id, base } = created();
+    expect(id).toMatch(/^EV-261111-/);
+    expect(t.Events![0]).toMatchObject({ title: "개관식", updated_at: "2026-11-11T12:00:00+09:00" });
+
+    const later = NOW + 60_000;
+    const edit = commit(planEventEdit(t, { now: later, actorId: "OP", eventId: id, base, input: { ...input, location: "크루 공간" } }));
+    expect(edit.ops[0]).toEqual({
+      type: "update",
+      table: "Events",
+      id,
+      set: { location: "크루 공간", updated_at: "2026-11-11T12:01:00+09:00" },
+    });
+    expect(applyCommit(t, edit)).toEqual({ ok: true });
+    expect(planEventEdit(t, { now: later, actorId: "OP", eventId: id, base: "2026-11-11T12:01:00+09:00", input: { ...input, location: "크루 공간" } })).toEqual({
+      refuse: "바뀐 내용이 없어요.",
+    });
+    expect(t.AuditLog!.map((r) => r.action)).toEqual(["event.create", "event.edit"]);
+  });
+
+  it("refuses a form opened before someone else's change (no silent overwrite)", () => {
+    const { t, id, base } = created();
+    // Someone edits the row in the sheet: the onEdit trigger bumps updated_at.
+    t.Events![0].host = "세팅 팀";
+    t.Events![0].updated_at = "2026-11-11T12:05:00+09:00";
+    expect(planEventEdit(t, { now: NOW, actorId: "OP", eventId: id, base, input: { ...input, title: "개관 파티" } })).toEqual({ refuse: EVENT_CHANGED });
+  });
+
+  it("an edit planned before a concurrent save is rejected under the lock", () => {
+    const { t, id, base } = created();
+    const stale = commit(planEventEdit(t, { now: NOW + 1000, actorId: "OP", eventId: id, base, input: { ...input, title: "A" } }));
+    applyCommit(t, commit(planEventEdit(t, { now: NOW + 2000, actorId: "OP", eventId: id, base, input: { ...input, title: "B" } })));
+    expect(applyCommit(t, stale)).toMatchObject({ ok: false, error: "conflict" });
+    expect(t.Events![0].title).toBe("B");
   });
 });

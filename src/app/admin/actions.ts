@@ -7,11 +7,16 @@ import { deliverDue } from "@/server/notify";
 import { operatorForAction } from "@/server/auth/viewer";
 import { matchDeposits, parseBankFile, type DepositMatch } from "@/server/domain/bank";
 import { parsePrivate, type Membership, type Role } from "@/server/domain/model";
+import { CLUB_FEED_TAG } from "@/lib/club-data";
 import { AUTO_INCOME_CATEGORIES, kindOf, METHODS } from "@/lib/ledger";
+import { isPublicEvent, parseEventForm } from "@/server/domain/event-input";
 import {
+  EVENT_CHANGED,
   NEEDS,
   planApproval,
   planCancelApproval,
+  planEventCreate,
+  planEventEdit,
   planLedgerAdd,
   planLedgerEdit,
   planLedgerVoid,
@@ -235,6 +240,46 @@ export async function voidLedgerEntry(_prev: AdminState, fd: FormData): Promise<
     planLedgerVoid(data, { now: Date.now(), actorId: op.member.id, entryId: field(fd, "entry_id"), reason: field(fd, "reason") }),
   );
   return outcome.ok ? done("무효 처리했어요. 기록은 시트와 변경 이력에 남아요.") : { status: "error", message: outcome.message };
+}
+
+// ---------------------------------------------------------------------------
+// Events (calendar)
+// ---------------------------------------------------------------------------
+
+/** Also clears the public schedule cache so the calendar shows the change right away. */
+function eventDone(message: string): AdminState {
+  updateTag(CLUB_FEED_TAG);
+  return done(message);
+}
+
+export async function createEvent(_prev: AdminState, fd: FormData): Promise<AdminState> {
+  const op = await operatorForAction();
+  if (!op) return DENIED;
+  const parsed = parseEventForm((name) => field(fd, name));
+  if (!parsed.ok) return { status: "error", message: parsed.message };
+  const outcome = await runCommit(NEEDS.events, (data) => planEventCreate(data, { now: Date.now(), actorId: op.member.id, input: parsed.input }));
+  if (!outcome.ok) return { status: "error", message: outcome.message };
+  const shown = isPublicEvent(String(parsed.input.visibility), String(parsed.input.status));
+  return eventDone(shown ? `등록했어요. 사이트 캘린더에 보여요: ${parsed.input.title}` : `저장했어요. 아직 사이트에는 보이지 않아요: ${parsed.input.title}`);
+}
+
+export async function editEvent(_prev: AdminState, fd: FormData): Promise<AdminState> {
+  const op = await operatorForAction();
+  if (!op) return DENIED;
+  const parsed = parseEventForm((name) => field(fd, name));
+  if (!parsed.ok) return { status: "error", message: parsed.message };
+  const outcome = await runCommit(NEEDS.events, (data) =>
+    planEventEdit(data, { now: Date.now(), actorId: op.member.id, eventId: field(fd, "event_id"), base: field(fd, "base"), input: parsed.input }),
+  );
+  if (!outcome.ok) {
+    // The form was based on an older version: drop the cached view so the page reloads the latest.
+    if (outcome.message === EVENT_CHANGED) {
+      updateTag(PRIVATE_TAG);
+      refresh();
+    }
+    return { status: "error", message: outcome.message };
+  }
+  return eventDone("이벤트를 고쳤어요.");
 }
 
 export interface BankState {

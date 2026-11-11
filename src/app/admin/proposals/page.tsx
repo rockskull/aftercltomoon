@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { SiteFooter, SiteHeader } from "@/components/site";
 import { NotReady } from "@/components/ui";
@@ -30,7 +31,7 @@ const REVIEW = { new: "새 제안", reviewing: "검토 중", accepted: "진행 �
 
 async function Proposals() {
   if (storeMode() === "unconfigured") return <div className="mx-auto max-w-3xl px-4 py-10"><NotReady /></div>;
-  const { club, tables } = await requireOperator("/admin/proposals");
+  const { tables } = await requireOperator("/admin/proposals");
   const proposals = [...(tables.Proposals ?? [])].sort((a, b) => cellText(b.submitted_at).localeCompare(cellText(a.submitted_at)));
   const events = [...(tables.Events ?? [])].sort((a, b) => cellText(b.start_at).localeCompare(cellText(a.start_at))).slice(0, 30);
   const t = (v: unknown) => cellText(v as string).trim();
@@ -40,7 +41,7 @@ async function Proposals() {
       <div className="flex flex-col gap-6">
         <Box title={`이벤트 제안 ${proposals.length}건`}>
           <p className="mb-3 text-[13px] text-ink-soft">
-            제안자의 연락처와 희망 참가비는 운영진만 볼 수 있어요. 확정된 이벤트는 스프레드시트 Events 탭에 등록하면 캘린더에 올라가요.
+            제안자의 연락처와 희망 참가비는 운영진만 볼 수 있어요. 확정된 이벤트는 <Link href="/admin/events" className="font-bold text-midnight underline underline-offset-4">이벤트</Link> 탭에서 등록하면 캘린더에 올라가요.
           </p>
           {proposals.length === 0 ? (
             <p className="text-[14px] text-ink-soft">아직 받은 제안이 없어요.</p>
@@ -107,11 +108,9 @@ async function Proposals() {
         <Box
           title="이벤트 (시트 전체)"
           action={
-            club.settings.sheetUrl ? (
-              <a href={club.settings.sheetUrl} target="_blank" rel="noopener noreferrer" className="text-[13px] font-bold text-midnight underline underline-offset-4">
-                시트에서 편집
-              </a>
-            ) : undefined
+            <Link href="/admin/events" className="text-[13px] font-bold text-midnight underline underline-offset-4">
+              이벤트 관리
+            </Link>
           }
         >
           {events.length === 0 ? (

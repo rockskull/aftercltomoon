@@ -2,6 +2,7 @@ import { formatKeyKo, toDateKey } from "@/lib/dates";
 import { nextMembershipPeriod, overlapping, totalMonths } from "@/lib/membership";
 import { pickText, type Check, type Op } from "../store/commit";
 import { newId, seoulIso } from "../store/ids";
+import type { EventInput } from "./event-input";
 import { deliveryTime } from "./quiet";
 import { cellText, type Row, type TableName, type Tables } from "../store/schema";
 import {
@@ -665,6 +666,51 @@ export function planLedgerVoid(data: Tables, ctx: Ctx & { entryId: string; reaso
 }
 
 // ---------------------------------------------------------------------------
+// Operator: events (calendar)
+// ---------------------------------------------------------------------------
+
+export const EVENT_CHANGED = "그사이 이 이벤트가 바뀌었어요. 최신 내용을 다시 불러왔으니 확인하고 다시 저장해 주세요.";
+
+export function planEventCreate(_data: Tables, ctx: Ctx & { input: EventInput }): Planned {
+  const commitId = newId("C", ctx.now, 8);
+  const eventId = newId("EV", ctx.now);
+  const row: Row = { event_id: eventId, ...ctx.input, updated_at: seoulIso(ctx.now) };
+  return {
+    commit: {
+      id: commitId,
+      checks: [],
+      ops: [{ type: "append", table: "Events", row }, audit(ctx, commitId, "event.create", eventId, null, row)],
+    },
+    result: { eventId },
+  };
+}
+
+/**
+ * `base` is the row's updated_at when the form was opened. Every site edit and
+ * the sheet's onEdit trigger bump it, so a form opened before someone else's
+ * change is refused instead of writing its stale values back over theirs.
+ */
+export function planEventEdit(data: Tables, ctx: Ctx & { eventId: string; base: string; input: EventInput }): Planned {
+  const row = (data.Events ?? []).find((r) => cellText(r.event_id) === ctx.eventId);
+  if (!row) return { refuse: "이벤트를 찾을 수 없어요." };
+  if (cellText(row.updated_at) !== ctx.base) return { refuse: EVENT_CHANGED };
+  const changed = Object.fromEntries(Object.entries(ctx.input).filter(([k, v]) => cellText(row[k]) !== String(v))) as Row;
+  const fields = Object.keys(changed);
+  if (!fields.length) return { refuse: "바뀐 내용이 없어요." };
+  const commitId = newId("C", ctx.now, 8);
+  return {
+    commit: {
+      id: commitId,
+      checks: [{ type: "exists", table: "Events", id: ctx.eventId, fields: pickText(row, [...fields, "updated_at"]) }],
+      ops: [
+        { type: "update", table: "Events", id: ctx.eventId, set: { ...changed, updated_at: seoulIso(ctx.now) } },
+        audit(ctx, commitId, "event.edit", ctx.eventId, pickText(row, fields), changed),
+      ],
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Member: notification settings and devices
 // ---------------------------------------------------------------------------
 
@@ -768,6 +814,7 @@ export const NEEDS = {
   proposals: ["Proposals"],
   proposalSubmit: ["Members", "Notifications"],
   ledger: ["Ledger"],
+  events: ["Events"],
   prefs: ["NotificationPrefs"],
   subscriptions: ["PushSubscriptions"],
   notifications: ["Notifications"],
