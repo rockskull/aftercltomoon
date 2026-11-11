@@ -1,3 +1,7 @@
+/** @OnlyCurrentDoc */
+// ↑ Asks for access to this spreadsheet only (spreadsheets.currentonly), not every
+//   spreadsheet in the deploying account. The script never opens another file.
+
 /**
  * AFTER CL TO MOON — Google Sheets gateway (Apps Script, bound to the club spreadsheet)
  *
@@ -7,7 +11,7 @@
  *
  * The website server is the only caller of POST; the secret lives in Script
  * Properties (PROPOSAL_SECRET, same value as CLUB_API_SECRET on Vercel).
- * Setup: README.md → "Google Sheets 연결".
+ * Setup: README.md → "배포 순서". Optional 15-minute notification trigger: Tick.gs.
  */
 
 var TZ = 'Asia/Seoul';
@@ -275,26 +279,10 @@ function setupSheets() {
   });
 }
 
-/** Calls the website's notification scheduler. Installed by installTick(). */
-function tick() {
-  var props = PropertiesService.getScriptProperties();
-  var site = props.getProperty('SITE_URL');
-  var secret = props.getProperty('CRON_SECRET');
-  if (!site || !secret) return;
-  var res = UrlFetchApp.fetch(site.replace(/\/$/, '') + '/api/cron/notifications', {
-    headers: { Authorization: 'Bearer ' + secret },
-    muteHttpExceptions: true,
-  });
-  if (res.getResponseCode() !== 200) console.warn('tick ' + res.getResponseCode() + ' ' + res.getContentText().slice(0, 300));
-}
-
-/** Runs tick() every 15 minutes (optional; Vercel Cron already runs it daily). */
-function installTick() {
-  ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'tick') ScriptApp.deleteTrigger(t);
-  });
-  ScriptApp.newTrigger('tick').timeBased().everyMinutes(15).create();
-}
+// The optional 15-minute notification trigger (tick / installTick) lives in Tick.gs.
+// It is kept out of this file because calling the site and installing triggers add two
+// sensitive permissions, and Google can block authorizing an unverified script that asks
+// for them. (Apps Script scans comments too, so service names are not spelled out here.)
 
 /** Keeps Events.updated_at current when the crew edits a row (runs automatically as a simple trigger). */
 function onEdit(e) {

@@ -40,7 +40,7 @@ npm run dev                                   # http://localhost:3000 (데모 �
 4. **프로젝트 설정(톱니) → 스크립트 속성**에 `vercel-env.secret.txt` 2번 섹션의 3개를 넣습니다: `PROPOSAL_SECRET`, `CRON_SECRET`, `SITE_URL`
 5. **배포 → 새 배포 → 유형: 웹 앱** · 실행: **나** · 액세스: **모든 사용자** → 배포 → `/exec`로 끝나는 URL을 복사합니다.
 6. **확인:** 그 URL을 브라우저에서 열어 `{"ok":true, ... "events":[...]}` 같은 JSON이 보이면 성공입니다.
-7. (선택) **`installTick`** 실행 → 15분마다 알림 스케줄러를 호출합니다(신청 시작·마감 알림이 더 제때 나감).
+7. (선택) 편집기에서 **+ → 스크립트**로 `Tick` 파일을 만들고 `apps-script/Tick.gs`를 붙여넣은 뒤 **`installTick`** 실행 → 15분마다 알림 스케줄러를 호출합니다(신청 시작·마감 알림이 더 제때 나감). 권한 2개(외부 서비스 연결·사용자 부재 시 실행)가 더 필요해서 `Code.gs`와 분리했습니다. 승인이 차단되면 `Tick` 파일을 지우세요 — Vercel Cron이 하루 한 번은 돌립니다.
 
 > `Code.gs`를 고친 뒤에는 **배포 관리 → 수정(연필) → 버전: 새 버전 → 배포**. URL은 그대로 유지됩니다.
 
@@ -101,6 +101,8 @@ Vercel → `aftercltomoon` → **Settings → Environment Variables** → 환경
 | 로그인했는데 "미등록 계정" | Members `email`이 로그인한 Google 메일과 같은지 |
 | 관리 화면이 404 | Members `role`이 operator/admin이고 `status`가 active인지 |
 | "시트에 저장하지 못했어요" | `CLUB_API_URL`/`CLUB_API_SECRET`, Apps Script 액세스가 "모든 사용자"인지, `PROPOSAL_SECRET`이 같은지 |
+| `setupSheets` 승인 시 **"차단된 앱"** | ① 회사(Workspace) 계정은 관리자 정책이라 우회 불가 → 개인 계정 ② 시크릿 창에서 개인 계정 **하나만** 로그인(여러 계정이면 승인이 첫 계정으로 감) ③ `Code.gs` 1번 줄이 `/** @OnlyCurrentDoc */`이고 `Tick.gs`는 아직 넣지 않았는지 (개요 화면의 OAuth 범위가 스프레드시트 1개여야 함) |
+| "Google 계정 액세스가 필요합니다" 경고 | 승인 창을 끝까지 안 거친 것. 확인되지 않은 앱 → **고급 → 이동(안전하지 않음)**, 권한 체크박스는 **모두 선택** |
 | `missing columns … (run setupSheets)` | Apps Script에서 `setupSheets` 다시 실행 |
 | Vercel 배포가 Blocked | 커밋 메일이 `vmftidls@naver.com`인지 (`git log -1 --format=%ae`) |
 
