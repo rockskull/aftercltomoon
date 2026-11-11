@@ -3,27 +3,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { cn } from "./ui";
 
-export function CopyButton({ text, label = "복사" }: { text: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1800);
-        } catch {
-          setCopied(false);
-        }
-      }}
-      className="inline-flex h-9 items-center rounded-md border border-midnight/30 px-3 font-label text-[11px] font-semibold uppercase tracking-[0.14em] text-midnight hover:border-midnight"
-    >
-      <span aria-live="polite">{copied ? "복사됨" : label}</span>
-    </button>
-  );
-}
-
 type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
 function subscribeStandalone(cb: () => void) {

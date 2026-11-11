@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
-import { CopyButton, InstallHint } from "@/components/client-bits";
+import { InstallHint } from "@/components/client-bits";
 import { dotDate, MembershipCard, summarizeMembership } from "@/components/membership-card";
 import { SiteFooter, SiteHeader } from "@/components/site";
 import { ArrowRight, cn, NotReady } from "@/components/ui";
@@ -9,7 +9,7 @@ import { requestNow } from "@/lib/club-data";
 import { toDateKey } from "@/lib/dates";
 import { membershipPhase, totalMonths } from "@/lib/membership";
 import { isOperator, requireViewer } from "@/server/auth/viewer";
-import { formatWon, isFirstJoin, type Payment } from "@/server/domain/model";
+import type { Payment } from "@/server/domain/model";
 import { storeMode } from "@/server/store";
 import { ApplyForm, ConsentConfirm } from "./apply-form";
 
@@ -62,7 +62,6 @@ async function MyMembership() {
   const planName = (id: string) => club.plans.find((p) => p.id === id)?.name ?? id;
   const activePlans = club.plans.filter((p) => p.active);
   const inactive = member?.status === "inactive";
-  const joiningFee = isFirstJoin(club, member) ? club.settings.joiningFee : 0;
 
   return (
     <div className="flex flex-col gap-8">
@@ -81,7 +80,9 @@ async function MyMembership() {
 
       <MembershipCard member={member} summary={summary} />
 
-      {summary.pending && <DepositGuide payment={summary.pending} planName={planName(summary.pending.planId)} settings={club.settings} />}
+      {summary.pending && (
+        <ApplicationReceived payment={summary.pending} planName={planName(summary.pending.planId)} notice={club.settings.applyNotice} />
+      )}
 
       {member && summary.current && (
         <Panel title="이용 정보">
@@ -123,14 +124,13 @@ async function MyMembership() {
         (!member || member.consentAt) && (
           <Panel title={summary.phase === "active" || summary.phase === "scheduled" ? "회원권 연장 신청" : "회원권 신청"}>
             <p className="mb-5 text-[14px] leading-relaxed text-ink-soft">
-              신청 후 모임통장으로 회비를 보내 주세요. 운영진이 입금을 확인하면 회원권이 시작돼요.
+              신청하면 운영진에게 전달돼요. 회비와 납부 방법은 회원 등록 동의서와 크루 단톡방 안내를 따라 주세요. 운영진이 확인하면
+              회원권이 시작되고 알림을 보내드려요.
             </p>
             <ApplyForm
               plans={activePlans.map((p) => ({
                 id: p.id,
                 name: p.name,
-                priceLabel: formatWon(p.price),
-                totalLabel: joiningFee ? formatWon(p.price + joiningFee) : null,
                 totalMonths: totalMonths(p),
                 bonusMonths: p.bonusMonths,
                 description: p.description,
@@ -141,7 +141,6 @@ async function MyMembership() {
               needsName={!member}
               today={todayKey}
               consentUrl={member ? null : club.settings.consent.member}
-              joiningFeeLabel={joiningFee ? formatWon(joiningFee) : null}
             />
           </Panel>
         )
@@ -163,10 +162,7 @@ async function MyMembership() {
             ))}
             {myPayments.map((p) => (
               <li key={p.id} className="flex flex-wrap items-baseline justify-between gap-2 rounded-md border border-dashed border-midnight/20 px-3 py-2.5">
-                <span>
-                  {planName(p.planId)} · {formatWon(p.amount)}
-                  {p.joiningFee > 0 && <span className="ml-1 text-[12px] text-ink-soft">(가입비 포함)</span>}
-                </span>
+                <span>{planName(p.planId)} 회원권 신청</span>
                 <span className="text-[13px] text-ink-soft">
                   {PAYMENT_LABEL[p.status]}
                   {p.depositedAt && <span className="ml-1.5 font-mono">{dotDate(p.depositedAt)}</span>}
@@ -187,38 +183,26 @@ async function MyMembership() {
   );
 }
 
-function DepositGuide({ payment, planName, settings }: { payment: Payment; planName: string; settings: { bankName: string; accountNumber: string; accountHolder: string; depositNotice: string } }) {
+/**
+ * Shown after applying. Deliberately no account number and no amount: fees are
+ * announced in the crew chat / consent form, not requested on the site.
+ */
+function ApplicationReceived({ payment, planName, notice }: { payment: Payment; planName: string; notice: string }) {
   return (
-    <section aria-labelledby="deposit-title" className="rounded-lg border-2 border-midnight bg-butter-200/70 p-5 shadow-[4px_4px_0_0_var(--color-midnight)]">
-      <p className="font-label text-[11px] font-semibold uppercase tracking-[0.28em] text-brown">Deposit</p>
-      <h2 id="deposit-title" className="mt-1 text-[19px] font-extrabold text-midnight">
-        모임통장으로 회비를 보내 주세요
+    <section aria-labelledby="applied-title" className="rounded-lg border-2 border-midnight bg-butter-200/70 p-5 shadow-[4px_4px_0_0_var(--color-midnight)]">
+      <p className="font-label text-[11px] font-semibold uppercase tracking-[0.28em] text-brown">Application</p>
+      <h2 id="applied-title" className="mt-1 text-[19px] font-extrabold text-midnight">
+        회원권 신청이 접수됐어요
       </h2>
       <dl className="mt-4 grid grid-cols-[88px_minmax(0,1fr)] gap-x-3 gap-y-2.5 text-[15px]">
-        <dt className="text-ink-soft">입금 계좌</dt>
-        <dd className="text-midnight">
-          <span className="block text-[13px] text-ink-soft">{settings.bankName}</span>
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[17px] font-semibold">{settings.accountNumber || "운영진에게 문의"}</span>
-            {settings.accountNumber && <CopyButton text={settings.accountNumber.replace(/[^\d]/g, "")} label="계좌 복사" />}
-          </span>
-          {settings.accountHolder && <span className="block text-[13px] text-ink-soft">예금주 {settings.accountHolder}</span>}
-        </dd>
-        <dt className="text-ink-soft">금액</dt>
-        <dd className="text-midnight">
-          <span className="font-mono text-[17px] font-semibold">{formatWon(payment.amount)}</span>
-          <span className="block text-[13px] text-ink-soft">
-            {payment.joiningFee > 0
-              ? `${planName} ${formatWon(payment.amount - payment.joiningFee)} + 가입비 ${formatWon(payment.joiningFee)}`
-              : planName}
-          </span>
-        </dd>
-        <dt className="text-ink-soft">입금자명</dt>
+        <dt className="text-ink-soft">회원권</dt>
+        <dd className="font-semibold text-midnight">{planName}</dd>
+        <dt className="text-ink-soft">확인용 이름</dt>
         <dd className="font-semibold text-midnight">{payment.depositorName}</dd>
         <dt className="text-ink-soft">상태</dt>
         <dd className="text-midnight">{PAYMENT_LABEL[payment.status]}</dd>
       </dl>
-      {settings.depositNotice && <p className="mt-4 text-[13px] leading-relaxed text-brown">{settings.depositNotice}</p>}
+      {notice && <p className="mt-4 text-[13px] leading-relaxed text-brown">{notice}</p>}
     </section>
   );
 }

@@ -182,10 +182,11 @@ export function demoTables(now = Date.now()): Tables {
       ledger("LG-DEMO-10", day(-2), "식음료", "생수", 12_000),
     ],
     Settings: [
-      { key: "bank_name", value: "카카오뱅크 모임통장", description: "입금 안내에 표시" },
-      { key: "account_number", value: "3333-00-0000000", description: "입금 계좌번호 (예시)" },
-      { key: "account_holder", value: "애프터문", description: "예금주" },
-      { key: "deposit_notice", value: "입금자명은 신청할 때 적은 이름과 같게 보내 주세요. 운영진이 확인하면 회원권이 바로 시작돼요.", description: "입금 안내 문구" },
+      {
+        key: "apply_notice",
+        value: "회비와 납부 방법은 회원 등록 동의서와 크루 단톡방 안내를 확인해 주세요. 운영진이 확인하면 회원권이 시작되고 알림을 보내드려요.",
+        description: "회원권 신청 후 안내 문구 (계좌번호·금액은 넣지 않기)",
+      },
       { key: "sheet_url", value: "", description: "운영진용 스프레드시트 링크" },
       { key: "joining_fee", value: 100000, description: "첫 등록 가입비 (원, 0이면 없음)" },
       { key: "consent_daily_url", value: "https://forms.gle/voZyWWAKs8gUAv949", description: "일일 이용 동의서 (Google 설문)" },

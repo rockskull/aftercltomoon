@@ -261,10 +261,8 @@ function setupSheets() {
   // Settings: add any key that is missing (existing values are never overwritten).
   var settings = ss.getSheetByName('Settings');
   var defaults = [
-    ['bank_name', '카카오뱅크 모임통장', '입금 안내에 표시'],
-    ['account_number', '', '입금 계좌번호'],
-    ['account_holder', '', '예금주'],
-    ['deposit_notice', '입금자명은 신청할 때 적은 이름과 같게 보내 주세요.', '입금 안내 문구'],
+    ['apply_notice', '회비와 납부 방법은 회원 등록 동의서와 크루 단톡방 안내를 확인해 주세요. 운영진이 확인하면 회원권이 시작되고 알림을 보내드려요.',
+      '회원권 신청 후 안내 문구 (계좌번호·금액은 넣지 않기)'],
     ['sheet_url', ss.getUrl(), '운영진용 스프레드시트 링크'],
     ['joining_fee', 100000, '첫 등록 가입비 (원, 0이면 없음)'],
     ['consent_daily_url', 'https://forms.gle/voZyWWAKs8gUAv949', '일일 이용 동의서 (Google 설문)'],

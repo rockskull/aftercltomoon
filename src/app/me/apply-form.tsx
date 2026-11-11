@@ -4,12 +4,10 @@ import { useActionState, useState } from "react";
 import { ArrowUpRight, buttonPrimary, cn } from "@/components/ui";
 import { applyMembership, confirmMemberConsent, type ActionState } from "./actions";
 
+/** Plans are shown by period only: fees are announced off-site (crew chat / consent form). */
 export interface PlanOption {
   id: string;
   name: string;
-  priceLabel: string;
-  /** Plan + joining fee, shown on a first registration. */
-  totalLabel: string | null;
   totalMonths: number;
   bonusMonths: number;
   description: string;
@@ -26,7 +24,6 @@ export function ApplyForm({
   needsName,
   today,
   consentUrl,
-  joiningFeeLabel,
 }: {
   plans: PlanOption[];
   isExtension: boolean;
@@ -36,8 +33,6 @@ export function ApplyForm({
   today: string;
   /** Set when the member still has to submit the 회원 등록 동의서. */
   consentUrl: string | null;
-  /** Set on a first registration: the one-time joining fee, formatted. */
-  joiningFeeLabel: string | null;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(applyMembership, { status: "idle" });
   const values = state.values ?? {};
@@ -55,11 +50,6 @@ export function ApplyForm({
 
       <fieldset>
         <legend className="text-[15px] font-semibold text-midnight">회원권</legend>
-        {joiningFeeLabel && (
-          <p className="mt-1 text-[13px] leading-relaxed text-brown">
-            첫 등록이라 <strong className="font-semibold">가입비 {joiningFeeLabel}</strong>이 함께 청구돼요. 회원권 금액과 합쳐 한 번에 입금해 주세요.
-          </p>
-        )}
         <div className="mt-2 grid gap-2">
           {plans.map((plan) => (
             <label
@@ -79,14 +69,9 @@ export function ApplyForm({
               />
               <span className="flex-1">
                 <span className="block text-[16px] font-bold text-midnight">{plan.name}</span>
-                <span className="block text-[13px] text-ink-soft">
-                  총 {plan.totalMonths}개월 이용{plan.bonusMonths ? ` (보너스 ${plan.bonusMonths}개월 포함)` : ""}
-                </span>
+                {plan.description && <span className="block text-[13px] text-ink-soft">{plan.description}</span>}
               </span>
-              <span className="text-right">
-                <span className="block font-mono text-[15px] font-semibold text-midnight">{plan.totalLabel ?? plan.priceLabel}</span>
-                {plan.totalLabel && <span className="block text-[11px] text-ink-soft">{plan.priceLabel} + 가입비</span>}
-              </span>
+              <span className="whitespace-nowrap text-right font-mono text-[14px] font-semibold text-midnight">총 {plan.totalMonths}개월</span>
             </label>
           ))}
         </div>
@@ -106,7 +91,7 @@ export function ApplyForm({
           입금자명
         </label>
         <p id="depositor-hint" className="mt-1 text-[13px] text-ink-soft">
-          모임통장에 찍힐 이름이에요. 운영진이 이 이름으로 입금을 확인해요.
+          회비를 낼 때 쓰는 이름이에요. 운영진이 확인할 때 이 이름으로 찾아요.
         </p>
         <input
           id="depositor_name"

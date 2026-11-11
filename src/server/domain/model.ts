@@ -111,10 +111,11 @@ export interface NotificationPrefs {
 }
 
 export interface ClubSettings {
-  bankName: string;
-  accountNumber: string;
-  accountHolder: string;
-  depositNotice: string;
+  /**
+   * Shown to a member after applying. The site never shows an account number or
+   * an amount to members: fees are announced in the crew chat / consent form.
+   */
+  applyNotice: string;
   sheetUrl: string;
   consent: ConsentLinks;
   /** One-time fee added to a member's first application (Settings: joining_fee, 0 = none). */
@@ -122,6 +123,9 @@ export interface ClubSettings {
 }
 
 export const DEFAULT_JOINING_FEE = 100_000;
+
+export const DEFAULT_APPLY_NOTICE =
+  "회비와 납부 방법은 회원 등록 동의서와 크루 단톡방 안내를 확인해 주세요. 운영진이 확인하면 회원권이 시작되고 알림을 보내드려요.";
 
 const text = (v: Cell | undefined) => cellText(v).trim();
 
@@ -289,10 +293,7 @@ export function prefsFor(rows: Row[] | undefined, memberId: string): Notificatio
 export function toSettings(rows: Row[] | undefined): ClubSettings {
   const map = new Map((rows ?? []).map((r) => [text(r.key), text(r.value)]));
   return {
-    bankName: map.get("bank_name") || "카카오뱅크 모임통장",
-    accountNumber: map.get("account_number") || "",
-    accountHolder: map.get("account_holder") || "",
-    depositNotice: map.get("deposit_notice") || "",
+    applyNotice: map.get("apply_notice") || DEFAULT_APPLY_NOTICE,
     sheetUrl: map.get("sheet_url") || "",
     consent: {
       daily: consentUrl(map.get("consent_daily_url"), CONSENT_DEFAULTS.daily),
