@@ -257,10 +257,15 @@ export async function createEvent(_prev: AdminState, fd: FormData): Promise<Admi
   if (!op) return DENIED;
   const parsed = parseEventForm((name) => field(fd, name));
   if (!parsed.ok) return { status: "error", message: parsed.message };
-  const outcome = await runCommit(NEEDS.events, (data) => planEventCreate(data, { now: Date.now(), actorId: op.member.id, input: parsed.input }));
+  // Set when the form was opened from an accepted proposal (ADMIN → 제안 → 이벤트로 옮기기).
+  const fromProposal = field(fd, "proposal_id") || undefined;
+  const outcome = await runCommit(fromProposal ? NEEDS.eventFromProposal : NEEDS.events, (data) =>
+    planEventCreate(data, { now: Date.now(), actorId: op.member.id, input: parsed.input, fromProposal }),
+  );
   if (!outcome.ok) return { status: "error", message: outcome.message };
   const shown = isPublicEvent(String(parsed.input.visibility), String(parsed.input.status));
-  return eventDone(shown ? `등록했어요. 사이트 캘린더에 보여요: ${parsed.input.title}` : `저장했어요. 아직 사이트에는 보이지 않아요: ${parsed.input.title}`);
+  const what = fromProposal ? "제안을 이벤트로 옮겼어요." : "등록했어요.";
+  return eventDone(shown ? `${what} 사이트 캘린더에 보여요: ${parsed.input.title}` : `${what} 아직 사이트에는 보이지 않아요: ${parsed.input.title}`);
 }
 
 export async function editEvent(_prev: AdminState, fd: FormData): Promise<AdminState> {

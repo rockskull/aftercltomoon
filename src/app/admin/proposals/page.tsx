@@ -5,11 +5,12 @@ import { SiteFooter, SiteHeader } from "@/components/site";
 import { NotReady } from "@/components/ui";
 import { formatDateTimeKo, parseMoment } from "@/lib/dates";
 import { requireOperator } from "@/server/auth/viewer";
+import { eventIdForProposal } from "@/server/domain/event-input";
 import { cellText } from "@/server/store/schema";
 import { storeMode } from "@/server/store";
 import { reviewProposal } from "../actions";
 import { ActionForm } from "../admin-ui";
-import { AdminFrame, AdminSkeleton, Box, Pill, smallButton, smallInput } from "../shared";
+import { AdminFrame, AdminSkeleton, Box, Pill, smallButton, smallInput, smallPrimary } from "../shared";
 
 export const metadata: Metadata = { title: "제안·이벤트", robots: { index: false } };
 
@@ -32,6 +33,7 @@ const REVIEW = { new: "새 제안", reviewing: "검토 중", accepted: "진행 �
 async function Proposals() {
   if (storeMode() === "unconfigured") return <div className="mx-auto max-w-3xl px-4 py-10"><NotReady /></div>;
   const { tables } = await requireOperator("/admin/proposals");
+  const eventIds = new Set((tables.Events ?? []).map((r) => cellText(r.event_id)));
   const proposals = [...(tables.Proposals ?? [])].sort((a, b) => cellText(b.submitted_at).localeCompare(cellText(a.submitted_at)));
   const events = [...(tables.Events ?? [])].sort((a, b) => cellText(b.start_at).localeCompare(cellText(a.start_at))).slice(0, 30);
   const t = (v: unknown) => cellText(v as string).trim();
@@ -80,6 +82,22 @@ async function Proposals() {
                           </div>
                         ))}
                     </dl>
+                    {id && status === "accepted" && (
+                      <div className="mt-3">
+                        {eventIds.has(eventIdForProposal(id)) ? (
+                          <Link
+                            href={`/admin/events/${encodeURIComponent(eventIdForProposal(id))}`}
+                            className="text-[13px] font-bold text-midnight underline underline-offset-4"
+                          >
+                            이벤트로 옮겼어요 · 이벤트 보기
+                          </Link>
+                        ) : (
+                          <Link href={`/admin/events?from=${encodeURIComponent(id)}#new`} className={smallPrimary}>
+                            이벤트로 옮기기
+                          </Link>
+                        )}
+                      </div>
+                    )}
                     {id ? (
                       <ActionForm action={reviewProposal} className="mt-3 flex flex-wrap items-end gap-2">
                         <input type="hidden" name="proposal_id" value={id} />

@@ -1,5 +1,6 @@
 import { DAY_MS, formatTime, parseMoment, toDateKey } from "@/lib/dates";
 import { safeUrl } from "@/lib/normalize";
+import { cellText, type Row } from "../store/schema";
 
 /**
  * The admin event form ↔ the Events sheet row. Pure, so it is unit-tested.
@@ -35,6 +36,31 @@ export const EVENT_FIELDS = [
 ] as const;
 export type EventField = (typeof EVENT_FIELDS)[number];
 export type EventInput = Record<EventField, string | number>;
+
+/**
+ * An event made from a proposal takes an id derived from it ("PR-…" → "EV-PR-…"),
+ * so the proposal list can link to it and the same proposal can't become two events.
+ */
+export function eventIdForProposal(proposalId: string): string {
+  return `EV-${proposalId}`;
+}
+
+/**
+ * A proposal → starting values for the new-event form. The operator reviews
+ * them before saving: "희망 날짜" is free text ("12/13(토) 저녁"), so the date is
+ * only filled in when it is a plain date, and the fee is left for the crew to set.
+ */
+export function eventDraftFromProposal(p: Row): Row {
+  const t = (k: string) => cellText(p[k]).trim();
+  const date = parseMoment(t("preferred_date"));
+  return {
+    title: t("event_title").slice(0, 80),
+    description: t("description").slice(0, 2000),
+    host: (t("proposer") ? `멤버 제안 · ${t("proposer")}` : "멤버 제안").slice(0, 60),
+    audience: t("audience").slice(0, 80),
+    start_at: date ? (date.dateOnly ? toDateKey(date.ms) : t("preferred_date")) : "",
+  };
+}
 
 /** Shown on the public calendar: public and not a draft. */
 export function isPublicEvent(visibility: string, status: string): boolean {

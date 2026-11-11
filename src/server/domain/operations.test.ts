@@ -6,6 +6,7 @@ import type { EventInput } from "./event-input";
 import { parsePrivate } from "./model";
 import {
   EVENT_CHANGED,
+  PROPOSAL_ALREADY_EVENT,
   planApplication,
   planApproval,
   planCancelApproval,
@@ -358,5 +359,43 @@ describe("events", () => {
     applyCommit(t, commit(planEventEdit(t, { now: NOW + 2000, actorId: "OP", eventId: id, base, input: { ...input, title: "B" } })));
     expect(applyCommit(t, stale)).toMatchObject({ ok: false, error: "conflict" });
     expect(t.Events![0].title).toBe("B");
+  });
+});
+
+describe("event from a proposal", () => {
+  const input: EventInput = {
+    title: "LP 감상회", short_title: "", description: "", category: "music", start_at: "2026-12-13T19:00:00+09:00", end_at: "",
+    registration_open: "", registration_close: "", capacity: "", public_fee: "", registration_url: "", host: "멤버 제안 · 지민",
+    audience: "", location: "", notes: "", visibility: "public", status: "published",
+  };
+  const withProposal = () => {
+    const t = baseTables();
+    t.Events = [];
+    t.Proposals = [{ proposal_id: "PR-1", event_title: "LP 감상회", review_status: "accepted" }];
+    return t;
+  };
+
+  it("uses the proposal's id, and the same proposal can't become two events", () => {
+    const t = withProposal();
+    const first = planEventCreate(t, { now: NOW, actorId: "OP", input, fromProposal: "PR-1" });
+    if (!("commit" in first)) throw new Error("expected a commit");
+    expect(applyCommit(t, first.commit)).toEqual({ ok: true });
+    expect(t.Events![0].event_id).toBe("EV-PR-1");
+    expect(JSON.parse(String(t.AuditLog!.at(-1)!.after_value))).toMatchObject({ from_proposal: "PR-1" });
+    expect(planEventCreate(t, { now: NOW, actorId: "OP", input, fromProposal: "PR-1" })).toEqual({ refuse: PROPOSAL_ALREADY_EVENT });
+  });
+
+  it("two operators converting at once: the second is stopped under the lock", () => {
+    const t = withProposal();
+    const a = planEventCreate(t, { now: NOW, actorId: "OP", input, fromProposal: "PR-1" });
+    const b = planEventCreate(t, { now: NOW, actorId: "OP2", input, fromProposal: "PR-1" });
+    if (!("commit" in a) || !("commit" in b)) throw new Error("expected commits");
+    expect(applyCommit(t, a.commit)).toEqual({ ok: true });
+    expect(applyCommit(t, b.commit)).toMatchObject({ ok: false, error: "conflict" });
+    expect(t.Events).toHaveLength(1);
+  });
+
+  it("refuses an unknown proposal", () => {
+    expect(planEventCreate(withProposal(), { now: NOW, actorId: "OP", input, fromProposal: "PR-404" })).toEqual({ refuse: "제안을 찾을 수 없어요." });
   });
 });

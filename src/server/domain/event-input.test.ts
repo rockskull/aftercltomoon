@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeEvent } from "@/lib/normalize";
-import { isPublicEvent, joinMoment, parseEventForm, splitMoment } from "./event-input";
+import { eventDraftFromProposal, eventIdForProposal, isPublicEvent, joinMoment, parseEventForm, splitMoment } from "./event-input";
 
 const form = (values: Record<string, string>) => parseEventForm((name) => (values[name] ?? "").trim());
 const base = { title: "개관식", start_date: "2026-11-21", visibility: "public", status: "published" };
@@ -68,5 +68,27 @@ describe("event form", () => {
     expect(isPublicEvent("public", "canceled")).toBe(true);
     expect(isPublicEvent("public", "draft")).toBe(false);
     expect(isPublicEvent("private", "published")).toBe(false);
+  });
+});
+
+describe("event from a proposal", () => {
+  const proposal = {
+    proposal_id: "PR-261111-ABCDE", proposer: "지민", contact: "카톡 jimin", event_title: "LP 감상회",
+    description: "각자 LP 한 장씩", preferred_date: "12/13(토) 저녁", audience: "멤버 누구나", expected_attendance: "6~8명",
+  };
+
+  it("pre-fills title, description, host and audience; leaves free-text dates for the operator", () => {
+    expect(eventDraftFromProposal(proposal)).toEqual({
+      title: "LP 감상회",
+      description: "각자 LP 한 장씩",
+      host: "멤버 제안 · 지민",
+      audience: "멤버 누구나",
+      start_at: "",
+    });
+    expect(eventDraftFromProposal({ ...proposal, preferred_date: "2026-12-13" }).start_at).toBe("2026-12-13");
+  });
+
+  it("derives the event id from the proposal id", () => {
+    expect(eventIdForProposal("PR-261111-ABCDE")).toBe("EV-PR-261111-ABCDE");
   });
 });

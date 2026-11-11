@@ -2,7 +2,7 @@ import { formatKeyKo, toDateKey } from "@/lib/dates";
 import { nextMembershipPeriod, overlapping, totalMonths } from "@/lib/membership";
 import { pickText, type Check, type Op } from "../store/commit";
 import { newId, seoulIso } from "../store/ids";
-import type { EventInput } from "./event-input";
+import { eventIdForProposal, type EventInput } from "./event-input";
 import { deliveryTime } from "./quiet";
 import { cellText, type Row, type TableName, type Tables } from "../store/schema";
 import {
@@ -671,15 +671,26 @@ export function planLedgerVoid(data: Tables, ctx: Ctx & { entryId: string; reaso
 
 export const EVENT_CHANGED = "그사이 이 이벤트가 바뀌었어요. 최신 내용을 다시 불러왔으니 확인하고 다시 저장해 주세요.";
 
-export function planEventCreate(_data: Tables, ctx: Ctx & { input: EventInput }): Planned {
+export const PROPOSAL_ALREADY_EVENT = "이 제안으로 만든 이벤트가 이미 있어요.";
+
+/** `fromProposal`: the accepted proposal this event comes from (its id becomes the event id). */
+export function planEventCreate(data: Tables, ctx: Ctx & { input: EventInput; fromProposal?: string }): Planned {
   const commitId = newId("C", ctx.now, 8);
-  const eventId = newId("EV", ctx.now);
+  const checks: Check[] = [];
+  let eventId = newId("EV", ctx.now);
+  if (ctx.fromProposal) {
+    if (!(data.Proposals ?? []).some((r) => cellText(r.proposal_id) === ctx.fromProposal)) return { refuse: "제안을 찾을 수 없어요." };
+    eventId = eventIdForProposal(ctx.fromProposal);
+    if ((data.Events ?? []).some((r) => cellText(r.event_id) === eventId)) return { refuse: PROPOSAL_ALREADY_EVENT };
+    checks.push({ type: "exists", table: "Proposals", id: ctx.fromProposal }, { type: "absent", table: "Events", where: { event_id: eventId } });
+  }
   const row: Row = { event_id: eventId, ...ctx.input, updated_at: seoulIso(ctx.now) };
+  const logged = ctx.fromProposal ? { ...row, from_proposal: ctx.fromProposal } : row;
   return {
     commit: {
       id: commitId,
-      checks: [],
-      ops: [{ type: "append", table: "Events", row }, audit(ctx, commitId, "event.create", eventId, null, row)],
+      checks,
+      ops: [{ type: "append", table: "Events", row }, audit(ctx, commitId, "event.create", eventId, null, logged)],
     },
     result: { eventId },
   };
@@ -815,6 +826,7 @@ export const NEEDS = {
   proposalSubmit: ["Members", "Notifications"],
   ledger: ["Ledger"],
   events: ["Events"],
+  eventFromProposal: ["Events", "Proposals"],
   prefs: ["NotificationPrefs"],
   subscriptions: ["PushSubscriptions"],
   notifications: ["Notifications"],
