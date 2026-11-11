@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "secrets": "node scripts/generate-secrets.mjs",
+    "ledger:convert": "node scripts/convert-ledger.mjs"
   },
   "dependencies": {
     "jose": "^6.2.17",

@@ -3,6 +3,8 @@
 석촌호수 근처 사설 볼더링 클럽 **AFTER CL TO MOON**의 모바일 우선 웹사이트(PWA)입니다.
 멤버는 일정과 회원권을 확인하고 이벤트를 제안합니다. 운영진은 **Google Sheets 하나**로 일정·회원·회비를 관리하고, 입금만 확인·승인하면 회원권 기간과 알림이 자동으로 처리됩니다.
 
+> **실데이터 연결을 이어서 할 때는 [docs/HANDOFF.md](docs/HANDOFF.md) 체크리스트부터 보세요.**
+
 - **v0.1** 월간 캘린더(멤버 등록기간 / 이벤트 신청기간 / 이벤트), 이벤트 목록·상세, 이벤트 제안서
 - **v0.2** Google 로그인, 회원권(기간 자동 계산·연장), 모임통장 입금 승인, 거래내역 엑셀 매칭, 운영진 화면, PWA 설치, 웹 푸시 알림
 
@@ -47,6 +49,8 @@ npm test           # 단위 테스트(기간 계산, 승인 동시성, 거래내
 npm run lint
 npm run typecheck
 npm run build
+npm run secrets    # Vercel·Apps Script용 비밀값을 vercel-env.secret.txt(Git 제외)에 생성
+npm run ledger:convert -- "<회비 사용 내역.xlsx>"   # 기존 장부 → private/ledger-import.xlsx (Git 제외)
 ```
 
 > **시트를 연결하기 전에는 배포된 사이트도 자동으로 데모 모드**로 동작합니다. 상단에 데모 배너가 뜨고, 로그인 화면에서 데모 계정(운영진 포함)을 골라 회원·관리 화면을 둘러볼 수 있습니다. 데모 데이터는 서버 메모리에만 있어 수시로 초기화되고, 제안서에 적은 연락처는 저장하지 않습니다. `CLUB_API_URL`과 `CLUB_API_SECRET`을 넣으면 데모는 자동으로 꺼집니다. 시트 연결 전에 회원 기능을 아예 숨기려면 `DEMO_MODE=false`로 설정하세요.
