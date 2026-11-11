@@ -44,7 +44,10 @@ export interface Payment {
   depositorName: string;
   /** Amount expected for this membership. */
   amount: number;
-  /** The first-membership price (Plans.first_price) was applied. */
+  /**
+   * Charged at the plan's first-membership price. Derived (amount = Plans.first_price),
+   * not stored, so the sheet needs no extra Payments column. Display only.
+   */
   firstJoin: boolean;
   planId: string;
   status: PaymentStatus;
@@ -191,7 +194,7 @@ export function toPayment(r: Row): Payment {
     memberId: text(r.member_id),
     depositorName: text(r.depositor_name),
     amount: num(r.amount),
-    firstJoin: bool(r.first_join, false),
+    firstJoin: false, // filled in by parsePrivate, which knows the plans
     planId: text(r.plan_id),
     status: oneOf(r.status, ["pending", "matched", "approved", "rejected", "refunded"] as const, "pending"),
     requestedAt: text(r.requested_at),
@@ -335,13 +338,18 @@ export interface ClubPrivate {
 }
 
 export function parsePrivate(tables: Tables): ClubPrivate {
+  const plans = (tables.Plans ?? [])
+    .map(toPlan)
+    .filter((p) => p.id && p.durationMonths + p.bonusMonths > 0)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.price - b.price);
+  const firstPrice = new Map(plans.filter((p) => p.firstPrice > 0 && p.firstPrice !== p.price).map((p) => [p.id, p.firstPrice]));
   return {
     members: (tables.Members ?? []).map(toMember).filter((m) => m.id),
-    plans: (tables.Plans ?? [])
-      .map(toPlan)
-      .filter((p) => p.id && p.durationMonths + p.bonusMonths > 0)
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.price - b.price),
-    payments: (tables.Payments ?? []).map(toPayment).filter((p) => p.id),
+    plans,
+    payments: (tables.Payments ?? [])
+      .map(toPayment)
+      .filter((p) => p.id)
+      .map((p) => ({ ...p, firstJoin: firstPrice.get(p.planId) === p.amount })),
     memberships: (tables.Memberships ?? []).map(toMembership).filter((m) => m.id && m.startDate && m.endDate),
     notifications: (tables.Notifications ?? []).map(toNotification).filter((n) => n.id),
     subscriptions: (tables.PushSubscriptions ?? []).map(toSubscription).filter((s) => s.id && s.endpoint),

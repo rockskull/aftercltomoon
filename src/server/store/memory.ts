@@ -69,7 +69,6 @@ export function demoTables(now = Date.now()): Tables {
     member_id: memberId,
     depositor_name: depositor,
     amount,
-    first_join: false,
     plan_id: planId,
     status: "approved",
     requested_at: `${date}T09:00:00+09:00`,
@@ -126,7 +125,6 @@ export function demoTables(now = Date.now()): Tables {
         member_id: "M-DEMO-SUA",
         depositor_name: "김수아",
         amount: 100000, // first membership: 1개월 first-time price (80,000 from the second time)
-        first_join: true,
         plan_id: "PLAN-1M",
         status: "pending",
         requested_at: at(-1, "21:10"),

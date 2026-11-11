@@ -29,7 +29,7 @@ var TABLES = {
   Members: ['member_id', 'name', 'email', 'depositor_name', 'role', 'status', 'applied_at', 'joined_at',
     'member_consent_at', 'memo'],
   Plans: ['plan_id', 'name', 'price', 'first_price', 'duration_months', 'bonus_months', 'active', 'sort_order', 'description'],
-  Payments: ['payment_id', 'member_id', 'depositor_name', 'amount', 'first_join', 'plan_id', 'status', 'requested_at',
+  Payments: ['payment_id', 'member_id', 'depositor_name', 'amount', 'plan_id', 'status', 'requested_at',
     'requested_start', 'deposited_at', 'bank_transaction_id', 'approved_by', 'approved_at', 'note'],
   Memberships: ['membership_id', 'member_id', 'plan_id', 'start_date', 'end_date', 'status', 'source_payment_id',
     'created_at', 'updated_at', 'note'],

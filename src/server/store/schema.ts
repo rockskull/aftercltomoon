@@ -23,7 +23,6 @@ export const TABLES = {
     "member_id",
     "depositor_name",
     "amount",
-    "first_join",
     "plan_id",
     "status",
     "requested_at",

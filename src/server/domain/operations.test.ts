@@ -309,6 +309,23 @@ describe("first-time price", () => {
     expect(result(t, "l2@x", "1M")).toEqual(expect.objectContaining({ amount: 80000, firstPriceApplied: false }));
   });
 
+  it("works on a sheet set up before first_price existed: regular price, and only existing Payments columns are written", () => {
+    const t = baseTables();
+    t.Plans = t.Plans!.map(({ first_price: _drop, ...rest }) => (void _drop, rest));
+    const planned = planApplication(t, {
+      now: NOW,
+      actorId: "",
+      email: "old-sheet@x.dev",
+      input: { name: "회원", depositorName: "입금자", planId: "1M", requestedStart: null, consentConfirmed: true },
+    });
+    if (!("commit" in planned)) throw new Error("no commit");
+    expect(planned.result).toMatchObject({ amount: 80000, firstPriceApplied: false });
+    // The live sheet's Payments header (2026-11-11). Writing any other column would be refused by Apps Script.
+    const liveColumns = ["payment_id", "member_id", "depositor_name", "amount", "plan_id", "status", "requested_at", "requested_start", "deposited_at", "bank_transaction_id", "approved_by", "approved_at", "note"];
+    const paymentRow = planned.commit.ops.find((o) => o.type === "append" && o.table === "Payments");
+    expect(paymentRow && "row" in paymentRow && Object.keys(paymentRow.row).every((k) => liveColumns.includes(k))).toBe(true);
+  });
+
   it("after the first approval, the next 1개월 is 80,000", () => {
     const t = baseTables();
     const first = planApplication(t, {

@@ -219,7 +219,6 @@ export function planApplication(
     member_id: memberId,
     depositor_name: ctx.input.depositorName,
     amount,
-    first_join: firstPriceApplied,
     plan_id: plan.id,
     status: "pending",
     requested_at: seoulIso(ctx.now),
