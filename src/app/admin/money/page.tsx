@@ -17,7 +17,7 @@ import {
 } from "@/lib/ledger";
 import { requireOperator } from "@/server/auth/viewer";
 import { formatWon } from "@/server/domain/model";
-import { loadMoney } from "@/server/money";
+import { moneyFrom } from "@/server/money";
 import { storeMode } from "@/server/store";
 import { addLedgerEntry, editLedgerEntry, voidLedgerEntry } from "../actions";
 import { ActionForm } from "../admin-ui";
@@ -45,14 +45,14 @@ const monthLabel = (m: string) => `${m.slice(0, 4)}.${m.slice(5, 7)}`;
 async function Money({ searchParams }: Pick<PageProps<"/admin/money">, "searchParams">) {
   if (storeMode() === "unconfigured") return <div className="mx-auto max-w-3xl px-4 py-10"><NotReady /></div>;
   const now = await requestNow();
-  await requireOperator("/admin/money");
+  const { tables } = await requireOperator("/admin/money");
   const params = await searchParams;
   const month = typeof params.month === "string" && /^\d{4}-\d{2}$/.test(params.month) ? params.month : "";
   const kind = params.kind === "income" || params.kind === "expense" ? params.kind : "";
   const showVoid = params.void === "1";
   const today = toDateKey(now);
 
-  const { entries } = await loadMoney();
+  const { entries } = moneyFrom(tables);
   const overall = summarize(entries);
   const inMonth = month ? entries.filter((e) => e.date.startsWith(month)) : entries;
   const scoped = summarize(inMonth);

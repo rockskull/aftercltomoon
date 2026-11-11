@@ -60,17 +60,35 @@ async function readFromSheetsCached(key: string): Promise<Tables> {
 }
 
 /**
- * Reads whole tables. `fresh: true` bypasses the cache; use it for anything an
- * operator acts on. Mutations re-verify against the live sheet regardless.
+ * Admin screens. Shorter-lived than the member cache so edits made directly in
+ * the sheet show up within about a minute; every write through the site clears
+ * it at once (PRIVATE_TAG). Approvals and other actions never rely on it: they
+ * re-check the operator and re-read the live sheet (operatorForAction, runCommit).
  */
-export async function readTables(tables: TableName[], opts: { fresh?: boolean } = {}): Promise<Tables> {
+async function readAdminCached(key: string): Promise<Tables> {
+  "use cache: remote";
+  cacheLife({ stale: 30, revalidate: 30, expire: 60 });
+  cacheTag(PRIVATE_TAG);
+  return readFromSheets(key.split(",") as TableName[]);
+}
+
+/**
+ * Reads whole tables.
+ * - `fresh: true` reads the live sheet; use it for anything an operator acts on.
+ *   Mutations re-verify against the live sheet regardless.
+ * - `admin: true` uses the short-lived admin cache (page views only).
+ */
+export async function readTables(tables: TableName[], opts: { fresh?: boolean; admin?: boolean } = {}): Promise<Tables> {
   switch (storeMode()) {
     case "demo":
       return demoStore().read(tables);
     case "unconfigured":
       throw new StoreUnavailableError();
-    case "sheets":
-      return opts.fresh ? readFromSheets(tables) : readFromSheetsCached([...tables].sort().join(","));
+    case "sheets": {
+      if (opts.fresh) return readFromSheets(tables);
+      const key = [...tables].sort().join(",");
+      return opts.admin ? readAdminCached(key) : readFromSheetsCached(key);
+    }
   }
 }
 

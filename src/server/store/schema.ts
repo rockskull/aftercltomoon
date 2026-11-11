@@ -166,3 +166,20 @@ export const PRIVATE_TABLES: TableName[] = [
   "NotificationPrefs",
   "Settings",
 ];
+
+/**
+ * Every table the admin pages show, read in ONE gateway call shared by all admin
+ * tabs (see readTables `admin`). Apps Script costs ~1.6 s per call plus ~0.3 s per
+ * tab, so one call with only what the screens use beats several smaller ones.
+ * The notification tables are left out: no admin screen shows them.
+ */
+export const ADMIN_TABLES: TableName[] = [
+  "Members",
+  "Plans",
+  "Payments",
+  "Memberships",
+  "Settings",
+  "Proposals",
+  "Events",
+  "Ledger",
+];

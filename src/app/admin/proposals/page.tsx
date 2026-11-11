@@ -5,7 +5,7 @@ import { NotReady } from "@/components/ui";
 import { formatDateTimeKo, parseMoment } from "@/lib/dates";
 import { requireOperator } from "@/server/auth/viewer";
 import { cellText } from "@/server/store/schema";
-import { readTables, storeMode } from "@/server/store";
+import { storeMode } from "@/server/store";
 import { reviewProposal } from "../actions";
 import { ActionForm } from "../admin-ui";
 import { AdminFrame, AdminSkeleton, Box, Pill, smallButton, smallInput } from "../shared";
@@ -30,8 +30,7 @@ const REVIEW = { new: "새 제안", reviewing: "검토 중", accepted: "진행 �
 
 async function Proposals() {
   if (storeMode() === "unconfigured") return <div className="mx-auto max-w-3xl px-4 py-10"><NotReady /></div>;
-  const { club } = await requireOperator("/admin/proposals");
-  const tables = await readTables(["Proposals", "Events"], { fresh: true });
+  const { club, tables } = await requireOperator("/admin/proposals");
   const proposals = [...(tables.Proposals ?? [])].sort((a, b) => cellText(b.submitted_at).localeCompare(cellText(a.submitted_at)));
   const events = [...(tables.Events ?? [])].sort((a, b) => cellText(b.start_at).localeCompare(cellText(a.start_at))).slice(0, 30);
   const t = (v: unknown) => cellText(v as string).trim();

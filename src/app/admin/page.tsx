@@ -9,7 +9,7 @@ import { toDateKey } from "@/lib/dates";
 import { accessUntil } from "@/lib/membership";
 import { requireOperator } from "@/server/auth/viewer";
 import { daysUntil } from "@/server/domain/operations";
-import { readTables, storeMode } from "@/server/store";
+import { storeMode } from "@/server/store";
 import { PendingPaymentCard } from "./payment-cards";
 import { AdminFrame, AdminSkeleton, Box, Pill } from "./shared";
 
@@ -32,9 +32,9 @@ export default function AdminPage() {
 async function Overview() {
   if (storeMode() === "unconfigured") return <div className="mx-auto max-w-3xl px-4 py-10"><NotReady /></div>;
   const now = await requestNow();
-  const { club } = await requireOperator("/admin");
+  const { club, tables } = await requireOperator("/admin");
   const todayKey = toDateKey(now);
-  const proposals = (await readTables(["Proposals"], { fresh: true })).Proposals ?? [];
+  const proposals = tables.Proposals ?? [];
 
   const pending = club.payments.filter((p) => p.status === "pending" || p.status === "matched");
   const activeMembers = club.members.filter((m) => m.status === "active");
