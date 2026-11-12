@@ -10,8 +10,12 @@ import { toDateKey } from "@/lib/dates";
 import { membershipPhase, totalMonths } from "@/lib/membership";
 import { isOperator, requireViewer } from "@/server/auth/viewer";
 import type { Payment } from "@/server/domain/model";
-import { storeMode } from "@/server/store";
+import { memberStamps } from "@/server/domain/stamps";
+import { readTables, storeMode } from "@/server/store";
+import { STAMP_TABLES } from "@/server/store/schema";
+import logo from "@/assets/brand/logo.jpg";
 import { ApplyForm, ConsentConfirm } from "./apply-form";
+import { MoonStamps } from "./moon-stamps";
 
 export const metadata: Metadata = { title: "My membership", robots: { index: false } };
 
@@ -173,6 +177,12 @@ async function MyMembership() {
         </Panel>
       )}
 
+      {member && (
+        <Suspense fallback={<Panel title="My Moon Stamps"><div className="h-40 animate-pulse rounded-md bg-ivory/60" /></Panel>}>
+          <MyMoonStamps memberId={member.id} />
+        </Suspense>
+      )}
+
       <InstallHint />
 
       <nav aria-label="회원 메뉴" className="flex flex-col divide-y divide-plywood-400 rounded-lg border-2 border-midnight bg-ivory">
@@ -180,6 +190,26 @@ async function MyMembership() {
         {isOperator(member) && <MenuLink href="/admin">운영진 관리 화면</MenuLink>}
       </nav>
     </div>
+  );
+}
+
+/**
+ * MY MOON STAMPS. `memberId` comes from the signed-in session resolved against the
+ * Members tab (never from the request), and only this member's stamps leave the
+ * server — without the award ids, who issued them, or the operators' notes.
+ */
+async function MyMoonStamps({ memberId }: { memberId: string }) {
+  let stamps;
+  try {
+    stamps = memberStamps(await readTables(STAMP_TABLES), memberId);
+  } catch (error) {
+    console.error("[stamps] could not load", error);
+    return null;
+  }
+  return (
+    <Panel title="My Moon Stamps">
+      <MoonStamps stamps={stamps} logoSrc={logo.src} />
+    </Panel>
   );
 }
 

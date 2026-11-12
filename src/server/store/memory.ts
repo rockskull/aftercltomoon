@@ -1,5 +1,5 @@
 import { addDays, toDateKey } from "@/lib/dates";
-import { membershipEndDate } from "@/lib/membership";
+import { membershipEndDate, monthStart } from "@/lib/membership";
 import { applyCommit, type Commit, type CommitResult } from "./commit";
 import type { Row, TableName, Tables } from "./schema";
 
@@ -51,16 +51,17 @@ export function demoTables(now = Date.now()): Tables {
     memo: "",
   });
 
-  const membership = (id: string, memberId: string, planId: string, start: string, months: number, paymentId: string): Row => ({
+  const membership = (id: string, memberId: string, planId: string, paidOn: string, months: number, paymentId: string): Row => ({
     membership_id: id,
     member_id: memberId,
     plan_id: planId,
-    start_date: start,
-    end_date: membershipEndDate(start, months),
+    // From the 1st of the month it was paid in, to the last day of the final month.
+    start_date: monthStart(paidOn),
+    end_date: membershipEndDate(monthStart(paidOn), months),
     status: "active",
     source_payment_id: paymentId,
-    created_at: `${start}T10:00:00+09:00`,
-    updated_at: `${start}T10:00:00+09:00`,
+    created_at: `${paidOn}T10:00:00+09:00`,
+    updated_at: `${paidOn}T10:00:00+09:00`,
     note: "",
   });
 
@@ -96,9 +97,9 @@ export function demoTables(now = Date.now()): Tables {
     updated_at: `${date}T20:00:00+09:00`,
   });
 
-  // Jimin's 1-month membership ends in ~5 days (inside the D-7 window); Hyunwoo is mid-way
-  // through 14 months; Taeo's ended about 40 days ago.
-  const jiminStart = day(-25);
+  // Memberships run in whole calendar months. Jimin has this month's 1-month pass (ends on the
+  // last day of this month); Hyunwoo is mid-way through 14 months; Taeo's ended a month or two ago.
+  const jiminStart = monthStart(today);
 
   return {
     Members: [
@@ -215,7 +216,26 @@ export function demoTables(now = Date.now()): Tables {
       },
     ],
     Events: [],
+    StampDefinitions: [
+      { stamp_id: "ST-01", name: "FIRST MOON", description: "첫 클럽 방문", image_key: "st-01", active: true },
+      { stamp_id: "ST-02", name: "FIRST TOP", description: "클럽에서 첫 볼더링 완등", image_key: "st-02", active: true },
+      { stamp_id: "ST-03", name: "NIGHT OWL", description: "퇴근 후 클럽 세션 참여", image_key: "st-03", active: true },
+      { stamp_id: "ST-04", name: "MOON HOST", description: "직접 이벤트 개최", image_key: "st-04", active: true },
+    ],
+    // Hyunwoo has three, Jimin and Taeo one each, Sua none yet.
+    StampAwards: [
+      stampAward("SA-DEMO-1", "M-DEMO-HYUNWOO", "ST-01", day(-120), "M-DEMO-ADMIN", ""),
+      stampAward("SA-DEMO-2", "M-DEMO-HYUNWOO", "ST-02", day(-104), "M-DEMO-OPER", "노란 테이프 V1, 세 번째 시도에 완등"),
+      stampAward("SA-DEMO-3", "M-DEMO-HYUNWOO", "ST-03", day(-12), "M-DEMO-OPER", ""),
+      stampAward("SA-DEMO-4", "M-DEMO-JIMIN", "ST-01", jiminStart, "M-DEMO-ADMIN", ""),
+      stampAward("SA-DEMO-5", "M-DEMO-TAEO", "ST-01", day(-70), "M-DEMO-ADMIN", ""),
+      stampAward("SA-DEMO-6", "M-DEMO-OPER", "ST-04", day(-20), "M-DEMO-ADMIN", "개관 준비 세션 진행"),
+    ],
   };
+}
+
+function stampAward(id: string, memberId: string, stampId: string, date: string, by: string, note: string): Row {
+  return { award_id: id, member_id: memberId, stamp_id: stampId, awarded_at: date, awarded_by: by, note };
 }
 
 /** Shared across hot reloads in development. */

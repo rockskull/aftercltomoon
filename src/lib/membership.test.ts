@@ -4,8 +4,14 @@ import {
   currentMembership,
   daysLeft,
   inclusiveDays,
+  isMonthEnd,
+  isMonthStart,
   membershipEndDate,
   membershipPhase,
+  monthBounds,
+  monthEnd,
+  monthStart,
+  monthStartOnOrAfter,
   nextMembershipPeriod,
   overlapping,
   type MembershipPeriod,
@@ -76,47 +82,98 @@ describe("phases and days left", () => {
   });
 });
 
-describe("nextMembershipPeriod", () => {
-  it("new member starts today by default", () => {
+describe("month helpers", () => {
+  it("finds month boundaries, including February in leap years", () => {
+    expect(monthStart("2026-11-12")).toBe("2026-11-01");
+    expect(monthEnd("2026-11-12")).toBe("2026-11-30");
+    expect(monthEnd("2028-02-03")).toBe("2028-02-29");
+    expect(monthEnd("2027-02-03")).toBe("2027-02-28");
+    expect(isMonthStart("2026-12-01")).toBe(true);
+    expect(isMonthEnd("2026-12-31")).toBe(true);
+    expect(isMonthEnd("2026-12-30")).toBe(false);
+    expect(monthStartOnOrAfter("2026-12-01")).toBe("2026-12-01");
+    expect(monthStartOnOrAfter("2026-12-11")).toBe("2027-01-01");
+  });
+
+  it("reads month inputs", () => {
+    expect(monthBounds("2027-02")).toEqual({ start: "2027-02-01", end: "2027-02-28" });
+    expect(monthBounds("2027-13")).toBeNull();
+    expect(monthBounds("2027-02-01")).toBeNull();
+  });
+});
+
+describe("nextMembershipPeriod (whole calendar months)", () => {
+  const isWholeMonths = (p: { startDate: string; endDate: string }) => isMonthStart(p.startDate) && isMonthEnd(p.endDate);
+
+  it("a new member gets this month, from the 1st to the last day, whatever the deposit date", () => {
     expect(nextMembershipPeriod({ existing: [], plan: PLAN_1M, todayKey: "2026-11-11" })).toEqual({
-      startDate: "2026-11-11",
-      endDate: "2026-12-10",
+      startDate: "2026-11-01",
+      endDate: "2026-11-30",
+      extendsExisting: false,
+    });
+    expect(nextMembershipPeriod({ existing: [], plan: PLAN_1M, todayKey: "2026-11-30" }).startDate).toBe("2026-11-01");
+  });
+
+  it("a new member can ask for a later month", () => {
+    const next = nextMembershipPeriod({ existing: [], plan: PLAN_6M, todayKey: "2026-11-11", requestedStart: "2026-12-01" });
+    expect(next).toEqual({ startDate: "2026-12-01", endDate: "2027-06-30", extendsExisting: false });
+    // a mid-month request (from before this rule) means that month
+    expect(nextMembershipPeriod({ existing: [], plan: PLAN_1M, todayKey: "2026-11-11", requestedStart: "2027-01-20" }).startDate).toBe("2027-01-01");
+    // a past month is never used
+    expect(nextMembershipPeriod({ existing: [], plan: PLAN_1M, todayKey: "2026-11-11", requestedStart: "2026-10-01" }).startDate).toBe("2026-11-01");
+  });
+
+  it("an extension starts on the 1st after the current one ends, keeping every paid month", () => {
+    const existing = [m("a", "2026-11-01", "2026-11-30")];
+    const next = nextMembershipPeriod({ existing, plan: PLAN_12M, todayKey: "2026-11-20" });
+    expect(next).toEqual({ startDate: "2026-12-01", endDate: "2028-01-31", extendsExisting: true });
+  });
+
+  it("chains after a scheduled future membership too", () => {
+    const existing = [m("a", "2026-11-01", "2026-11-30"), m("b", "2026-12-01", "2026-12-31")];
+    expect(nextMembershipPeriod({ existing, plan: PLAN_1M, todayKey: "2026-11-20" }).startDate).toBe("2027-01-01");
+  });
+
+  it("after an older mid-month membership, starts on the following 1st (never overlaps)", () => {
+    const existing = [m("legacy", "2026-11-11", "2026-12-10")];
+    const next = nextMembershipPeriod({ existing, plan: PLAN_1M, todayKey: "2026-11-30" });
+    expect(next).toEqual({ startDate: "2027-01-01", endDate: "2027-01-31", extendsExisting: true });
+  });
+
+  it("an expired member starts this month (not from the old end date)", () => {
+    const existing = [m("a", "2026-08-01", "2026-08-31")];
+    expect(nextMembershipPeriod({ existing, plan: PLAN_1M, todayKey: "2026-11-11" })).toEqual({
+      startDate: "2026-11-01",
+      endDate: "2026-11-30",
       extendsExisting: false,
     });
   });
 
-  it("new member can start on a later chosen date (deposit date ≠ start date)", () => {
-    const next = nextMembershipPeriod({ existing: [], plan: PLAN_6M, todayKey: "2026-11-11", requestedStart: "2026-12-01" });
-    expect(next).toEqual({ startDate: "2026-12-01", endDate: "2027-06-30", extendsExisting: false });
-  });
-
-  it("extension keeps every remaining day", () => {
-    const existing = [m("a", "2026-11-11", "2026-12-10")];
-    const next = nextMembershipPeriod({ existing, plan: PLAN_12M, todayKey: "2026-11-30" });
-    expect(next).toEqual({ startDate: "2026-12-11", endDate: "2028-02-10", extendsExisting: true });
-  });
-
-  it("chains after a scheduled future membership too", () => {
-    const existing = [m("a", "2026-11-11", "2026-12-10"), m("b", "2026-12-11", "2027-01-10")];
-    const next = nextMembershipPeriod({ existing, plan: PLAN_1M, todayKey: "2026-11-20" });
-    expect(next.startDate).toBe("2027-01-11");
-  });
-
-  it("expired member starts fresh (not from the old end date)", () => {
-    const existing = [m("a", "2026-08-01", "2026-08-31")];
-    const next = nextMembershipPeriod({ existing, plan: PLAN_1M, todayKey: "2026-11-11" });
-    expect(next).toEqual({ startDate: "2026-11-11", endDate: "2026-12-10", extendsExisting: false });
-  });
-
   it("ignores canceled and refunded memberships", () => {
     const existing = [m("a", "2026-11-01", "2026-11-30", "canceled"), m("b", "2026-11-01", "2027-05-31", "refunded")];
-    expect(nextMembershipPeriod({ existing, plan: PLAN_1M, todayKey: "2026-11-11" }).startDate).toBe("2026-11-11");
+    expect(nextMembershipPeriod({ existing, plan: PLAN_1M, todayKey: "2026-11-11" }).startDate).toBe("2026-11-01");
   });
 
-  it("crew override wins", () => {
-    const existing = [m("a", "2026-11-11", "2026-12-10")];
-    const next = nextMembershipPeriod({ existing, plan: PLAN_1M, todayKey: "2026-11-20", startOverride: "2027-01-01" });
-    expect(next).toEqual({ startDate: "2027-01-01", endDate: "2027-01-31", extendsExisting: false });
+  it("a crew override wins and is moved to its month's 1st", () => {
+    const existing = [m("a", "2026-11-01", "2026-11-30")];
+    expect(nextMembershipPeriod({ existing, plan: PLAN_1M, todayKey: "2026-11-20", startOverride: "2027-01-01" })).toEqual({
+      startDate: "2027-01-01",
+      endDate: "2027-01-31",
+      extendsExisting: false,
+    });
+    expect(nextMembershipPeriod({ existing, plan: PLAN_6M, todayKey: "2026-11-20", startOverride: "2026-12-15" })).toEqual({
+      startDate: "2026-12-01",
+      endDate: "2027-06-30",
+      extendsExisting: true,
+    });
+  });
+
+  it("every plan length always ends on a month's last day", () => {
+    for (const plan of [PLAN_1M, PLAN_6M, PLAN_12M, { durationMonths: 2, bonusMonths: 0 }]) {
+      for (const todayKey of ["2026-01-31", "2026-02-28", "2027-12-15", "2028-02-29"]) {
+        expect(isWholeMonths(nextMembershipPeriod({ existing: [], plan, todayKey }))).toBe(true);
+      }
+    }
   });
 });
 

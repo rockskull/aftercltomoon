@@ -9,7 +9,8 @@
 |---|---|
 | 사이트 | https://aftercltomoon.vercel.app — **데모 모드** (시트 미연결, 데모 계정으로 회원·운영진 화면 확인 가능) |
 | 코드 | GitHub `rockskull/aftercltomoon` `main` · Vercel이 연결되어 **push하면 자동 배포** |
-| 완료 | 캘린더·이벤트·제안서(로그인 필요), Google 로그인 코드, 회원권 기간 계산, 첫 등록 가격(1개월 10만 원), 입금 승인, 거래내역 매칭, 알림, PWA, 관리 화면, 동의서, 회계 장부, 사이트 결제 요청 제거 |
+| 완료 | 캘린더·이벤트·제안서(로그인 필요), Google 로그인 코드, 회원권 기간 계산(**달 단위: 1일 시작 · 말일 종료**), 첫 등록 가격(1개월 10만 원), 입금 승인, 거래내역 매칭, 알림, PWA, 관리 화면, 동의서, 회계 장부, 사이트 결제 요청 제거, 초대장(`/invite`), 포스터 생성기(08), MOON STAMPS(06) |
+| 실서비스 반영 | 스탬프는 시트에 **StampDefinitions · StampAwards** 탭이 있어야 발급돼요 → 아래 "새 Code.gs 반영" |
 | 남은 일 | ① Apps Script로 시트 연결 ② Google 로그인 설정 ③ Vercel 환경변수 ④ 데이터 채우기 |
 
 ---
@@ -36,13 +37,23 @@ npm run dev                                   # http://localhost:3000 (데모 �
 
 1. 실데이터 시트를 **Apps Script를 쓸 수 있는 계정**(개인 또는 크루 공용)으로 엽니다. 회사 계정은 Apps Script가 막혀 있을 수 있어요.
 2. **확장 프로그램 → Apps Script** → `apps-script/Code.gs` 전체를 붙여넣고 저장합니다.
-3. 함수 목록에서 **`setupSheets`**를 실행하고 권한을 승인합니다. 탭 14개, 머리글, 드롭다운, 기본 상품과 설정이 만들어지고 시트 시간대가 서울로 바뀝니다. 템플릿을 이미 가져왔어도 안전합니다(빠진 것만 추가).
+3. 함수 목록에서 **`setupSheets`**를 실행하고 권한을 승인합니다. 탭 16개, 머리글, 드롭다운, 기본 상품, 스탬프 4종, 설정이 만들어지고 시트 시간대가 서울로 바뀝니다. 템플릿을 이미 가져왔어도 안전합니다(빠진 것만 추가).
 4. **프로젝트 설정(톱니) → 스크립트 속성**에 `vercel-env.secret.txt` 2번 섹션의 3개를 넣습니다: `PROPOSAL_SECRET`, `CRON_SECRET`, `SITE_URL`
 5. **배포 → 새 배포 → 유형: 웹 앱** · 실행: **나** · 액세스: **모든 사용자** → 배포 → `/exec`로 끝나는 URL을 복사합니다.
 6. **확인:** 그 URL을 브라우저에서 열어 `{"ok":true, ... "events":[...]}` 같은 JSON이 보이면 성공입니다.
 7. (선택) 편집기에서 **+ → 스크립트**로 `Tick` 파일을 만들고 `apps-script/Tick.gs`를 붙여넣은 뒤 **`installTick`** 실행 → 15분마다 알림 스케줄러를 호출합니다(신청 시작·마감 알림이 더 제때 나감). 권한 2개(외부 서비스 연결·사용자 부재 시 실행)가 더 필요해서 `Code.gs`와 분리했습니다. 승인이 차단되면 `Tick` 파일을 지우세요 — Vercel Cron이 하루 한 번은 돌립니다.
 
 > `Code.gs`를 고친 뒤에는 **배포 관리 → 수정(연필) → 버전: 새 버전 → 배포**. URL은 그대로 유지됩니다.
+
+### 새 Code.gs 반영 (MOON STAMPS, 2026-11-12)
+
+이미 시트를 연결했다면 이것만 하면 됩니다. 순서대로:
+1. Apps Script의 `Code.gs`를 저장소의 최신 `apps-script/Code.gs`로 **통째로 바꿔 붙여넣고** 저장
+2. **`setupSheets`** 실행 → `StampDefinitions`(스탬프 4종이 채워짐)와 `StampAwards` 탭이 새로 생겨요. 기존 데이터는 그대로예요.
+3. **배포 관리 → 수정 → 새 버전 → 배포** (URL은 그대로)
+4. 확인: ADMIN → 회원 → 아무 회원 → **Moon stamps** 칸에 "스탬프 발급" 버튼이 보이면 끝. "시트에 스탬프 탭이 아직 없어요"가 보이면 1~3을 다시 확인하세요.
+
+이 순서를 하기 전에 사이트를 배포해도 괜찮아요. 회원 화면은 스탬프를 "아직"으로만 보여 주고, 발급 버튼은 안내 문구로 바뀌며, 다른 기능에는 영향이 없어요.
 
 ---
 
@@ -53,7 +64,7 @@ npm run dev                                   # http://localhost:3000 (데모 �
 | **Settings** | `sheet_url`(이 시트 주소) · `apply_notice`(신청 후 안내 문구, **계좌번호·금액은 넣지 않기**) · 동의서 주소(기본값 있음). 예전 템플릿의 `joining_fee` 행이 있다면 지워도 됩니다(더 이상 쓰지 않음) |
 | **Plans** | `first_price` 열 확인: `PLAN-1M`에 **100000**(처음 등록하는 사람의 1개월권 가격), 나머지는 비워 두기. `setupSheets`가 이 열을 새로 만들 때 1개월권에 자동으로 채워요 |
 | **Members** | 첫 운영진 한 줄 + 기존 회원. `member_id`는 겹치지 않게(예: `M-001`), `email`은 **Google 로그인 메일**, `role`(member/operator/admin), `status`=`active`, **`joined_at`(가입일)은 꼭** — 비어 있으면 첫 신청 때 1개월권이 첫 등록 가격(10만 원)으로 잡힙니다. 동의서를 이미 받았다면 `member_consent_at`에 날짜 |
-| **Memberships** | 기존 회원의 현재 이용 기간: `membership_id`(예: `MS-001`), `member_id`, `plan_id`(`PLAN-1M`/`PLAN-6M`/`PLAN-12M`), `start_date`, `end_date`, `status`=`active` |
+| **Memberships** | 기존 회원의 현재 이용 기간: `membership_id`(예: `MS-001`), `member_id`, `plan_id`(`PLAN-1M`/`PLAN-6M`/`PLAN-12M`), `start_date`(**1일**), `end_date`(**말일**), `status`=`active`. 회원권은 달 단위예요. 이미 넣은 중간 날짜 기간(예: 11.11–12.10)은 그대로 둬도 되지만, 그 뒤 연장은 겹치지 않게 그다음 달 1일부터 시작해요. 맞추려면 ADMIN 회원 상세의 "기간·상태 수정"에서 달을 고르세요 |
 | **Ledger** | `private/ledger-import.xlsx`의 내용을 2행부터 붙여넣기. "계약비"를 보증금으로 분류했고 출자금 날짜는 첫 지출일로 넣었으니 확인 |
 | **Events / Enrollment** | 일정. `status`=`published`, Events는 `visibility`=`public`이어야 공개 |
 
@@ -93,6 +104,10 @@ Vercel → `aftercltomoon` → **Settings → Environment Variables** → 환경
 - [ ] 크론 수동 호출: `curl -H "Authorization: Bearer <CRON_SECRET>" https://aftercltomoon.vercel.app/api/cron/notifications` → `{"ok":true,...}`
 - [x] Events 탭에 이벤트를 하나 넣고 1~2분 뒤 캘린더에 보인다 (2026-11-11 개관식으로 확인)
 - [ ] **ADMIN → 이벤트**에서 이벤트를 등록·수정하면 캘린더에 바로 보인다
+- [ ] 운영진으로 이벤트 상세 → **Make a poster** → FEED·STORY 각각 Save PNG (휴대폰은 공유 화면의 "이미지 저장")
+- [ ] 로그아웃 상태에서 홈 맨 아래 **View invitation** → 초대장 → **Share invitation**으로 카톡 공유
+- [ ] 회원권 신청 화면에 **시작 월** 선택이 보이고, 승인 카드에 "승인하면 ○○.01 – ○○.말일"로 나온다
+- [ ] (새 Code.gs 반영 후) 운영진으로 회원 상세 → **Moon stamps → 스탬프 발급** → 그 회원 MY의 **My Moon Stamps**에 날짜와 함께 보이고 **Save stamp**로 카드 저장
 
 ## 막힐 때
 

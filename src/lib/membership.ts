@@ -3,6 +3,14 @@ import { addDays, daysInMonth, makeDateKey } from "./dates";
 /**
  * Membership period engine. Pure functions on Seoul day keys ("YYYY-MM-DD").
  *
+ * Club rule: memberships run in whole calendar months. Every membership starts
+ * on the 1st and ends on the last day of a month (1개월 → 11.01–11.30,
+ * 6개월 + 보너스 1개월 → 12.01–06.30), whatever day the fee was paid.
+ * nextMembershipPeriod and the operator forms only ever produce such periods.
+ *
+ * membershipEndDate keeps the general period rule below; for a start on the
+ * 1st it is exactly the last day of the final month.
+ *
  * Period rule (Korean Civil Act art. 160, counting the first day):
  *  - the start day is included, the end day is included;
  *  - a period of N months ends the day before the same day-of-month N months
@@ -18,6 +26,38 @@ export function membershipEndDate(startKey: string, months: number): string {
   const tm = (targetMonthIndex % 12) + 1;
   if (d > daysInMonth(ty, tm)) return makeDateKey(ty, tm, daysInMonth(ty, tm));
   return addDays(makeDateKey(ty, tm, d), -1);
+}
+
+/** First day of the month that contains `key`. */
+export function monthStart(key: string): string {
+  return `${key.slice(0, 8)}01`;
+}
+
+/** Last day of the month that contains `key`. */
+export function monthEnd(key: string): string {
+  const y = Number(key.slice(0, 4));
+  const m = Number(key.slice(5, 7));
+  return makeDateKey(y, m, daysInMonth(y, m));
+}
+
+export function isMonthStart(key: string): boolean {
+  return key.slice(8) === "01";
+}
+
+export function isMonthEnd(key: string): boolean {
+  return key === monthEnd(key);
+}
+
+/** The 1st of a month on or after `key` (a mid-month day moves to the next month's 1st). */
+export function monthStartOnOrAfter(key: string): string {
+  return isMonthStart(key) ? key : addDays(monthEnd(key), 1);
+}
+
+/** A month input value ("YYYY-MM") → its first and last day; null when malformed. */
+export function monthBounds(month: string): { start: string; end: string } | null {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return null;
+  const start = `${month}-01`;
+  return { start, end: monthEnd(start) };
 }
 
 /** Inclusive number of days in [start, end]. */
@@ -94,12 +134,15 @@ export interface NextPeriod {
 }
 
 /**
- * Period for a newly approved payment.
- *  - Member still has access (now or scheduled): starts the day after the last
- *    valid end date, so no remaining day is lost.
- *  - Otherwise (new or expired member): starts on `requestedStart` if the crew
- *    chose one, else today.
- * An explicit `startOverride` from the crew always wins.
+ * Period for a newly approved payment: always from the 1st of a month to the
+ * last day of a month. The deposit date plays no part.
+ *  - Member still has access (now or scheduled): starts on the 1st right after
+ *    the last valid end date, so no paid month is lost. (Site-made memberships
+ *    end on a month's last day, so this is simply the next day; an older row
+ *    ending mid-month moves to the following 1st instead of overlapping.)
+ *  - Otherwise (new or expired member): the month the member asked for, if it
+ *    is this month or later, else this month.
+ * An explicit `startOverride` from the crew always wins (moved to its month's 1st).
  */
 export function nextMembershipPeriod(args: {
   existing: MembershipPeriod[];
@@ -110,20 +153,17 @@ export function nextMembershipPeriod(args: {
 }): NextPeriod {
   const months = totalMonths(args.plan);
   const lastEnd = accessUntil(args.existing, args.todayKey);
+  const chained = lastEnd ? monthStartOnOrAfter(addDays(lastEnd, 1)) : null;
 
-  if (args.startOverride) {
-    return {
-      startDate: args.startOverride,
-      endDate: membershipEndDate(args.startOverride, months),
-      extendsExisting: lastEnd !== null && args.startOverride === addDays(lastEnd, 1),
-    };
+  let startDate: string;
+  if (args.startOverride) startDate = monthStart(args.startOverride);
+  else if (chained) startDate = chained;
+  else {
+    const thisMonth = monthStart(args.todayKey);
+    const requested = args.requestedStart ? monthStart(args.requestedStart) : null;
+    startDate = requested && requested > thisMonth ? requested : thisMonth;
   }
-  if (lastEnd) {
-    const startDate = addDays(lastEnd, 1);
-    return { startDate, endDate: membershipEndDate(startDate, months), extendsExisting: true };
-  }
-  const startDate = args.requestedStart && args.requestedStart >= args.todayKey ? args.requestedStart : args.todayKey;
-  return { startDate, endDate: membershipEndDate(startDate, months), extendsExisting: false };
+  return { startDate, endDate: membershipEndDate(startDate, months), extendsExisting: chained !== null && startDate === chained };
 }
 
 /** Valid memberships whose dates overlap [start, end]; used to warn the crew before saving. */

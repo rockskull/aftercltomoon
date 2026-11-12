@@ -5,7 +5,10 @@ import { nextMembershipPeriod, totalMonths } from "@/lib/membership";
 import { formatWon, type ClubPrivate, type Payment } from "@/server/domain/model";
 import { approvePayment, cancelApproval, refundPayment, rejectPayment } from "./actions";
 import { ActionForm } from "./admin-ui";
+import { MonthSelect } from "./month-select";
 import { Pill, smallButton, smallInput, smallPrimary } from "./shared";
+
+const monthLabel = (key: string) => `${key.slice(0, 4)}년 ${Number(key.slice(5, 7))}월`;
 
 const when = (iso: string) => {
   const m = parseMoment(iso);
@@ -61,7 +64,7 @@ export function PendingPaymentCard({ payment, club, todayKey }: { payment: Payme
         <p className="mt-3 rounded-md bg-butter-200/60 px-3 py-2 text-[13px] text-midnight">
           승인하면 <strong className="font-mono">{dotDate(preview.startDate)} – {dotDate(preview.endDate)}</strong> ({totalMonths(plan)}개월)
           {preview.extendsExisting ? " · 기존 회원권에 이어서 연장" : ""}
-          {payment.requestedStart ? ` · 희망 시작일 ${dotDate(payment.requestedStart)}` : ""}
+          {payment.requestedStart ? ` · 희망 시작 ${monthLabel(payment.requestedStart)}` : ""}
         </p>
       )}
 
@@ -70,17 +73,22 @@ export function PendingPaymentCard({ payment, club, todayKey }: { payment: Payme
           <input type="hidden" name="payment_id" value={payment.id} />
           <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
             입금일
-            <input type="date" name="deposited_at" defaultValue={todayKey} max={todayKey} className={smallInput} required />
+            <input type="date" name="deposited_at" defaultValue={todayKey} className={smallInput} required />
           </label>
           <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
-            시작일 (바꿀 때만)
-            <input type="date" name="start_date" className={smallInput} aria-describedby={`start-${payment.id}`} />
+            시작 월 (바꿀 때만)
+            <MonthSelect
+              name="start_month"
+              todayKey={todayKey}
+              emptyLabel={preview ? `자동 (${monthLabel(preview.startDate)})` : "자동"}
+              describedBy={`start-${payment.id}`}
+            />
           </label>
           <button type="submit" className={smallPrimary}>
             입금 확인 · 승인
           </button>
           <span id={`start-${payment.id}`} className="sr-only">
-            비워 두면 {preview ? dotDate(preview.startDate) : "자동 계산된 날짜"}부터 시작해요.
+            회원권은 1일에 시작해 말일에 끝나요. 비워 두면 {preview ? dotDate(preview.startDate) : "자동 계산된 날짜"}부터 시작해요.
           </span>
         </ActionForm>
         <ActionForm action={rejectPayment} className="flex items-end gap-2" confirmText="이 신청을 반려할까요?">

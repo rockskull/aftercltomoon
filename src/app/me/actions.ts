@@ -48,8 +48,9 @@ export async function applyMembership(_prev: ActionState, fd: FormData): Promise
     return { status: "error", message: "입금자명을 20자 이내로 적어 주세요.", values };
   }
   if (!values.plan_id) return { status: "error", message: "회원권을 골라 주세요.", values };
-  if (values.requested_start && (!/^\d{4}-\d{2}-\d{2}$/.test(values.requested_start) || values.requested_start < today)) {
-    return { status: "error", message: "희망 시작일은 오늘 이후 날짜로 골라 주세요.", values };
+  // Memberships start on the 1st of a month: this month or a later one.
+  if (values.requested_start && (!/^\d{4}-\d{2}-01$/.test(values.requested_start) || values.requested_start < `${today.slice(0, 8)}01`)) {
+    return { status: "error", message: "시작 월을 다시 골라 주세요.", values };
   }
 
   const outcome = await runCommit(NEEDS.application, (data) =>

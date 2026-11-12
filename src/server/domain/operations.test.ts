@@ -81,15 +81,15 @@ function commitOf(planned: ReturnType<typeof planApproval>): Commit {
 }
 
 describe("payment approval", () => {
-  it("activates a new member from today and records everything", () => {
+  it("activates a new member for the whole current month and records everything", () => {
     const t = baseTables();
     expect(applyCommit(t, commitOf(planApproval(t, { now: NOW, actorId: "OP", paymentId: "P-NEW" })))).toEqual({ ok: true });
 
     const club = parsePrivate(t);
     const ms = club.memberships.find((m) => m.sourcePaymentId === "P-NEW")!;
-    expect([ms.startDate, ms.endDate, ms.status]).toEqual(["2026-11-11", "2026-12-10", "active"]);
+    expect([ms.startDate, ms.endDate, ms.status]).toEqual(["2026-11-01", "2026-11-30", "active"]);
     expect(club.payments.find((p) => p.id === "P-NEW")).toMatchObject({ status: "approved", approvedBy: "OP", depositedAt: "2026-11-11" });
-    expect(club.members.find((m) => m.id === "NEW")).toMatchObject({ status: "active", joinedAt: "2026-11-11" });
+    expect(club.members.find((m) => m.id === "NEW")).toMatchObject({ status: "active", joinedAt: "2026-11-01" });
     expect(club.notifications.map((n) => n.type)).toEqual(["payment_approved"]);
     expect(t.AuditLog).toHaveLength(1);
     expect(t.AuditLog![0]).toMatchObject({ actor_id: "OP", action: "payment.approve", target_id: "P-NEW" });
@@ -171,7 +171,7 @@ describe("payment approval", () => {
     expect(applyCommit(t, commitOf(again))).toEqual({ ok: true });
     club = parsePrivate(t);
     expect(club.memberships.filter((m) => m.memberId === "NEW").map((m) => [m.status, m.startDate, m.endDate])).toEqual([
-      ["canceled", "2026-11-11", "2026-12-10"],
+      ["canceled", "2026-11-01", "2026-11-30"],
       ["active", "2026-12-01", "2026-12-31"],
     ]);
     expect(t.AuditLog!.map((r) => r.action)).toEqual(["payment.approve", "payment.cancel_approval", "payment.approve"]);
@@ -182,11 +182,30 @@ describe("payment approval", () => {
     applyCommit(t, commitOf(planApproval(t, { now: NOW, actorId: "OP", paymentId: "P-OLD-A" })));
     const second = parsePrivate(t).memberships.find((m) => m.sourcePaymentId === "P-OLD-A")!;
     expect(
-      planMembershipEdit(t, { now: NOW, actorId: "OP", membershipId: second.id, startDate: "2026-11-20", endDate: "2026-12-31", status: "active", reason: "조정" }),
+      planMembershipEdit(t, { now: NOW, actorId: "OP", membershipId: second.id, startMonth: "2026-11", endMonth: "2026-12", status: "active", reason: "조정" }),
     ).toEqual({ refuse: "같은 회원의 다른 회원권과 기간이 겹쳐요." });
-    const ok = planMembershipEdit(t, { now: NOW, actorId: "OP", membershipId: second.id, startDate: "2026-12-01", endDate: "2027-01-05", status: "active", reason: "부상 연장" });
+    const ok = planMembershipEdit(t, { now: NOW, actorId: "OP", membershipId: second.id, startMonth: "2026-12", endMonth: "2027-01", status: "active", reason: "부상 연장" });
     expect(applyCommit(t, commitOf(ok))).toEqual({ ok: true });
+    expect(parsePrivate(t).memberships.find((m) => m.id === second.id)).toMatchObject({ startDate: "2026-12-01", endDate: "2027-01-31" });
     expect(t.AuditLog!.at(-1)).toMatchObject({ action: "membership.edit", target_id: second.id });
+  });
+
+  it("editing only the status of an older mid-month membership keeps its dates", () => {
+    const t = baseTables();
+    t.Memberships!.push({ membership_id: "MS-LEGACY", member_id: "NEW", plan_id: "1M", start_date: "2026-10-11", end_date: "2026-11-10", status: "active" });
+    const edit = planMembershipEdit(t, { now: NOW, actorId: "OP", membershipId: "MS-LEGACY", startMonth: "2026-10", endMonth: "2026-11", status: "canceled", reason: "중복" });
+    expect(applyCommit(t, commitOf(edit))).toEqual({ ok: true });
+    expect(parsePrivate(t).memberships.find((m) => m.id === "MS-LEGACY")).toMatchObject({ startDate: "2026-10-11", endDate: "2026-11-10", status: "canceled" });
+  });
+
+  it("the deposit date is free: past or future, it never moves the period", () => {
+    for (const depositedAt of ["2026-09-03", "2026-11-28", "2027-01-15"]) {
+      const t = baseTables();
+      expect(applyCommit(t, commitOf(planApproval(t, { now: NOW, actorId: "OP", paymentId: "P-NEW", depositedAt })))).toEqual({ ok: true });
+      const club = parsePrivate(t);
+      expect(club.payments.find((p) => p.id === "P-NEW")!.depositedAt).toBe(depositedAt);
+      expect(club.memberships.find((m) => m.sourcePaymentId === "P-NEW")).toMatchObject({ startDate: "2026-11-01", endDate: "2026-11-30" });
+    }
   });
 });
 

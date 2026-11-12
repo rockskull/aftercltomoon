@@ -91,6 +91,10 @@ export const TABLES = {
     "created_at",
     "updated_at",
   ],
+  /** MOON STAMPS: the four stamps (artwork is static; see src/lib/stamps.ts). */
+  StampDefinitions: ["stamp_id", "name", "description", "image_key", "active"],
+  /** Who received which stamp. Private: only the member themself and operators see it; `note` is operators-only. */
+  StampAwards: ["award_id", "member_id", "stamp_id", "awarded_at", "awarded_by", "note"],
   AuditLog: ["log_id", "commit_id", "actor_id", "action", "target_id", "before_value", "after_value", "created_at"],
   Settings: ["key", "value", "description"],
   // v0.1 tables (read by the public feed / written by the proposal form)
@@ -183,3 +187,10 @@ export const ADMIN_TABLES: TableName[] = [
   "Events",
   "Ledger",
 ];
+
+/**
+ * MOON STAMPS are read on their own (only /me and the admin member page need
+ * them), so other screens don't pay for two more tabs, and a sheet that has not
+ * been set up for stamps yet can never break them.
+ */
+export const STAMP_TABLES: TableName[] = ["StampDefinitions", "StampAwards"];

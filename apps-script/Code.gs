@@ -41,6 +41,8 @@ var TABLES = {
   EventWatch: ['event_id', 'fingerprint', 'status', 'first_seen_at', 'updated_at'],
   Ledger: ['entry_id', 'date', 'category', 'description', 'amount', 'person', 'method', 'receipt_url', 'memo',
     'status', 'created_by', 'created_at', 'updated_at'],
+  StampDefinitions: ['stamp_id', 'name', 'description', 'image_key', 'active'],
+  StampAwards: ['award_id', 'member_id', 'stamp_id', 'awarded_at', 'awarded_by', 'note'],
   AuditLog: ['log_id', 'commit_id', 'actor_id', 'action', 'target_id', 'before_value', 'after_value', 'created_at'],
   Settings: ['key', 'value', 'description'],
 };
@@ -274,6 +276,21 @@ function setupSheets() {
       if (String(data[i][idCol]).trim() === 'PLAN-1M' && data[i][fpCol] === '') plans.getRange(i + 1, fpCol + 1).setValue(100000);
     }
   }
+  // MOON STAMPS: the four stamps (names and conditions are fixed; artwork lives on the website).
+  var stamps = ss.getSheetByName('StampDefinitions');
+  var stampSeed = [
+    { stamp_id: 'ST-01', name: 'FIRST MOON', description: '첫 클럽 방문', image_key: 'st-01', active: true },
+    { stamp_id: 'ST-02', name: 'FIRST TOP', description: '클럽에서 첫 볼더링 완등', image_key: 'st-02', active: true },
+    { stamp_id: 'ST-03', name: 'NIGHT OWL', description: '퇴근 후 클럽 세션 참여', image_key: 'st-03', active: true },
+    { stamp_id: 'ST-04', name: 'MOON HOST', description: '직접 이벤트 개최', image_key: 'st-04', active: true },
+  ];
+  var stampIds = stamps.getLastRow() < 2 ? [] :
+    stamps.getRange(2, 1, stamps.getLastRow() - 1, 1).getValues().map(function (r) { return String(r[0]).trim(); });
+  stampSeed.forEach(function (s) {
+    if (stampIds.indexOf(s.stamp_id) === -1) stamps.appendRow(rowFor_(stamps, s));
+  });
+  dropdown_(ss, 'StampAwards', 'stamp_id', ['ST-01', 'ST-02', 'ST-03', 'ST-04']);
+
   // Settings: add any key that is missing (existing values are never overwritten).
   var settings = ss.getSheetByName('Settings');
   var defaults = [

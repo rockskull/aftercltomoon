@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { ClubCalendar } from "@/components/calendar/club-calendar";
 import { EventCard } from "@/components/event-card";
 import { SiteFooter, SiteHeader } from "@/components/site";
-import { ArrowRight, buttonPrimaryOnDark, DataNotice, Logo, SectionTitle } from "@/components/ui";
+import { ArrowRight, buttonPrimary, buttonPrimaryOnDark, DataNotice, Logo, SectionTitle } from "@/components/ui";
 import { MembershipCard, summarizeMembership } from "@/components/membership-card";
 import { getClubData, requestNow } from "@/lib/club-data";
 import { toDateKey } from "@/lib/dates";
@@ -29,6 +29,7 @@ export default function HomePage() {
           </Suspense>
         </section>
         <ProposeInvite />
+        <PassItOn />
       </main>
       <SiteFooter />
     </>
@@ -206,6 +207,28 @@ function ProposeInvite() {
           <ArrowRight />
         </Link>
         <p className="mt-3 text-[13px] text-cream/60">로그인한 뒤 제안할 수 있어요.</p>
+      </div>
+    </section>
+  );
+}
+
+/** ⑤ PASS IT ON. — a link to the public invitation card (static; nothing is issued). */
+function PassItOn() {
+  return (
+    <section aria-labelledby="invite-title" className="paper text-midnight">
+      <div className="mx-auto max-w-6xl px-4 py-14 md:px-6 md:py-20">
+        <p className="font-label text-[11px] font-medium uppercase tracking-[0.32em] text-brown">Invitation</p>
+        <h2 id="invite-title" className="mt-2 font-display text-[46px] font-extrabold uppercase leading-[0.88] md:text-[72px]">
+          Pass it on.
+        </h2>
+        <p className="mt-5 text-[22px] font-bold md:text-[26px]">이걸 전해주세요.</p>
+        <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-ink-soft">
+          “함께하고 싶은 사람이 있다면, 이 작은 클럽을 소개해 주세요.”
+        </p>
+        <Link href="/invite" className={`${buttonPrimary} mt-8 w-full sm:w-auto`}>
+          View invitation
+          <ArrowRight />
+        </Link>
       </div>
     </section>
   );

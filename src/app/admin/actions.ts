@@ -3,6 +3,7 @@
 import { refresh, updateTag } from "next/cache";
 import { after } from "next/server";
 import { toDateKey } from "@/lib/dates";
+import { monthBounds } from "@/lib/membership";
 import { deliverDue } from "@/server/notify";
 import { operatorForAction } from "@/server/auth/viewer";
 import { matchDeposits, parseBankFile, type DepositMatch } from "@/server/domain/bank";
@@ -10,6 +11,7 @@ import { parsePrivate, type Membership, type Role } from "@/server/domain/model"
 import { CLUB_FEED_TAG } from "@/lib/club-data";
 import { AUTO_INCOME_CATEGORIES, kindOf, METHODS } from "@/lib/ledger";
 import { isPublicEvent, parseEventForm } from "@/server/domain/event-input";
+import { planStampAward } from "@/server/domain/stamps";
 import {
   EVENT_CHANGED,
   NEEDS,
@@ -52,9 +54,11 @@ function sendSoon() {
 export async function approvePayment(_prev: AdminState, fd: FormData): Promise<AdminState> {
   const op = await operatorForAction();
   if (!op) return DENIED;
-  const startOverride = field(fd, "start_date");
+  // The start is chosen by month (memberships always run from the 1st to the last day of a month).
+  const startMonth = field(fd, "start_month");
+  const startOverride = startMonth ? monthBounds(startMonth)?.start : null;
   const depositedAt = field(fd, "deposited_at");
-  if ((startOverride && !isDay(startOverride)) || (depositedAt && !isDay(depositedAt))) {
+  if ((startMonth && !startOverride) || (depositedAt && !isDay(depositedAt))) {
     return { status: "error", message: "날짜 형식을 확인해 주세요." };
   }
   const outcome = await runCommit<{ startDate: string; endDate: string }>(NEEDS.approval, (data) =>
@@ -110,18 +114,18 @@ export async function refundPayment(_prev: AdminState, fd: FormData): Promise<Ad
 export async function editMembership(_prev: AdminState, fd: FormData): Promise<AdminState> {
   const op = await operatorForAction();
   if (!op) return DENIED;
-  const startDate = field(fd, "start_date");
-  const endDate = field(fd, "end_date");
+  const startMonth = field(fd, "start_month");
+  const endMonth = field(fd, "end_month");
   const status = field(fd, "status") as Membership["status"];
-  if (!isDay(startDate) || !isDay(endDate)) return { status: "error", message: "날짜 형식을 확인해 주세요." };
+  if (!monthBounds(startMonth) || !monthBounds(endMonth)) return { status: "error", message: "시작 월과 종료 월을 골라 주세요." };
   if (!["active", "canceled", "refunded"].includes(status)) return { status: "error", message: "상태를 골라 주세요." };
   const outcome = await runCommit(NEEDS.membership, (data) =>
     planMembershipEdit(data, {
       now: Date.now(),
       actorId: op.member.id,
       membershipId: field(fd, "membership_id"),
-      startDate,
-      endDate,
+      startMonth,
+      endMonth,
       status,
       reason: field(fd, "reason"),
     }),
@@ -152,6 +156,26 @@ export async function editMember(_prev: AdminState, fd: FormData): Promise<Admin
     }),
   );
   return outcome.ok ? done("회원 정보를 저장했어요.") : { status: "error", message: outcome.message };
+}
+
+/** MOON STAMPS: an operator records a stamp after checking the moment themselves (no automatic checks). */
+export async function awardStamp(_prev: AdminState, fd: FormData): Promise<AdminState> {
+  const op = await operatorForAction();
+  if (!op) return DENIED;
+  const awardedAt = field(fd, "awarded_at");
+  if (!isDay(awardedAt)) return { status: "error", message: "발급일을 골라 주세요." };
+  const outcome = await runCommit(NEEDS.stamps, (data) =>
+    planStampAward(data, {
+      now: Date.now(),
+      actorId: op.member.id,
+      memberId: field(fd, "member_id"),
+      stampId: field(fd, "stamp_id"),
+      awardedAt,
+      note: field(fd, "note"),
+    }),
+  );
+  if (!outcome.ok) return { status: "error", message: outcome.message };
+  return done(outcome.duplicate ? "이미 반영된 발급이에요." : "스탬프를 발급했어요. 회원의 MY 화면에 바로 보여요.");
 }
 
 export async function reviewProposal(_prev: AdminState, fd: FormData): Promise<AdminState> {

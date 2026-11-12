@@ -1,5 +1,5 @@
 import { formatKeyKo, toDateKey } from "@/lib/dates";
-import { nextMembershipPeriod, overlapping, totalMonths } from "@/lib/membership";
+import { monthBounds, nextMembershipPeriod, overlapping, totalMonths } from "@/lib/membership";
 import { pickText, type Check, type Op } from "../store/commit";
 import { newId, seoulIso } from "../store/ids";
 import { eventIdForProposal, type EventInput } from "./event-input";
@@ -462,24 +462,35 @@ export function planRefund(data: Tables, ctx: Ctx & { paymentId: string; reason:
 // Operator: edit memberships and members
 // ---------------------------------------------------------------------------
 
+/**
+ * Operators change a membership by whole months ("YYYY-MM"): it then runs from
+ * the 1st of the start month to the last day of the end month. A month left as
+ * it was keeps its stored day, so fixing only the status of an older mid-month
+ * row doesn't move its dates.
+ */
 export function planMembershipEdit(
   data: Tables,
-  ctx: Ctx & { membershipId: string; startDate: string; endDate: string; status: Membership["status"]; reason: string },
+  ctx: Ctx & { membershipId: string; startMonth: string; endMonth: string; status: Membership["status"]; reason: string },
 ): Planned {
   const membership = (data.Memberships ?? []).map(toMembership).find((m) => m.id === ctx.membershipId);
   if (!membership) return { refuse: "회원권을 찾을 수 없어요." };
-  if (ctx.endDate < ctx.startDate) return { refuse: "종료일이 시작일보다 빨라요." };
+  const startBounds = monthBounds(ctx.startMonth);
+  const endBounds = monthBounds(ctx.endMonth);
+  if (!startBounds || !endBounds) return { refuse: "시작 월과 종료 월을 골라 주세요." };
+  const startDate = ctx.startMonth === membership.startDate.slice(0, 7) ? membership.startDate : startBounds.start;
+  const endDate = ctx.endMonth === membership.endDate.slice(0, 7) ? membership.endDate : endBounds.end;
+  if (endDate < startDate) return { refuse: "종료 월이 시작 월보다 빨라요." };
   if (!ctx.reason.trim()) return { refuse: "변경 사유를 적어 주세요." };
   if (ctx.status === "active") {
     const others = memberMemberships(data, membership.memberId);
-    if (overlapping(others, ctx.startDate, ctx.endDate, membership.id).length) {
+    if (overlapping(others, startDate, endDate, membership.id).length) {
       return { refuse: "같은 회원의 다른 회원권과 기간이 겹쳐요." };
     }
   }
   const commitId = newId("C", ctx.now, 8);
   const set = {
-    start_date: ctx.startDate,
-    end_date: ctx.endDate,
+    start_date: startDate,
+    end_date: endDate,
     status: ctx.status,
     updated_at: seoulIso(ctx.now),
     note: ctx.reason,
@@ -824,6 +835,7 @@ export const NEEDS = {
   proposals: ["Proposals"],
   proposalSubmit: ["Members", "Notifications"],
   ledger: ["Ledger"],
+  stamps: ["Members", "StampAwards"],
   events: ["Events"],
   eventFromProposal: ["Events", "Proposals"],
   prefs: ["NotificationPrefs"],

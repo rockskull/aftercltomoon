@@ -9,12 +9,14 @@ import { getClubData, requestNow } from "@/lib/club-data";
 import { formatLongDateKo } from "@/lib/dates";
 import {
   eventDurationLabel,
+  eventHref,
   eventTimeLabel,
   formatOpenAt,
   registrationWindowLabel,
 } from "@/lib/event-format";
 import { getEventStatus, isMuted } from "@/lib/status";
 import type { ClubEvent, EventDisplayStatus } from "@/lib/types";
+import { readSession } from "@/server/auth/session";
 
 function safeDecode(value: string): string {
   try {
@@ -63,15 +65,28 @@ async function EventDetail({ params }: { params: PageProps<"/events/[id]">["para
   const status = getEventStatus(event, await requestNow());
   const muted = isMuted(status);
   const duration = eventDurationLabel(event);
+  // Display hint only: the poster page itself re-checks the operator role on the server.
+  const session = await readSession();
+  const operator = session?.roleHint === "operator" || session?.roleHint === "admin";
 
   return (
     <article className="mx-auto max-w-3xl px-4 pb-32 pt-6 md:px-6 md:pb-16 md:pt-10">
-      <Link
-        href="/#calendar"
-        className="inline-flex h-10 items-center gap-1.5 font-label text-[12px] font-semibold uppercase tracking-[0.2em] text-ink-soft hover:text-midnight"
-      >
-        <span aria-hidden="true">←</span> Calendar
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          href="/#calendar"
+          className="inline-flex h-10 items-center gap-1.5 font-label text-[12px] font-semibold uppercase tracking-[0.2em] text-ink-soft hover:text-midnight"
+        >
+          <span aria-hidden="true">←</span> Calendar
+        </Link>
+        {operator && status !== "CANCELED" && (
+          <Link
+            href={`${eventHref(event)}/poster`}
+            className="inline-flex h-10 items-center rounded-[6px] border-2 border-midnight bg-butter px-3.5 font-label text-[12px] font-semibold uppercase tracking-[0.16em] text-midnight shadow-[2px_2px_0_0_var(--color-midnight)]"
+          >
+            Make a poster
+          </Link>
+        )}
+      </div>
 
       <header className="mt-3 flex gap-4">
         <DateStamp ms={event.start} muted={muted} className="w-[66px]" />

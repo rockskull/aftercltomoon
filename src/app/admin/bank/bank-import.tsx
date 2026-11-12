@@ -5,6 +5,7 @@ import { cn } from "@/components/ui";
 import { formatDateTimeKo } from "@/lib/dates";
 import { analyzeBankFile, approvePayment, type BankState } from "../actions";
 import { ActionForm } from "../admin-ui";
+import { MonthSelect } from "../month-select";
 import { Pill, smallInput, smallPrimary } from "../shared";
 
 const won = (n: number) => `${String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}원`;
@@ -87,8 +88,8 @@ export function BankImport() {
                           <input type="hidden" name="bank_transaction_id" value={m.deposit.key} />
                           <input type="hidden" name="deposited_at" value={m.deposit.dateKey} />
                           <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
-                            시작일 (바꿀 때만)
-                            <input type="date" name="start_date" className={smallInput} />
+                            시작 월 (바꿀 때만)
+                            <MonthSelect name="start_month" todayKey={m.deposit.dateKey} emptyLabel="자동" />
                           </label>
                           <button type="submit" className={smallPrimary}>
                             이 입금으로 승인

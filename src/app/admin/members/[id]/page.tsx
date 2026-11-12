@@ -13,6 +13,8 @@ import { formatWon } from "@/server/domain/model";
 import { storeMode } from "@/server/store";
 import { editMember, editMembership } from "../../actions";
 import { ActionForm } from "../../admin-ui";
+import { MonthSelect } from "../../month-select";
+import { MemberStamps } from "./member-stamps";
 import { ApprovedPaymentRow, PendingPaymentCard } from "../../payment-cards";
 import { AdminFrame, AdminSkeleton, Box, Pill, smallButton, smallInput, smallPrimary } from "../../shared";
 
@@ -122,12 +124,12 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
                     <ActionForm action={editMembership} className="mt-2 flex flex-wrap items-end gap-2" confirmText="회원권을 수정할까요? 변경 이력이 남아요.">
                       <input type="hidden" name="membership_id" value={m.id} />
                       <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
-                        시작일
-                        <input type="date" name="start_date" defaultValue={m.startDate} required className={smallInput} />
+                        시작 월 (1일부터)
+                        <MonthSelect name="start_month" todayKey={todayKey} defaultValue={m.startDate.slice(0, 7)} required />
                       </label>
                       <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
-                        종료일
-                        <input type="date" name="end_date" defaultValue={m.endDate} required className={smallInput} />
+                        종료 월 (말일까지)
+                        <MonthSelect name="end_month" todayKey={todayKey} defaultValue={m.endDate.slice(0, 7)} required />
                       </label>
                       <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
                         상태
@@ -151,6 +153,10 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
             </ul>
           )}
         </Box>
+
+        <Suspense fallback={<Box title="Moon stamps"><div className="h-24 animate-pulse rounded-md bg-white/40" /></Box>}>
+          <MemberStamps member={member} members={club.members} todayKey={todayKey} />
+        </Suspense>
 
         <Box title="회비">
           {payments.length === 0 ? (

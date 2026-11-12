@@ -16,6 +16,20 @@ export interface PlanOption {
 const input =
   "block w-full rounded-md border-2 border-midnight/25 bg-ivory px-3.5 py-3 text-[16px] text-midnight focus:border-midnight focus:outline-none";
 
+/** This month and the next three, as the 1st of each month ("YYYY-MM-01"). */
+function startMonths(today: string): Array<{ value: string; label: string }> {
+  const y = Number(today.slice(0, 4));
+  const m = Number(today.slice(5, 7));
+  return [0, 1, 2, 3].map((i) => {
+    const year = y + Math.floor((m - 1 + i) / 12);
+    const month = ((m - 1 + i) % 12) + 1;
+    return {
+      value: `${year}-${String(month).padStart(2, "0")}-01`,
+      label: `${year}년 ${month}월${i === 0 ? " (이번 달)" : i === 1 ? " (다음 달)" : ""}`,
+    };
+  });
+}
+
 export function ApplyForm({
   plans,
   isExtension,
@@ -104,25 +118,33 @@ export function ApplyForm({
         />
       </div>
 
-      <div>
-        <label htmlFor="requested_start" className="text-[15px] font-semibold text-midnight">
-          희망 시작일 <span className="text-[12px] font-medium text-ink-soft">선택</span>
-        </label>
-        <p id="start-hint" className="mt-1 text-[13px] text-ink-soft">
-          {isExtension
-            ? "비워 두면 지금 회원권이 끝난 다음 날부터 이어져요. 남은 기간은 그대로 유지돼요."
-            : "비워 두면 운영진이 입금을 확인한 날부터 시작해요."}
+      {isExtension ? (
+        <p className="rounded-md border border-dashed border-midnight/30 px-4 py-3 text-[14px] leading-relaxed text-ink-soft">
+          회원권은 매월 1일에 시작해 말일에 끝나요. 연장분은 지금 회원권이 끝난 다음 달 1일부터 이어지고, 남은 기간은 그대로 유지돼요.
         </p>
-        <input
-          id="requested_start"
-          name="requested_start"
-          type="date"
-          min={today}
-          aria-describedby="start-hint"
-          defaultValue={values.requested_start ?? ""}
-          className={cn(input, "mt-2")}
-        />
-      </div>
+      ) : (
+        <div>
+          <label htmlFor="requested_start" className="text-[15px] font-semibold text-midnight">
+            시작 월
+          </label>
+          <p id="start-hint" className="mt-1 text-[13px] text-ink-soft">
+            회원권은 고른 달 1일에 시작해 마지막 달 말일에 끝나요. 입금한 날짜와는 상관없어요.
+          </p>
+          <select
+            id="requested_start"
+            name="requested_start"
+            aria-describedby="start-hint"
+            defaultValue={values.requested_start ?? startMonths(today)[0].value}
+            className={cn(input, "mt-2")}
+          >
+            {startMonths(today).map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <button type="submit" disabled={pending || !planId} className={cn(buttonPrimary, "w-full disabled:opacity-60 sm:w-72")}>
         {pending ? "Sending…" : isExtension ? "Extend membership" : "Apply"}
