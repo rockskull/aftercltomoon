@@ -10,7 +10,7 @@
 | 사이트 | https://aftercltomoon.vercel.app — **데모 모드** (시트 미연결, 데모 계정으로 회원·운영진 화면 확인 가능) |
 | 코드 | GitHub `rockskull/aftercltomoon` `main` · Vercel이 연결되어 **push하면 자동 배포** |
 | 완료 | 캘린더·이벤트·제안서(로그인 필요), Google 로그인 코드, 회원권 기간 계산(**달 단위: 1일 시작 · 말일 종료**), 첫 등록 가격(1개월 10만 원), 입금 승인, 거래내역 매칭, 알림, PWA, 관리 화면, 동의서, 회계 장부, 사이트 결제 요청 제거, 초대장(`/invite`), 포스터 생성기(08), MOON STAMPS(06) |
-| 실서비스 반영 | 스탬프는 시트에 **StampDefinitions · StampAwards** 탭이 있어야 발급돼요 → 아래 "새 Code.gs 반영" |
+| 실서비스 반영 | 스탬프(**StampDefinitions · StampAwards**)와 라디오(**RadioTracks**)는 시트 탭이 있고 Apps Script 배포가 새 버전이어야 동작해요 → 아래 "새 Code.gs 반영" |
 | 남은 일 | ① Apps Script로 시트 연결 ② Google 로그인 설정 ③ Vercel 환경변수 ④ 데이터 채우기 |
 
 ---
@@ -45,15 +45,17 @@ npm run dev                                   # http://localhost:3000 (데모 �
 
 > `Code.gs`를 고친 뒤에는 **배포 관리 → 수정(연필) → 버전: 새 버전 → 배포**. URL은 그대로 유지됩니다.
 
-### 새 Code.gs 반영 (MOON STAMPS, 2026-11-12)
+### 새 Code.gs 반영 (MOON STAMPS · AFTER HOURS RADIO, 2026-11-12)
 
 이미 시트를 연결했다면 이것만 하면 됩니다. 순서대로:
-1. Apps Script의 `Code.gs`를 저장소의 최신 `apps-script/Code.gs`로 **통째로 바꿔 붙여넣고** 저장
-2. **`setupSheets`** 실행 → `StampDefinitions`(스탬프 4종이 채워짐)와 `StampAwards` 탭이 새로 생겨요. 기존 데이터는 그대로예요.
+1. Apps Script의 `Code.gs`를 저장소의 최신 `apps-script/Code.gs`로 **통째로 바꿔 붙여넣고** 저장 (`Tick.gs`는 없는 상태로)
+2. **`setupSheets`** 실행 → `StampDefinitions`(스탬프 4종), `StampAwards`, `RadioTracks`(기본곡 14곡) 탭과 Settings의 `radio_player`(off)가 새로 생겨요. 기존 데이터는 그대로예요. 기본곡은 탭을 처음 만들 때 한 번만 들어가요.
 3. **배포 관리 → 수정 → 새 버전 → 배포** (URL은 그대로)
 4. 확인: ADMIN → 회원 → 아무 회원 → **Moon stamps** 칸에 "스탬프 발급" 버튼이 보이면 끝(배포 후 관리 화면 캐시 때문에 최대 1분 걸릴 수 있어요). "Apps Script 배포가 아직 이전 버전" 안내가 보이면 **3번(새 버전 배포)** 을 안 한 거예요. 탭이 시트에 있어도 배포를 올려야 사이트가 읽어요. **새 배포**가 아니라 **기존 배포 수정**이어야 URL이 그대로예요.
 
-이 순서를 하기 전에 사이트를 배포해도 괜찮아요. 회원 화면은 스탬프를 "아직"으로만 보여 주고, 발급 버튼은 안내 문구로 바뀌며, 다른 기능에는 영향이 없어요.
+이 순서를 하기 전에 사이트를 배포해도 괜찮아요. 회원 화면은 스탬프를 "아직"으로만 보여 주고, 발급 버튼은 안내 문구로 바뀌며, `/radio`는 "준비하고 있어요"로 보여요. 다른 기능에는 영향이 없어요.
+
+**라디오 플레이어 켜기:** 아지트에서 음악을 함께 트는 것은 이용 권한을 확인한 뒤로 정해서, 플레이어는 꺼진 채로 시작해요(목록·신청·삭제는 바로 됨). 확인되면 Settings 탭 `radio_player`를 `on`으로 바꾸면 1분 안에 켜져요. RIDE ON TIME은 공식 전곡 업로드가 없어 팬 업로드로 연결돼 있어요.
 
 ---
 
@@ -108,6 +110,7 @@ Vercel → `aftercltomoon` → **Settings → Environment Variables** → 환경
 - [ ] 로그아웃 상태에서 홈 맨 아래 **View invitation** → 초대장 → **Share invitation**으로 카톡 공유
 - [ ] 회원권 신청 화면에 **시작 월** 선택이 보이고, 승인 카드에 "승인하면 ○○.01 – ○○.말일"로 나온다
 - [ ] (새 Code.gs 반영 후) 운영진으로 회원 상세 → **Moon stamps → 스탬프 발급** → 그 회원 MY의 **My Moon Stamps**에 날짜와 함께 보이고 **Save stamp**로 카드 저장
+- [ ] (새 Code.gs 반영 후) `/radio`에 기본곡 14곡이 보이고, 회원으로 YouTube 링크를 신청하면 바로 15번째로 붙는다. admin 계정에만 **Delete track**이 보인다
 
 ## 막힐 때
 

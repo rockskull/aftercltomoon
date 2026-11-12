@@ -30,6 +30,7 @@ export default function HomePage() {
         </section>
         <ProposeInvite />
         <PassItOn />
+        <RadioTeaser />
       </main>
       <SiteFooter />
     </>
@@ -229,6 +230,31 @@ function PassItOn() {
           View invitation
           <ArrowRight />
         </Link>
+      </div>
+    </section>
+  );
+}
+
+/** ⑥ AFTER HOURS RADIO — the members' playlist. */
+function RadioTeaser() {
+  return (
+    <section aria-labelledby="radio-title" className="paper border-t border-dashed border-midnight/20 text-midnight">
+      <div className="mx-auto max-w-6xl px-4 pb-16 pt-12 md:px-6 md:pb-20">
+        <div className="rounded-xl border-2 border-midnight bg-midnight p-6 text-cream shadow-[6px_6px_0_0_var(--color-butter)] md:p-8">
+          <p className="font-label text-[11px] font-medium uppercase tracking-[0.32em] text-butter">After hours radio</p>
+          <h2 id="radio-title" className="mt-2 font-display text-[40px] font-extrabold uppercase leading-[0.9] md:text-[56px]">
+            Every member
+            <br />
+            has a song.
+          </h2>
+          <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-cream/75">
+            멤버들이 한 곡씩 보태며 쌓아 가는 우리 클럽의 음악 목록이에요. 오늘 듣고 싶은 곡을 YouTube 링크로 보태 주세요.
+          </p>
+          <Link href="/radio" className={`${buttonPrimaryOnDark} mt-6 w-full sm:w-auto`}>
+            Tune in
+            <ArrowRight />
+          </Link>
+        </div>
       </div>
     </section>
   );

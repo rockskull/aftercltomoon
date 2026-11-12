@@ -7,7 +7,7 @@
 
 - **v0.1** 월간 캘린더(멤버 등록기간 / 이벤트 신청기간 / 이벤트), 이벤트 목록·상세, 이벤트 제안서
 - **v0.2** Google 로그인, 회원권(기간 자동 계산·연장), 모임통장 입금 승인, 거래내역 엑셀 매칭, 운영진 화면, PWA 설치, 웹 푸시 알림
-- **추가** 동의서, 회계 장부, 초대장(`/invite`), 이벤트 포스터 생성기(MAKE A POSTER), MOON STAMPS, 회원권 달 단위(1일 시작 · 말일 종료)
+- **추가** 동의서, 회계 장부, 초대장(`/invite`), 이벤트 포스터 생성기(MAKE A POSTER), MOON STAMPS, 회원권 달 단위(1일 시작 · 말일 종료), AFTER HOURS RADIO(`/radio`)
 
 ---
 
@@ -26,7 +26,7 @@
 
 | 폴더 | 내용 |
 |---|---|
-| `src/app` | 페이지: `/`, `/events`, `/events/[id]/poster`, `/host`, `/invite`, `/consent`, `/login`, `/me`, `/notifications`, `/admin/*`, `/offline`, API 라우트 |
+| `src/app` | 페이지: `/`, `/events`, `/events/[id]/poster`, `/host`, `/invite`, `/radio`, `/consent`, `/login`, `/me`, `/notifications`, `/admin/*`, `/offline`, API 라우트 |
 | `src/lib` | 날짜(Asia/Seoul), 이벤트 상태, 캘린더 배치, **회원권 기간 엔진**(`membership.ts`) |
 | `src/lib/canvas` | 브랜드 이미지 렌더러(브라우저 Canvas): 이벤트 포스터, 초대장 PNG |
 | `src/server/store` | 시트 스키마, commit 규칙, Apps Script 클라이언트, 데모용 메모리 저장소 |
@@ -65,7 +65,7 @@ npm run ledger:convert -- "<회비 사용 내역.xlsx>"   # 기존 장부 → pr
 
 1. Google 드라이브에서 새 스프레드시트를 만듭니다. 운영진에게만 편집 권한을 공유합니다.
 2. **확장 프로그램 → Apps Script**를 열고 `apps-script/Code.gs` 내용을 붙여넣습니다. 프로젝트 설정에서 시간대를 `Asia/Seoul`로 맞춥니다(또는 `appsscript.json` 내용을 사용합니다).
-3. 편집기에서 **`setupSheets`** 함수를 한 번 실행합니다(처음에 권한 승인 필요). 탭 16개, 머리글, 드롭다운, 기본 회원권 상품 3종, MOON STAMPS 4종, 설정 값이 만들어지고 시트 시간대가 서울로 바뀝니다. 다시 실행해도 기존 데이터는 그대로 두고 빠진 열만 추가합니다.
+3. 편집기에서 **`setupSheets`** 함수를 한 번 실행합니다(처음에 권한 승인 필요). 탭 17개, 머리글, 드롭다운, 기본 회원권 상품 3종, MOON STAMPS 4종, 라디오 기본곡 14곡, 설정 값이 만들어지고 시트 시간대가 서울로 바뀝니다. 다시 실행해도 기존 데이터는 그대로 두고 빠진 열만 추가합니다.
    > **Apps Script를 아직 실행할 수 없다면** `apps-script/after-cl-to-moon-sheet-template.xlsx`로 같은 시트 구조를 만들 수 있습니다.
    > Google Sheets에서 **파일 → 가져오기 → 업로드 → 스프레드시트 바꾸기**로 가져온 뒤 **파일 → 설정 → 시간대**를 `(GMT+09:00) 서울`로 맞추고, Settings 탭의 `sheet_url`에 시트 주소를 붙여넣으세요.
    > 나중에 Apps Script에서 `setupSheets`를 실행해도 기존 데이터는 그대로 두므로 안전합니다.
@@ -228,6 +228,19 @@ Vercel 무료(Hobby) 요금제는 비상업적 용도로만 쓸 수 있고, 상�
 - 스탬프 그림 4종은 완성된 정적 에셋입니다(`public/stamps/st-0N.svg`). 글자는 사이트 폰트를 외곽선으로 바꿔 넣어 어디서나 같게 보입니다. 디자인을 고칠 때만 `scripts/stamps/build-stamps.mjs`를 수정하고 `npm run stamps:build`로 다시 만듭니다(같은 결과가 나오도록 고정 시드 사용). 운영 중에는 AI나 이미지 API를 부르지 않습니다.
 - 시트: **StampDefinitions**(stamp_id, name, description, image_key, active)에서 문구를 바꾸거나 `active`를 FALSE로 해 새 발급 화면에서 감출 수 있습니다(이미 받은 회원에게는 계속 보임). ST-01~04 외의 행은 무시합니다. **StampAwards**(award_id, member_id, stamp_id, awarded_at, awarded_by, note)는 발급 기록입니다.
 
+### AFTER HOURS RADIO (`/radio`)
+
+멤버들이 함께 만드는 음악 목록입니다. 홈 아래 **Tune in**이나 푸터의 **Radio**로 들어갑니다(상단 메뉴는 그대로).
+
+- **목록**: 기본곡 14곡 다음에 신청 순서대로 쌓입니다. 누구나 볼 수 있지만, **신청자 이름과 사연은 로그인한 회원에게만** 보입니다(로그아웃 상태에서는 "멤버 신청"으로 표시). 목록은 약 20초마다 새로 고쳐집니다.
+- **신청(ADD A TRACK)**: 로그인한 회원(Members 탭, 이용 중지 제외)만 할 수 있습니다. YouTube 링크(youtube.com/watch, youtu.be, shorts, music.youtube.com 등)를 붙여넣으면 곡명·아티스트를 YouTube oEmbed로 채워 주고, 회원이 고칠 수 있습니다. 한 줄 사연은 150자까지입니다. **승인 없이 바로 목록 끝에 추가**되고 시트에 저장됩니다. 같은 영상이 이미 있으면 막고 몇 번째 곡인지 알려 줍니다. 없는 영상(비공개·삭제)은 받지 않습니다.
+- **삭제(DELETE TRACK)**: **admin만** 보이고 할 수 있습니다(operator는 불가). 서버가 Members 탭으로 권한을 다시 확인하고, 행을 지우지 않고 `status = deleted`, `deleted_at`, `deleted_by`만 기록합니다. 삭제된 곡은 목록·재생 순서에서 빠지고, 재생 중이던 곡이면 공용 플레이어가 다음 곡으로 넘어갑니다. 삭제한 곡을 다시 신청하는 건 가능합니다.
+- **플레이어**: 아지트의 공용 기기 한 대에서 이 페이지를 열어 두는 방식입니다. YouTube IFrame 플레이어(youtube-nocookie)로 목록 순서대로 재생하고, 이전/다음 곡, 반복(전체·한 곡), 곡별 재생을 지원합니다. 재생할 수 없는 영상은 원본 링크를 보여 주고 다음 곡으로 넘어갑니다. 새 신청곡은 지금 곡을 끊지 않고 목록 끝에 붙습니다. 다른 사람의 기기를 조작하는 기능은 없습니다.
+  - **플레이어는 기본으로 꺼져 있습니다.** 공간에서 음악을 함께 트는 것은 이용 권한(YouTube 약관, 공연권 등)을 확인한 뒤 켜기로 했습니다. 확인되면 Settings 탭의 `radio_player`를 `on`으로 바꾸세요. 꺼져 있는 동안에도 목록·신청·삭제는 그대로 되고, 각 곡의 YouTube 링크로 들을 수 있습니다.
+- **기본곡 14곡**: 곡마다 제목·아티스트로 찾아 **공식 업로드를 우선** 연결했고, YouTube 플레이어에서 실제 재생되는 것을 확인했습니다(2026-11-12, 목록은 `src/lib/radio.ts`). 단, **RIDE ON TIME은 YouTube에 공식 전곡 업로드가 없어** 조회수가 가장 많은 팬 업로드를 연결했습니다. 내려갈 수 있으니 필요하면 삭제하고 다른 링크로 신청하세요.
+  - 기본곡은 `setupSheets`가 **RadioTracks 탭을 처음 만들 때 한 번만** 넣습니다. 다시 실행하거나 사이트를 다시 배포해도 추가·복원되지 않으므로, 삭제한 기본곡은 삭제된 채로 남습니다.
+- 시트 **RadioTracks**: track_id, title, artist, youtube_url, youtube_video_id, requested_by(회원 ID 또는 AFTER CL TO MOON), display_name, message, source(seed/member), sort_order, created_at, status(active/deleted), deleted_at, deleted_by. 순서를 바꾸고 싶으면 `sort_order`를 고치면 됩니다.
+
 ### 거래내역 엑셀 매칭 (ADMIN → 거래내역)
 
 카카오뱅크 앱에서 모임통장 거래내역을 엑셀로 내려받아 올리면, 입금만 골라 신청 내역과 비교합니다.
@@ -260,6 +273,7 @@ Vercel 무료(Hobby) 요금제는 비상업적 용도로만 쓸 수 있고, 상�
 - 회원 화면은 로그인한 본인 데이터만 조회합니다(URL에 회원 ID를 받지 않음). 운영진이 아니면 관리 화면은 404로 보입니다.
 - **이벤트 제안(`/host`)은 로그인한 사용자만** 쓸 수 있습니다. 로그인하지 않으면 `src/proxy.ts`가 로그인 화면으로 보내고, 로그인 후 제안 페이지로 돌아옵니다. 페이지와 제출 처리는 서버에서 세션을 다시 확인하므로, 쿠키를 꾸며 내거나 제출 요청을 직접 보내도 저장되지 않습니다. 이름과 연락처(로그인 메일)는 미리 채워집니다.
 - **스탬프 발급 기록은 공개 API로 나가지 않습니다.** 회원 화면은 로그인 세션을 Members 탭으로 확인한 본인의 스탬프만 서버에서 골라 보내고(요청에서 회원 ID를 받지 않음), 발급자와 운영진 메모는 보내지 않습니다. 전체 기록은 운영진 화면에서만 보입니다.
+- **라디오 신청·삭제는 서버에서만** 시트에 씁니다. 신청자는 로그인 세션을 Members 탭으로 확인해 정하고(브라우저가 보낸 회원 ID나 역할은 믿지 않음), 삭제는 admin인지 실시간 시트로 다시 확인합니다. 화면과 `/api/radio`에는 회원 ID가 나가지 않고, 이름·사연은 로그인한 회원에게만 갑니다.
 - 웹에서 시트에 쓰는 모든 텍스트는 일반 텍스트로 저장되어 수식이나 숫자로 해석되지 않습니다.
 - 서비스 워커는 페이지를 캐시하지 않아, 공용 기기에서 다른 사람의 회원 정보가 남지 않습니다.
 - 데모 로그인은 시트가 연결되면 자동으로 꺼집니다.

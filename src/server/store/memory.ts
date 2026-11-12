@@ -1,5 +1,7 @@
 import { addDays, toDateKey } from "@/lib/dates";
 import { membershipEndDate, monthStart } from "@/lib/membership";
+import { RADIO_SEED } from "@/lib/radio";
+import { seedRows } from "../domain/radio";
 import { applyCommit, type Commit, type CommitResult } from "./commit";
 import type { Row, TableName, Tables } from "./schema";
 
@@ -189,6 +191,44 @@ export function demoTables(now = Date.now()): Tables {
       { key: "sheet_url", value: "", description: "운영진용 스프레드시트 링크" },
       { key: "consent_daily_url", value: "https://forms.gle/voZyWWAKs8gUAv949", description: "일일 이용 동의서 (Google 설문)" },
       { key: "consent_member_url", value: "https://forms.gle/m1ZoK1xUvmktA1kT7", description: "회원 등록 동의서 (Google 설문)" },
+      // On in the demo so the player can be tried; the real sheet starts "off" until music rights are checked.
+      { key: "radio_player", value: "on", description: "AFTER HOURS RADIO 아지트 플레이어" },
+    ],
+    // The 14 seeds, one member request, and one request an admin removed (hidden from the list).
+    RadioTracks: [
+      ...seedRows(RADIO_SEED, at(-30, "20:00")),
+      {
+        track_id: "RT-DEMO-1",
+        title: "Show Me How (garage session)",
+        artist: "Men I Trust",
+        youtube_url: "https://www.youtube.com/watch?v=cpU7Yrl-AwM",
+        youtube_video_id: "cpU7Yrl-AwM",
+        requested_by: "M-DEMO-HYUNWOO",
+        display_name: "현우",
+        message: "벽 새로 세팅할 때 틀어 두면 딱 좋아요",
+        source: "member",
+        sort_order: 15,
+        created_at: at(-3, "22:10"),
+        status: "active",
+        deleted_at: "",
+        deleted_by: "",
+      },
+      {
+        track_id: "RT-DEMO-2",
+        title: "Friday Morning (Live at Sydney Opera House)",
+        artist: "Khruangbin",
+        youtube_url: "https://www.youtube.com/watch?v=RlCFsZMWYpI",
+        youtube_video_id: "RlCFsZMWYpI",
+        requested_by: "M-DEMO-JIMIN",
+        display_name: "지민",
+        message: "라이브 버전도!",
+        source: "member",
+        sort_order: 16,
+        created_at: at(-2, "21:00"),
+        status: "deleted",
+        deleted_at: at(-1, "10:00"),
+        deleted_by: "M-DEMO-ADMIN",
+      },
     ],
     Proposals: [
       {

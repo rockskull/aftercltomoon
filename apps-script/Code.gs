@@ -43,9 +43,33 @@ var TABLES = {
     'status', 'created_by', 'created_at', 'updated_at'],
   StampDefinitions: ['stamp_id', 'name', 'description', 'image_key', 'active'],
   StampAwards: ['award_id', 'member_id', 'stamp_id', 'awarded_at', 'awarded_by', 'note'],
+  RadioTracks: ['track_id', 'title', 'artist', 'youtube_url', 'youtube_video_id', 'requested_by', 'display_name', 'message',
+    'source', 'sort_order', 'created_at', 'status', 'deleted_at', 'deleted_by'],
   AuditLog: ['log_id', 'commit_id', 'actor_id', 'action', 'target_id', 'before_value', 'after_value', 'created_at'],
   Settings: ['key', 'value', 'description'],
 };
+
+/**
+ * AFTER HOURS RADIO seed tracks (artist, title, YouTube video id), written once by
+ * setupSheets when the RadioTracks tab is first created. Same list as
+ * src/lib/radio.ts RADIO_SEED (a test keeps them in sync).
+ */
+var RADIO_SEED = [
+  ['Khruangbin', 'Friday Morning', 'KjQSSYOTXzk'],
+  ['Men I Trust', 'Show Me How', 'OZRYzH0Q0pU'],
+  ['Steely Dan', 'Peg', 'MXupeS9hv70'],
+  ['Tatsuro Yamashita', 'SPARKLE', 'pqobRu9aR3M'],
+  ['Nujabes', 'Aruarian Dance', 'qYcoJpqCha4'],
+  ['BADBADNOTGOOD', 'Time Moves Slow', 'GpSWv71IsVw'],
+  ['Radiohead', 'Weird Fishes/Arpeggi', 'TNRCvG9YtYI'],
+  ['toe', 'Goodbye (feat. Toki Asako)', 'aVLviSRNeLw'],
+  ['Tatsuro Yamashita', 'RIDE ON TIME', '3yWSSB-TIew'],
+  ['Steely Dan', 'Aja', 'CYZwVf07tHA'],
+  ['Khruangbin', 'Time (You and I)', 'oc50wHexbwg'],
+  ['Radiohead', 'Reckoner', '_uofQD-N6UI'],
+  ['Air', "La femme d'argent", 'YUX8fUrKRNU'],
+  ['Sigur Rós', 'Hoppípolla', 'JAYb8ZyjzD0'],
+];
 
 /** Only these columns ever leave the spreadsheet through the public GET. */
 var PUBLIC_EVENT_FIELDS = ['event_id', 'title', 'short_title', 'description', 'category', 'start_at', 'end_at',
@@ -291,6 +315,26 @@ function setupSheets() {
   });
   dropdown_(ss, 'StampAwards', 'stamp_id', ['ST-01', 'ST-02', 'ST-03', 'ST-04']);
 
+  // AFTER HOURS RADIO: the 14 seed tracks, only when the tab has just been created and is empty.
+  // Running setupSheets again (or redeploying the site) never adds them back, so a seed an
+  // admin deleted stays deleted.
+  var radio = ss.getSheetByName('RadioTracks');
+  if (added.RadioTracks.length === TABLES.RadioTracks.length && radio.getLastRow() < 2) {
+    var createdAt = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd'T'HH:mm:ssXXX");
+    RADIO_SEED.forEach(function (t, i) {
+      var record = {
+        track_id: 'RT-SEED-' + (i < 9 ? '0' : '') + (i + 1), title: t[1], artist: t[0],
+        youtube_url: 'https://www.youtube.com/watch?v=' + t[2], youtube_video_id: t[2],
+        requested_by: 'AFTER CL TO MOON', display_name: 'AFTER CL TO MOON', message: '', source: 'seed',
+        sort_order: i + 1, created_at: createdAt, status: 'active', deleted_at: '', deleted_by: '',
+      };
+      Object.keys(record).forEach(function (k) { record[k] = toCell_(record[k]); });
+      radio.appendRow(rowFor_(radio, record));
+    });
+  }
+  dropdown_(ss, 'RadioTracks', 'source', ['seed', 'member']);
+  dropdown_(ss, 'RadioTracks', 'status', ['active', 'deleted']);
+
   // Settings: add any key that is missing (existing values are never overwritten).
   var settings = ss.getSheetByName('Settings');
   var defaults = [
@@ -299,6 +343,7 @@ function setupSheets() {
     ['sheet_url', ss.getUrl(), '운영진용 스프레드시트 링크'],
     ['consent_daily_url', 'https://forms.gle/voZyWWAKs8gUAv949', '일일 이용 동의서 (Google 설문)'],
     ['consent_member_url', 'https://forms.gle/m1ZoK1xUvmktA1kT7', '회원 등록 동의서 (Google 설문)'],
+    ['radio_player', 'off', 'AFTER HOURS RADIO 아지트 플레이어. 음악 이용 권한을 확인한 뒤 on으로 바꾸기'],
   ];
   var existingKeys = settings.getLastRow() < 2 ? [] :
     settings.getRange(2, 1, settings.getLastRow() - 1, 1).getValues().map(function (r) { return String(r[0]).trim(); });

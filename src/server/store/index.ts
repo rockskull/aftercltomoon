@@ -72,13 +72,25 @@ async function readAdminCached(key: string): Promise<Tables> {
   return readFromSheets(key.split(",") as TableName[]);
 }
 
+/** Cache tag of the radio playlist; adding or deleting a track clears it. */
+export const RADIO_TAG = "club-radio";
+
+/** The radio page polls every ~20 s, so its shared cache turns over quickly (one sheet read per 15 s at most). */
+async function readRadioCached(key: string): Promise<Tables> {
+  "use cache: remote";
+  cacheLife({ stale: 15, revalidate: 15, expire: 120 });
+  cacheTag(RADIO_TAG, PRIVATE_TAG);
+  return readFromSheets(key.split(",") as TableName[]);
+}
+
 /**
  * Reads whole tables.
  * - `fresh: true` reads the live sheet; use it for anything an operator acts on.
  *   Mutations re-verify against the live sheet regardless.
  * - `admin: true` uses the short-lived admin cache (page views only).
+ * - `radio: true` uses the radio playlist cache.
  */
-export async function readTables(tables: TableName[], opts: { fresh?: boolean; admin?: boolean } = {}): Promise<Tables> {
+export async function readTables(tables: TableName[], opts: { fresh?: boolean; admin?: boolean; radio?: boolean } = {}): Promise<Tables> {
   switch (storeMode()) {
     case "demo":
       return demoStore().read(tables);
@@ -87,6 +99,7 @@ export async function readTables(tables: TableName[], opts: { fresh?: boolean; a
     case "sheets": {
       if (opts.fresh) return readFromSheets(tables);
       const key = [...tables].sort().join(",");
+      if (opts.radio) return readRadioCached(key);
       return opts.admin ? readAdminCached(key) : readFromSheetsCached(key);
     }
   }

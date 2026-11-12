@@ -136,6 +136,11 @@ export function SiteFooter() {
             </li>
           ))}
           <li>
+            <Link href="/radio" className="hover:text-cream">
+              Radio
+            </Link>
+          </li>
+          <li>
             <Link href="/me" className="hover:text-cream">
               My membership
             </Link>

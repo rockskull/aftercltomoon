@@ -836,6 +836,7 @@ export const NEEDS = {
   proposalSubmit: ["Members", "Notifications"],
   ledger: ["Ledger"],
   stamps: ["Members", "StampAwards"],
+  radio: ["Members", "RadioTracks"],
   events: ["Events"],
   eventFromProposal: ["Events", "Proposals"],
   prefs: ["NotificationPrefs"],

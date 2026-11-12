@@ -123,6 +123,8 @@ export interface ClubSettings {
   applyNotice: string;
   sheetUrl: string;
   consent: ConsentLinks;
+  /** AFTER HOURS RADIO player (Settings radio_player): off until the crew has checked music rights. */
+  radioPlayer: boolean;
 }
 
 export const DEFAULT_APPLY_NOTICE =
@@ -301,6 +303,7 @@ export function toSettings(rows: Row[] | undefined): ClubSettings {
       daily: consentUrl(map.get("consent_daily_url"), CONSENT_DEFAULTS.daily),
       member: consentUrl(map.get("consent_member_url"), CONSENT_DEFAULTS.member),
     },
+    radioPlayer: ["on", "true", "yes", "1", "켜기"].includes((map.get("radio_player") ?? "").trim().toLowerCase()),
   };
 }
 

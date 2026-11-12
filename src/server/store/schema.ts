@@ -95,6 +95,23 @@ export const TABLES = {
   StampDefinitions: ["stamp_id", "name", "description", "image_key", "active"],
   /** Who received which stamp. Private: only the member themself and operators see it; `note` is operators-only. */
   StampAwards: ["award_id", "member_id", "stamp_id", "awarded_at", "awarded_by", "note"],
+  /** AFTER HOURS RADIO. Never deleted: admins mark a track `deleted` (soft delete). */
+  RadioTracks: [
+    "track_id",
+    "title",
+    "artist",
+    "youtube_url",
+    "youtube_video_id",
+    "requested_by",
+    "display_name",
+    "message",
+    "source",
+    "sort_order",
+    "created_at",
+    "status",
+    "deleted_at",
+    "deleted_by",
+  ],
   AuditLog: ["log_id", "commit_id", "actor_id", "action", "target_id", "before_value", "after_value", "created_at"],
   Settings: ["key", "value", "description"],
   // v0.1 tables (read by the public feed / written by the proposal form)
@@ -194,3 +211,6 @@ export const ADMIN_TABLES: TableName[] = [
  * been set up for stamps yet can never break them.
  */
 export const STAMP_TABLES: TableName[] = ["StampDefinitions", "StampAwards"];
+
+/** AFTER HOURS RADIO page: tracks, who may add/delete, and the player switch — one gateway call. */
+export const RADIO_TABLES: TableName[] = ["Members", "RadioTracks", "Settings"];
