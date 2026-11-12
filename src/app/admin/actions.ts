@@ -12,6 +12,7 @@ import { CLUB_FEED_TAG } from "@/lib/club-data";
 import { AUTO_INCOME_CATEGORIES, kindOf, METHODS } from "@/lib/ledger";
 import { isPublicEvent, parseEventForm } from "@/server/domain/event-input";
 import { planStampAward } from "@/server/domain/stamps";
+import { planDeleteTrack, planEditTrack, planMoveTrack, planRestoreTrack } from "@/server/domain/radio";
 import {
   EVENT_CHANGED,
   NEEDS,
@@ -29,7 +30,7 @@ import {
   planRejection,
   type LedgerInput,
 } from "@/server/domain/operations";
-import { PRIVATE_TAG, readTables, runCommit } from "@/server/store";
+import { PRIVATE_TAG, RADIO_TAG, readTables, runCommit } from "@/server/store";
 
 export interface AdminState {
   status: "idle" | "success" | "error";
@@ -156,6 +157,53 @@ export async function editMember(_prev: AdminState, fd: FormData): Promise<Admin
     }),
   );
   return outcome.ok ? done("회원 정보를 저장했어요.") : { status: "error", message: outcome.message };
+}
+
+// ---------------------------------------------------------------------------
+// AFTER HOURS RADIO track management (admins only — re-checked in each plan against the live Members tab)
+// ---------------------------------------------------------------------------
+
+function radioDone(message: string): AdminState {
+  updateTag(RADIO_TAG);
+  return done(message);
+}
+
+export async function editRadioTrack(_prev: AdminState, fd: FormData): Promise<AdminState> {
+  const op = await operatorForAction();
+  if (!op) return DENIED;
+  const outcome = await runCommit(NEEDS.radio, (data) =>
+    planEditTrack(data, {
+      now: Date.now(),
+      email: op.session.email,
+      trackId: field(fd, "track_id"),
+      set: { title: field(fd, "title"), artist: field(fd, "artist"), displayName: field(fd, "display_name"), message: field(fd, "message") },
+    }),
+  );
+  return outcome.ok ? radioDone("곡 정보를 고쳤어요. 라디오 목록에 바로 보여요.") : { status: "error", message: outcome.message };
+}
+
+export async function moveRadioTrack(_prev: AdminState, fd: FormData): Promise<AdminState> {
+  const op = await operatorForAction();
+  if (!op) return DENIED;
+  const direction = field(fd, "direction") === "down" ? "down" : "up";
+  const outcome = await runCommit(NEEDS.radio, (data) =>
+    planMoveTrack(data, { now: Date.now(), email: op.session.email, trackId: field(fd, "track_id"), direction }),
+  );
+  return outcome.ok ? radioDone(direction === "up" ? "한 칸 위로 옮겼어요." : "한 칸 아래로 옮겼어요.") : { status: "error", message: outcome.message };
+}
+
+export async function deleteRadioTrack(_prev: AdminState, fd: FormData): Promise<AdminState> {
+  const op = await operatorForAction();
+  if (!op) return DENIED;
+  const outcome = await runCommit(NEEDS.radio, (data) => planDeleteTrack(data, { now: Date.now(), email: op.session.email, trackId: field(fd, "track_id") }));
+  return outcome.ok ? radioDone("목록에서 뺐어요. 아래 '삭제된 곡'에서 되돌릴 수 있어요.") : { status: "error", message: outcome.message };
+}
+
+export async function restoreRadioTrack(_prev: AdminState, fd: FormData): Promise<AdminState> {
+  const op = await operatorForAction();
+  if (!op) return DENIED;
+  const outcome = await runCommit(NEEDS.radio, (data) => planRestoreTrack(data, { now: Date.now(), email: op.session.email, trackId: field(fd, "track_id") }));
+  return outcome.ok ? radioDone("원래 자리로 되돌렸어요.") : { status: "error", message: outcome.message };
 }
 
 /** MOON STAMPS: an operator records a stamp after checking the moment themselves (no automatic checks). */

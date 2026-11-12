@@ -8,9 +8,19 @@ import { loadYouTube, YT_STATE, type YTPlayer } from "@/lib/youtube-player";
 import { addTrack, deleteTrack, lookupTrack, type LookupResult } from "./actions";
 
 const SAVED_KEY = "acm:radio:current";
+const SHUFFLE_KEY = "acm:radio:shuffle";
 const POLL_MS = 20_000;
 const dotted = (key: string) => key.replace(/-/g, ".");
 type Notice = { text: string; url?: string } | null;
+
+function shuffled<T>(items: T[]): T[] {
+  const a = [...items];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 /**
  * AFTER HOURS RADIO. The list is the main thing: everyone can browse it, signed-in
@@ -24,6 +34,10 @@ export function RadioStation({ initial }: { initial: RadioState }) {
   const [currentId, setCurrentId] = useState<string | null>(initial.tracks[0]?.id ?? null);
   const [playing, setPlaying] = useState(false);
   const [repeatOne, setRepeatOne] = useState(false);
+  // Shuffle: every track once in a random order (queue), then a new round. `history` lets ⏮ go back.
+  const [shuffle, setShuffle] = useState(false);
+  const [queue, setQueue] = useState<string[]>([]);
+  const history = useRef<string[]>([]);
   const [playerReady, setPlayerReady] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const found = tracks.findIndex((t) => t.id === currentId);
@@ -34,10 +48,15 @@ export function RadioStation({ initial }: { initial: RadioState }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const errorsInRow = useRef(0);
   // Latest values for the YouTube callbacks and the poller (they outlive renders).
-  const live = useRef({ state, index, currentId, playing, repeatOne });
+  const live = useRef({ state, index, currentId, playing, repeatOne, shuffle, queue });
   useEffect(() => {
-    live.current = { state, index, currentId, playing, repeatOne };
+    live.current = { state, index, currentId, playing, repeatOne, shuffle, queue };
   });
+
+  const setQueueNow = useCallback((next: string[]) => {
+    live.current.queue = next;
+    setQueue(next);
+  }, []);
 
   const play = useCallback((id: string, autoplay: boolean) => {
     const track = live.current.state.tracks.find((t) => t.id === id);
@@ -53,28 +72,85 @@ export function RadioStation({ initial }: { initial: RadioState }) {
     else player.cueVideoById(track.videoId);
   }, []);
 
+  /** A track picked by hand: in shuffle it leaves the queue and the one before it is remembered for ⏮. */
+  const pick = useCallback(
+    (id: string) => {
+      const { shuffle: on, currentId: cur, queue: q } = live.current;
+      if (on) {
+        if (cur && cur !== id) history.current.push(cur);
+        setQueueNow(q.filter((x) => x !== id));
+      }
+      play(id, true);
+    },
+    [play, setQueueNow],
+  );
+
   const step = useCallback(
     (delta: number) => {
-      const { state: s, index: i } = live.current;
+      const { state: s, index: i, shuffle: on, queue: q, currentId: cur } = live.current;
       if (!s.tracks.length) return;
+      const exists = (id: string) => s.tracks.some((t) => t.id === id);
+      if (on && delta > 0) {
+        let upcoming = q.filter(exists);
+        if (!upcoming.length) upcoming = shuffled(s.tracks.map((t) => t.id).filter((id) => id !== cur)); // a new round
+        if (!upcoming.length) return play(cur ?? s.tracks[0].id, true);
+        const [nextId, ...rest] = upcoming;
+        if (cur) history.current.push(cur);
+        setQueueNow(rest);
+        return play(nextId, true);
+      }
+      if (on && delta < 0) {
+        let back = history.current.pop();
+        while (back && !exists(back)) back = history.current.pop();
+        if (back) {
+          if (cur) setQueueNow([cur, ...q]);
+          return play(back, true);
+        }
+      }
       play(s.tracks[(i + delta + s.tracks.length) % s.tracks.length].id, true);
     },
-    [play],
+    [play, setQueueNow],
   );
+
+  function toggleShuffle() {
+    const on = !live.current.shuffle;
+    setShuffle(on);
+    live.current.shuffle = on;
+    history.current = [];
+    setQueueNow(on ? shuffled(live.current.state.tracks.map((t) => t.id).filter((id) => id !== live.current.currentId)) : []);
+    try {
+      localStorage.setItem(SHUFFLE_KEY, on ? "1" : "0");
+    } catch {}
+  }
 
   /** New list from the server or a local change. If the track on air was removed, the next one takes over. */
   const applyState = useCallback(
     (next: RadioState) => {
-      const { state: before, currentId: cur, playing: wasPlaying } = live.current;
+      const { state: before, currentId: cur, playing: wasPlaying, shuffle: on, queue: q } = live.current;
       live.current.state = next;
       setState(next);
+      if (on) {
+        // Newly added tracks join the current shuffle round at random spots; removed ones leave it.
+        const known = new Set(before.tracks.map((t) => t.id));
+        const upcoming = q.filter((id) => next.tracks.some((t) => t.id === id));
+        for (const t of next.tracks) {
+          if (!known.has(t.id)) upcoming.splice(Math.floor(Math.random() * (upcoming.length + 1)), 0, t.id);
+        }
+        setQueueNow(upcoming);
+      }
       if (cur && !next.tracks.some((t) => t.id === cur) && next.tracks.length) {
-        const oldIndex = Math.max(0, before.tracks.findIndex((t) => t.id === cur));
-        play(next.tracks[Math.min(oldIndex, next.tracks.length - 1)].id, wasPlaying);
+        if (on && live.current.queue.length) {
+          const [nextId, ...rest] = live.current.queue;
+          setQueueNow(rest);
+          play(nextId, wasPlaying);
+        } else {
+          const oldIndex = Math.max(0, before.tracks.findIndex((t) => t.id === cur));
+          play(next.tracks[Math.min(oldIndex, next.tracks.length - 1)].id, wasPlaying);
+        }
         if (wasPlaying) setNotice({ text: "지금 곡이 목록에서 삭제돼서 다음 곡으로 넘어갔어요." });
       }
     },
-    [play],
+    [play, setQueueNow],
   );
 
   // YouTube player events, always seeing the latest state.
@@ -127,6 +203,15 @@ export function RadioStation({ initial }: { initial: RadioState }) {
           setCurrentId(start.id);
           live.current.currentId = start.id;
         }
+        let shuffleOn = false;
+        try {
+          shuffleOn = localStorage.getItem(SHUFFLE_KEY) === "1";
+        } catch {}
+        if (shuffleOn) {
+          setShuffle(true);
+          live.current.shuffle = true;
+          setQueueNow(shuffled(list.map((t) => t.id).filter((id) => id !== start?.id)));
+        }
         // The API replaces the element it is given, so it gets its own child (React keeps `host`).
         const mount = document.createElement("div");
         host.replaceChildren(mount);
@@ -156,7 +241,7 @@ export function RadioStation({ initial }: { initial: RadioState }) {
         player?.destroy();
       } catch {}
     };
-  }, [state.playerEnabled]);
+  }, [state.playerEnabled, setQueueNow]);
 
   // Keep the list fresh (~20 s). A new request never interrupts the song on air.
   useEffect(() => {
@@ -187,7 +272,11 @@ export function RadioStation({ initial }: { initial: RadioState }) {
     applyState({ ...s, tracks: s.tracks.filter((t) => t.id !== track.id) });
   }
 
-  const upNext = tracks.length > 1 ? Array.from({ length: Math.min(4, tracks.length - 1) }, (_, k) => tracks[(index + 1 + k) % tracks.length]) : [];
+  const upNext = shuffle
+    ? queue.map((id) => tracks.find((t) => t.id === id)).filter((t): t is RadioTrack => Boolean(t)).slice(0, 4)
+    : tracks.length > 1
+      ? Array.from({ length: Math.min(4, tracks.length - 1) }, (_, k) => tracks[(index + 1 + k) % tracks.length])
+      : [];
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-10 px-4 pb-20 md:px-6">
@@ -239,14 +328,27 @@ export function RadioStation({ initial }: { initial: RadioState }) {
                   <ControlButton label="다음 곡" onClick={() => step(1)} disabled={!playerReady || tracks.length < 2}>
                     <path d="M16 5h2v14h-2zM4 5l11 7-11 7z" />
                   </ControlButton>
-                  <button
-                    type="button"
-                    aria-pressed={repeatOne}
-                    onClick={() => setRepeatOne((v) => !v)}
-                    className="ml-auto h-11 rounded-md border border-cream/30 px-3 font-label text-[11px] font-semibold uppercase tracking-[0.16em] text-cream hover:border-cream"
-                  >
-                    {repeatOne ? "반복: 한 곡" : "반복: 전체"}
-                  </button>
+                  <div className="ml-auto flex gap-2">
+                    <button
+                      type="button"
+                      aria-pressed={shuffle}
+                      onClick={toggleShuffle}
+                      className={cn(
+                        "h-11 rounded-md border px-3 font-label text-[11px] font-semibold uppercase tracking-[0.16em]",
+                        shuffle ? "border-butter bg-butter text-midnight" : "border-cream/30 text-cream hover:border-cream",
+                      )}
+                    >
+                      {shuffle ? "셔플 켜짐" : "셔플"}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={repeatOne}
+                      onClick={() => setRepeatOne((v) => !v)}
+                      className="h-11 rounded-md border border-cream/30 px-3 font-label text-[11px] font-semibold uppercase tracking-[0.16em] text-cream hover:border-cream"
+                    >
+                      {repeatOne ? "반복: 한 곡" : "반복: 전체"}
+                    </button>
+                  </div>
                 </div>
                 {!playerReady && <p className="mt-2 text-[12px] text-cream/60">플레이어를 불러오는 중…</p>}
               </>
@@ -274,13 +376,13 @@ export function RadioStation({ initial }: { initial: RadioState }) {
 
       {state.ready && state.playerEnabled && upNext.length > 0 && (
         <section aria-labelledby="next-title">
-          <SectionLabel id="next-title" eyebrow="Up next" title="다음 곡" />
+          <SectionLabel id="next-title" eyebrow={shuffle ? "Up next · shuffle" : "Up next"} title="다음 곡" />
           <ol className="mt-4 flex flex-col gap-1.5">
             {upNext.map((t) => (
               <li key={t.id}>
                 <button
                   type="button"
-                  onClick={() => play(t.id, true)}
+                  onClick={() => pick(t.id)}
                   disabled={!playerReady}
                   className="flex w-full items-baseline gap-3 rounded-md px-3 py-2.5 text-left hover:bg-white/[0.06] disabled:cursor-default"
                 >
@@ -298,7 +400,14 @@ export function RadioStation({ initial }: { initial: RadioState }) {
 
       {state.ready && (
         <section aria-labelledby="all-title">
-          <SectionLabel id="all-title" eyebrow="All tracks" title={`전체 ${tracks.length}곡`} />
+          <div className="flex items-end justify-between gap-3">
+            <SectionLabel id="all-title" eyebrow="All tracks" title={`전체 ${tracks.length}곡`} />
+            {state.canDelete && (
+              <Link href="/admin/radio" className="mb-1 font-label text-[11px] font-semibold uppercase tracking-[0.16em] text-butter underline underline-offset-4">
+                트랙 관리
+              </Link>
+            )}
+          </div>
           <ol className="mt-4 flex flex-col gap-2">
             {tracks.map((t, i) => {
               const onAir = t.id === current?.id && state.playerEnabled;
@@ -320,7 +429,7 @@ export function RadioStation({ initial }: { initial: RadioState }) {
                       {state.playerEnabled && (
                         <button
                           type="button"
-                          onClick={() => play(t.id, true)}
+                          onClick={() => pick(t.id)}
                           disabled={!playerReady}
                           className="inline-flex h-9 items-center font-label text-[11px] font-semibold uppercase tracking-[0.16em] text-butter disabled:opacity-40"
                         >
@@ -369,7 +478,7 @@ function SectionLabel({ id, eyebrow, title }: { id: string; eyebrow: string; tit
 }
 
 function Requester({ track, className }: { track: RadioTrack; className?: string }) {
-  const who = track.source === "seed" ? "AFTER CL TO MOON" : (track.displayName ?? "멤버 신청");
+  const who = track.displayName ?? (track.source === "seed" ? "AFTER CL TO MOON" : "멤버 신청");
   return (
     <div className={className}>
       <p className="text-[12px] text-cream/55">

@@ -5,7 +5,18 @@ import { guessTrack, RADIO_SEED, youtubeVideoId } from "@/lib/radio";
 import { applyCommit } from "../store/commit";
 import { demoTables, MemoryStore } from "../store/memory";
 import type { Row, Tables } from "../store/schema";
-import { activeTracks, planAddTrack, planDeleteTrack, RADIO_TAB_MISSING, seedRows, toPublic } from "./radio";
+import {
+  activeTracks,
+  deletedTracks,
+  planAddTrack,
+  planDeleteTrack,
+  planEditTrack,
+  planMoveTrack,
+  planRestoreTrack,
+  RADIO_TAB_MISSING,
+  seedRows,
+  toPublic,
+} from "./radio";
 
 const NOW = Date.parse("2026-11-12T21:00:00+09:00");
 
@@ -160,6 +171,92 @@ describe("adding a track", () => {
     const data = tables();
     delete data.RadioTracks;
     expect(add(data, "amy@x.dev")).toEqual({ refuse: RADIO_TAB_MISSING });
+  });
+});
+
+describe("track management (admin)", () => {
+  const edit = (data: Tables, email: string, over: Partial<{ title: string; artist: string; displayName: string; message: string }> = {}) =>
+    planEditTrack(data, { now: NOW, email, trackId: "RT-SEED-03", set: { title: "Peg", artist: "Steely Dan", displayName: "AFTER CL TO MOON", message: "", ...over } });
+
+  it("lets only an admin edit the name shown and the memo (message)", () => {
+    const data = tables();
+    for (const email of ["amy@x.dev", "oper@x.dev"]) expect(edit(data, email, { message: "x" })).toHaveProperty("refuse");
+    const planned = edit(data, "admin@x.dev", { displayName: "운영진 추천", message: "벽 세팅 끝나고 첫 곡" });
+    if ("refuse" in planned) throw new Error(planned.refuse);
+    expect(applyCommit(data, planned.commit)).toEqual({ ok: true });
+    expect(data.RadioTracks![2]).toMatchObject({ display_name: "운영진 추천", message: "벽 세팅 끝나고 첫 곡", title: "Peg" });
+    expect(data.AuditLog!.at(-1)).toMatchObject({ action: "radio.edit", actor_id: "ADMIN" });
+    // the crew's line on a seed track is shown to everyone
+    expect(toPublic(activeTracks(data), false)[2]).toMatchObject({ displayName: "운영진 추천", message: "벽 세팅 끝나고 첫 곡" });
+  });
+
+  it("checks lengths and refuses an edit that changes nothing", () => {
+    const data = tables();
+    expect(edit(data, "admin@x.dev")).toEqual({ refuse: "바뀐 내용이 없어요." });
+    expect(edit(data, "admin@x.dev", { title: "" })).toHaveProperty("refuse");
+    expect(edit(data, "admin@x.dev", { displayName: "가".repeat(41) })).toHaveProperty("refuse");
+    expect(edit(data, "admin@x.dev", { message: "가".repeat(151) })).toHaveProperty("refuse");
+  });
+
+  it("refuses an edit made on stale data", () => {
+    const data = tables();
+    const first = edit(data, "admin@x.dev", { message: "첫 메모" });
+    const second = edit(data, "admin@x.dev", { message: "두 번째 메모" });
+    if ("refuse" in first || "refuse" in second) throw new Error("refused");
+    expect(applyCommit(data, first.commit).ok).toBe(true);
+    expect(applyCommit(data, second.commit)).toMatchObject({ ok: false, error: "conflict" });
+  });
+
+  it("moves a track up and down the play order", () => {
+    const data = tables();
+    const move = (trackId: string, direction: "up" | "down") => {
+      const planned = planMoveTrack(data, { now: NOW, email: "admin@x.dev", trackId, direction });
+      if ("refuse" in planned) return planned.refuse;
+      expect(applyCommit(data, planned.commit)).toEqual({ ok: true });
+      return activeTracks(data).map((t) => t.id).slice(0, 4).join(",");
+    };
+    expect(move("RT-SEED-03", "up")).toBe("RT-SEED-01,RT-SEED-03,RT-SEED-02,RT-SEED-04");
+    expect(move("RT-SEED-03", "up")).toBe("RT-SEED-03,RT-SEED-01,RT-SEED-02,RT-SEED-04");
+    expect(move("RT-SEED-03", "up")).toBe("이미 맨 위예요.");
+    expect(move("RT-SEED-03", "down")).toBe("RT-SEED-01,RT-SEED-03,RT-SEED-02,RT-SEED-04");
+    expect(planMoveTrack(data, { now: NOW, email: "oper@x.dev", trackId: "RT-SEED-01", direction: "down" })).toHaveProperty("refuse");
+  });
+
+  it("pulls apart two tracks saved with the same order", () => {
+    const data = tables();
+    data.RadioTracks!.push(
+      { track_id: "RT-A", title: "A", artist: "a", youtube_video_id: "aaaaaaaaaaa", source: "member", sort_order: 15, created_at: "2026-11-12T09:00:00+09:00", status: "active" },
+      { track_id: "RT-B", title: "B", artist: "b", youtube_video_id: "bbbbbbbbbbb", source: "member", sort_order: 15, created_at: "2026-11-12T09:00:01+09:00", status: "active" },
+    );
+    const planned = planMoveTrack(data, { now: NOW, email: "admin@x.dev", trackId: "RT-B", direction: "up" });
+    if ("refuse" in planned) throw new Error(planned.refuse);
+    applyCommit(data, planned.commit);
+    expect(activeTracks(data).map((t) => t.id).slice(14)).toEqual(["RT-B", "RT-A"]);
+  });
+
+  it("restores a deleted track to its place, unless the same video is back on the list", () => {
+    const data = tables();
+    const del = planDeleteTrack(data, { now: NOW, email: "admin@x.dev", trackId: "RT-SEED-03" });
+    if ("refuse" in del) throw new Error(del.refuse);
+    applyCommit(data, del.commit);
+    expect(deletedTracks(data).map((t) => t.id)).toEqual(["RT-SEED-03"]);
+
+    const readded = add(data, "amy@x.dev", "MXupeS9hv70");
+    if ("refuse" in readded) throw new Error(readded.refuse);
+    applyCommit(data, readded.commit);
+    expect(planRestoreTrack(data, { now: NOW, email: "admin@x.dev", trackId: "RT-SEED-03" })).toEqual({
+      refuse: "같은 영상이 이미 목록에 있어요: #14 Men I Trust — Show Me How (garage session)",
+    });
+
+    const other = tables();
+    const del2 = planDeleteTrack(other, { now: NOW, email: "admin@x.dev", trackId: "RT-SEED-03" });
+    if ("refuse" in del2) throw new Error(del2.refuse);
+    applyCommit(other, del2.commit);
+    expect(planRestoreTrack(other, { now: NOW, email: "oper@x.dev", trackId: "RT-SEED-03" })).toHaveProperty("refuse");
+    const restore = planRestoreTrack(other, { now: NOW, email: "admin@x.dev", trackId: "RT-SEED-03" });
+    if ("refuse" in restore) throw new Error(restore.refuse);
+    applyCommit(other, restore.commit);
+    expect(activeTracks(other)[2]).toMatchObject({ id: "RT-SEED-03", status: "active", deletedAt: "", deletedBy: "" });
   });
 });
 

@@ -111,6 +111,7 @@ Vercel → `aftercltomoon` → **Settings → Environment Variables** → 환경
 - [ ] 회원권 신청 화면에 **시작 월** 선택이 보이고, 승인 카드에 "승인하면 ○○.01 – ○○.말일"로 나온다
 - [ ] (새 Code.gs 반영 후) 운영진으로 회원 상세 → **Moon stamps → 스탬프 발급** → 그 회원 MY의 **My Moon Stamps**에 날짜와 함께 보이고 **Save stamp**로 카드 저장
 - [ ] (새 Code.gs 반영 후) `/radio`에 기본곡 14곡이 보이고, 회원으로 YouTube 링크를 신청하면 바로 15번째로 붙는다. admin 계정에만 **Delete track**이 보인다
+- [ ] admin으로 **ADMIN → 라디오**에서 순서 ▲▼, 표시 이름·메모 수정, 삭제 → 되돌리기가 된다 (operator는 보기만)
 
 ## 막힐 때
 
