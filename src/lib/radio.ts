@@ -33,6 +33,7 @@ export const RADIO_SEED: ReadonlyArray<{ artist: string; title: string; videoId:
 export const TITLE_MAX = 120;
 export const ARTIST_MAX = 80;
 export const MESSAGE_MAX = 150;
+export const DISPLAY_NAME_MAX = 40;
 
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 
@@ -101,6 +102,8 @@ export interface RadioState {
   signedIn: boolean;
   /** A signed-in club member (Members tab, not suspended). */
   canAdd: boolean;
+  /** That member's own name, to prefill the name shown with a request (null for everyone else). */
+  myName: string | null;
   /** An active admin. */
   canDelete: boolean;
 }

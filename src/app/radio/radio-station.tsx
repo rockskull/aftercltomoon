@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useTransition, type FormEvent, type ReactNode } from "react";
 import { ArrowUpRight, buttonPrimary, buttonSecondary, cn } from "@/components/ui";
-import { MESSAGE_MAX, ARTIST_MAX, TITLE_MAX, youtubeVideoId, type RadioState, type RadioTrack } from "@/lib/radio";
+import { ARTIST_MAX, DISPLAY_NAME_MAX, MESSAGE_MAX, TITLE_MAX, youtubeVideoId, type RadioState, type RadioTrack } from "@/lib/radio";
 import { loadYouTube, YT_STATE, type YTPlayer } from "@/lib/youtube-player";
 import { addTrack, deleteTrack, lookupTrack, type LookupResult } from "./actions";
 
@@ -553,6 +553,7 @@ function AddTrack({ state, onAdded }: { state: RadioState; onAdded: (track: Radi
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
   const [message, setMessage] = useState("");
+  const [displayName, setDisplayName] = useState(state.myName ?? "");
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const latest = useRef("");
@@ -593,7 +594,7 @@ function AddTrack({ state, onAdded }: { state: RadioState; onAdded: (track: Radi
   function submit(event: FormEvent) {
     event.preventDefault();
     startTransition(async () => {
-      const r = await addTrack({ url, title, artist, message });
+      const r = await addTrack({ url, title, artist, message, displayName });
       if (r.ok) {
         onAdded(r.track);
         setResult({ ok: true, text: `목록 맨 끝, ${r.position}번째 곡으로 추가했어요. 지금 나오는 곡은 그대로 이어져요.` });
@@ -684,13 +685,23 @@ function AddTrack({ state, onAdded }: { state: RadioState; onAdded: (track: Radi
                     </label>
                   </div>
                   <label className="text-[13px] font-semibold">
-                    한 줄 사연 <span className="font-normal text-ink-soft">(선택)</span>
+                    이름 <span className="font-normal text-ink-soft">(목록에 신청자로 보여요)</span>
+                    <input
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      maxLength={DISPLAY_NAME_MAX}
+                      placeholder={state.myName ?? ""}
+                      className={cn(field, "mt-1")}
+                    />
+                  </label>
+                  <label className="text-[13px] font-semibold">
+                    메모 · 한 줄 사연 <span className="font-normal text-ink-soft">(선택)</span>
                     <textarea
                       value={message}
                       onChange={(e) => setMessage(e.target.value)}
                       maxLength={MESSAGE_MAX}
                       rows={2}
-                      placeholder="이 곡을 고른 이유를 한 줄로"
+                      placeholder="이 곡을 고른 이유나 듣고 싶은 때를 한 줄로"
                       className={cn(field, "mt-1 resize-none")}
                     />
                     <span className="mt-0.5 block text-right font-mono text-[11px] font-normal text-ink-soft">

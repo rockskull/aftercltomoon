@@ -12,7 +12,7 @@ import { RADIO_TABLES } from "./store/schema";
  */
 export async function loadRadio(): Promise<RadioState> {
   const session = await readSession();
-  const empty: RadioState = { ready: false, tracks: [], playerEnabled: false, signedIn: Boolean(session), canAdd: false, canDelete: false };
+  const empty: RadioState = { ready: false, tracks: [], playerEnabled: false, signedIn: Boolean(session), canAdd: false, canDelete: false, myName: null };
   if (storeMode() === "unconfigured") return empty;
   const tables = await readTables(RADIO_TABLES, { radio: true });
   const member = session ? memberByEmail(tables, session.email) : null;
@@ -25,6 +25,7 @@ export async function loadRadio(): Promise<RadioState> {
     signedIn: Boolean(session),
     canAdd: isMember,
     canDelete: isRadioAdmin(member),
+    myName: isMember ? member.name || session?.name || "" : null,
   };
 }
 

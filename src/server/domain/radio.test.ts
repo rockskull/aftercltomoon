@@ -129,6 +129,20 @@ describe("adding a track", () => {
     expect(data.AuditLog!.at(-1)).toMatchObject({ action: "radio.add", actor_id: "AMY" });
   });
 
+  it("takes the name shown with the request from the member, or their member name when left empty", () => {
+    const withName = (displayName?: string) =>
+      planAddTrack(tables(), { now: NOW, email: "amy@x.dev", sessionName: "Google 이름", input: { videoId: "cpU7Yrl-AwM", title: "t", artist: "a", message: "", displayName } });
+    const named = withName("  에이미   (클라이밍) ");
+    if ("refuse" in named) throw new Error(named.refuse);
+    expect(named.result.track.displayName).toBe("에이미 (클라이밍)");
+    for (const empty of [undefined, "", "   "]) {
+      const planned = withName(empty);
+      if ("refuse" in planned) throw new Error(planned.refuse);
+      expect(planned.result.track.displayName).toBe("amy");
+    }
+    expect(withName("가".repeat(41))).toEqual({ refuse: "이름은 40자까지 쓸 수 있어요." });
+  });
+
   it("is for club members only (an applicant may, a suspended account or a stranger may not)", () => {
     expect(add(tables(), "new@x.dev")).not.toHaveProperty("refuse");
     expect(add(tables(), "gone@x.dev")).toHaveProperty("refuse");

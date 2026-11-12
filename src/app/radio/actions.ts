@@ -31,7 +31,7 @@ export async function lookupTrack(url: string): Promise<LookupResult> {
 export type AddResult = { ok: true; track: RadioTrack; position: number } | { ok: false; message: string };
 
 /** ADD TO RADIO: straight to the end of the list (no approval). The server checks the login and membership itself. */
-export async function addTrack(input: { url: string; title: string; artist: string; message: string }): Promise<AddResult> {
+export async function addTrack(input: { url: string; title: string; artist: string; message: string; displayName: string }): Promise<AddResult> {
   const session = await readSession();
   if (!session) return { ok: false, message: LOGIN_NEEDED };
   const videoId = youtubeVideoId(String(input?.url ?? ""));
@@ -45,7 +45,13 @@ export async function addTrack(input: { url: string; title: string; artist: stri
       now: Date.now(),
       email: session.email,
       sessionName: session.name,
-      input: { videoId, title: String(input.title ?? ""), artist: String(input.artist ?? ""), message: String(input.message ?? "") },
+      input: {
+        videoId,
+        title: String(input.title ?? ""),
+        artist: String(input.artist ?? ""),
+        message: String(input.message ?? ""),
+        displayName: String(input.displayName ?? ""),
+      },
     }),
   );
   if (!outcome.ok) return { ok: false, message: outcome.message };

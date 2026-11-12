@@ -1,4 +1,4 @@
-import { ARTIST_MAX, isVideoId, MESSAGE_MAX, TITLE_MAX, watchUrl, type RadioTrack } from "@/lib/radio";
+import { ARTIST_MAX, DISPLAY_NAME_MAX, isVideoId, MESSAGE_MAX, TITLE_MAX, watchUrl, type RadioTrack } from "@/lib/radio";
 import type { Check, Op } from "../store/commit";
 import { newId, seoulIso } from "../store/ids";
 import { cellText, type Row, type Tables } from "../store/schema";
@@ -27,7 +27,7 @@ export interface StoredTrack {
   deletedBy: string;
 }
 
-export const DISPLAY_NAME_MAX = 40;
+export { DISPLAY_NAME_MAX };
 
 export const RADIO_TAB_MISSING =
   "사이트가 쓰는 Apps Script 배포가 아직 이전 버전이라 라디오 목록을 읽지 못해요. Apps Script에서 setupSheets를 실행한 뒤 배포 관리 → 기존 배포 수정(연필) → 버전: 새 버전 → 배포를 해 주세요.";
@@ -113,6 +113,8 @@ export interface TrackInput {
   title: string;
   artist: string;
   message: string;
+  /** The name shown with the request; empty = the member's name. */
+  displayName?: string;
 }
 
 type Planned<R> = { commit: { id: string; checks: Check[]; ops: Op[] }; result: R } | { refuse: string };
@@ -146,10 +148,12 @@ export function planAddTrack(
   const title = ctx.input.title.trim();
   const artist = ctx.input.artist.trim();
   const message = ctx.input.message.trim().replace(/\s+/g, " ");
+  const displayName = (ctx.input.displayName ?? "").trim().replace(/\s+/g, " ") || member.name || ctx.sessionName;
   if (!isVideoId(ctx.input.videoId)) return { refuse: "YouTube 영상 링크를 확인해 주세요." };
   if (!title || title.length > TITLE_MAX) return { refuse: `곡명을 ${TITLE_MAX}자 이내로 적어 주세요.` };
   if (!artist || artist.length > ARTIST_MAX) return { refuse: `아티스트를 ${ARTIST_MAX}자 이내로 적어 주세요.` };
-  if (message.length > MESSAGE_MAX) return { refuse: `사연은 ${MESSAGE_MAX}자까지 쓸 수 있어요.` };
+  if (displayName.length > DISPLAY_NAME_MAX) return { refuse: `이름은 ${DISPLAY_NAME_MAX}자까지 쓸 수 있어요.` };
+  if (message.length > MESSAGE_MAX) return { refuse: `메모는 ${MESSAGE_MAX}자까지 쓸 수 있어요.` };
 
   const list = activeTracks(data);
   const index = list.findIndex((t) => t.videoId === ctx.input.videoId);
@@ -168,7 +172,7 @@ export function planAddTrack(
     youtube_url: watchUrl(ctx.input.videoId),
     youtube_video_id: ctx.input.videoId,
     requested_by: member.id,
-    display_name: member.name || ctx.sessionName,
+    display_name: displayName,
     message,
     source: "member",
     sort_order: sortOrder,
