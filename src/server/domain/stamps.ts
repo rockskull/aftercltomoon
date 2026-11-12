@@ -96,8 +96,9 @@ export function memberStamps(tables: Tables, memberId: string): MyStamp[] {
     }));
 }
 
+/** Shown when the deployed Apps Script version predates the stamp tabs (it leaves them out of reads). */
 export const STAMP_TABS_MISSING =
-  "시트에 스탬프 탭이 아직 없어요. Apps Script에 새 Code.gs를 붙여넣고 setupSheets를 실행해 주세요.";
+  "사이트가 쓰는 Apps Script 배포가 아직 이전 버전이라 스탬프 탭을 읽지 못해요. Apps Script에서 setupSheets를 실행한 뒤 배포 관리 → 기존 배포 수정(연필) → 버전: 새 버전 → 배포를 해 주세요.";
 
 /** Operator: record that a member earned a stamp (checked by a person, not automatically). */
 export function planStampAward(
