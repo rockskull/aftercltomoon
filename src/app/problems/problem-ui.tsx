@@ -24,7 +24,7 @@ export const FUN_LABEL = ["", "별로", "아쉬움", "보통", "재미있음", "
 export const ruled =
   "bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_27px,rgba(12,22,32,0.07)_27px,rgba(12,22,32,0.07)_28px)]";
 
-/** The colour grade with its swatch: "● 노랑 (5.10b ~ 5.10d)". `yds={false}` shows the colour only. */
+/** The colour grade with its swatch: "● 초록 (5.10b ~ 5.10c)". `yds={false}` shows the colour only. */
 export function GradeBadge({ grade, yds = true, className }: { grade: string; yds?: boolean; className?: string }) {
   const g = gradeInfo(grade);
   return (

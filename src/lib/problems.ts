@@ -11,16 +11,16 @@ export const LIMITS = { title: 40, grade: 12, wall: 30, setter: 30, note: 500, b
 
 /**
  * The club's grades: Korean bouldering gym colours, easiest first, with the YDS
- * range in brackets. Stored as the colour name ("노랑"); shown as "노랑 (5.10b ~ 5.10d)".
+ * range in brackets. Stored as the colour name ("초록"); shown as "초록 (5.10b ~ 5.10c)".
  */
 export const GRADES = [
-  { name: "빨강", yds: "5.8 이하 ~ 5.9", level: "입문", swatch: "#d63a2f" },
-  { name: "주황", yds: "5.9 ~ 5.10b", level: "초급", swatch: "#ef8a22" },
-  { name: "노랑", yds: "5.10b ~ 5.10d", level: "초중급", swatch: "#f1c232" },
-  { name: "초록", yds: "5.10d ~ 5.11b", level: "중급", swatch: "#2f9d5a" },
-  { name: "파랑", yds: "5.11b ~ 5.11d", level: "중상급", swatch: "#2f6fd6" },
-  { name: "보라", yds: "5.11d ~ 5.12c", level: "상급", swatch: "#7a4fc8" },
-  { name: "검정", yds: "5.12d 이상", level: "고급~엘리트", swatch: "#151515" },
+  { name: "빨강", yds: "5.0", level: "입문", swatch: "#d63a2f" },
+  { name: "주황", yds: "5.9", level: "초급", swatch: "#ef8a22" },
+  { name: "노랑", yds: "5.10a", level: "초중급", swatch: "#f1c232" },
+  { name: "초록", yds: "5.10b ~ 5.10c", level: "중급", swatch: "#2f9d5a" },
+  { name: "파랑", yds: "5.10d ~ 5.11a", level: "중상급", swatch: "#2f6fd6" },
+  { name: "보라", yds: "5.11a ~ 5.11c", level: "상급", swatch: "#7a4fc8" },
+  { name: "검정", yds: "5.12+", level: "고급~엘리트", swatch: "#151515" },
 ] as const;
 
 export type GradeName = (typeof GRADES)[number]["name"];
@@ -29,7 +29,7 @@ export function gradeInfo(grade: string): (typeof GRADES)[number] | null {
   return GRADES.find((g) => g.name === grade.trim()) ?? null;
 }
 
-/** "노랑 (5.10b ~ 5.10d)"; anything outside the colour set is shown as stored. */
+/** "초록 (5.10b ~ 5.10c)"; anything outside the colour set is shown as stored. */
 export function gradeLabel(grade: string): string {
   const g = gradeInfo(grade);
   return g ? `${g.name} (${g.yds})` : grade;

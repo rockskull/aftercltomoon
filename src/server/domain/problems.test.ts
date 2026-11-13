@@ -95,17 +95,17 @@ describe("problems (crew)", () => {
   it("sorts and labels grades in colour order (빨강 → 검정) with YDS", () => {
     expect(["검정", "노랑", "빨강", "보라", "주황", "초록", "파랑"].sort(compareGrades)).toEqual(["빨강", "주황", "노랑", "초록", "파랑", "보라", "검정"]);
     expect(["V3", "파랑", "빨강"].sort(compareGrades)).toEqual(["빨강", "파랑", "V3"]); // anything else goes last
-    expect(gradeLabel("빨강")).toBe("빨강 (5.8 이하 ~ 5.9)");
-    expect(gradeLabel("노랑")).toBe("노랑 (5.10b ~ 5.10d)");
-    expect(gradeLabel("검정")).toBe("검정 (5.12d 이상)");
+    expect(gradeLabel("빨강")).toBe("빨강 (5.0)");
+    expect(gradeLabel("초록")).toBe("초록 (5.10b ~ 5.10c)");
+    expect(gradeLabel("검정")).toBe("검정 (5.12+)");
     expect(GRADES.map((g) => `${g.name}:${g.yds}:${g.level}`)).toEqual([
-      "빨강:5.8 이하 ~ 5.9:입문",
-      "주황:5.9 ~ 5.10b:초급",
-      "노랑:5.10b ~ 5.10d:초중급",
-      "초록:5.10d ~ 5.11b:중급",
-      "파랑:5.11b ~ 5.11d:중상급",
-      "보라:5.11d ~ 5.12c:상급",
-      "검정:5.12d 이상:고급~엘리트",
+      "빨강:5.0:입문",
+      "주황:5.9:초급",
+      "노랑:5.10a:초중급",
+      "초록:5.10b ~ 5.10c:중급",
+      "파랑:5.10d ~ 5.11a:중상급",
+      "보라:5.11a ~ 5.11c:상급",
+      "검정:5.12+:고급~엘리트",
     ]);
   });
 
