@@ -1,23 +1,26 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/components/ui";
+import { can, type Capability } from "@/lib/permissions";
 import { AdminToasts } from "./admin-ui";
 
 export type AdminTab = "overview" | "payments" | "members" | "events" | "money" | "bank" | "proposals" | "radio" | "settings";
 
-const TABS: Array<{ key: AdminTab; href: string; label: string }> = [
+/** `cap`: shown only to crew who may use it (src/lib/permissions.ts); the pages check again. */
+const TABS: Array<{ key: AdminTab; href: string; label: string; cap?: Capability }> = [
   { key: "overview", href: "/admin", label: "현황" },
-  { key: "payments", href: "/admin/payments", label: "입금 확인" },
+  { key: "payments", href: "/admin/payments", label: "입금 확인", cap: "money" },
   { key: "members", href: "/admin/members", label: "회원" },
-  { key: "events", href: "/admin/events", label: "이벤트" },
-  { key: "money", href: "/admin/money", label: "회계" },
-  { key: "bank", href: "/admin/bank", label: "거래내역" },
-  { key: "proposals", href: "/admin/proposals", label: "제안" },
-  { key: "radio", href: "/admin/radio", label: "라디오" },
+  { key: "events", href: "/admin/events", label: "이벤트", cap: "events" },
+  { key: "money", href: "/admin/money", label: "회계", cap: "money" },
+  { key: "bank", href: "/admin/bank", label: "거래내역", cap: "money" },
+  { key: "proposals", href: "/admin/proposals", label: "제안", cap: "proposals" },
+  { key: "radio", href: "/admin/radio", label: "라디오", cap: "radio" },
   { key: "settings", href: "/admin/settings", label: "설정" },
 ];
 
-export function AdminFrame({ tab, title, children }: { tab: AdminTab; title: string; children: ReactNode }) {
+export function AdminFrame({ tab, title, who, children }: { tab: AdminTab; title: string; who: { role: string; status: string }; children: ReactNode }) {
+  const tabs = TABS.filter((t) => !t.cap || can(who, t.cap));
   return (
     <AdminToasts>
     <div className="mx-auto max-w-5xl px-4 py-8 md:px-6 md:py-10">
@@ -25,7 +28,7 @@ export function AdminFrame({ tab, title, children }: { tab: AdminTab; title: str
       <h1 className="mt-1 font-display text-[40px] font-extrabold uppercase leading-[0.9] text-midnight md:text-[48px]">{title}</h1>
       <nav aria-label="관리 메뉴" className="-mx-4 mt-5 overflow-x-auto px-4">
         <ul className="flex min-w-max gap-1 border-b-2 border-midnight">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <li key={t.key}>
               <Link
                 href={t.href}

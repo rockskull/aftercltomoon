@@ -40,7 +40,7 @@ interface Listed {
 async function Events({ searchParams }: Pick<PageProps<"/admin/events">, "searchParams">) {
   if (storeMode() === "unconfigured") return <div className="mx-auto max-w-3xl px-4 py-10"><NotReady /></div>;
   const now = await requestNow();
-  const { club, tables } = await requireOperator("/admin/events");
+  const { club, tables, member: me } = await requireOperator("/admin/events");
   const params = await searchParams;
   const today = toDateKey(now);
   const todayStart = parseMoment(today)!.ms;
@@ -64,7 +64,7 @@ async function Events({ searchParams }: Pick<PageProps<"/admin/events">, "search
   const madeFrom = proposal && rows.some((r) => cellText(r.event_id) === eventIdForProposal(from)) ? eventIdForProposal(from) : null;
 
   return (
-    <AdminFrame tab="events" title="Events">
+    <AdminFrame tab="events" title="Events" who={me}>
       <div className="flex flex-col gap-6">
         <div id="new">
           {proposal && madeFrom ? (

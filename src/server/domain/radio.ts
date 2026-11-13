@@ -1,3 +1,4 @@
+import { can } from "@/lib/permissions";
 import { ARTIST_MAX, DISPLAY_NAME_MAX, isVideoId, MESSAGE_MAX, TITLE_MAX, watchUrl, type RadioTrack } from "@/lib/radio";
 import type { Check, Op } from "../store/commit";
 import { newId, seoulIso } from "../store/ids";
@@ -100,8 +101,9 @@ export function memberByEmail(tables: Tables, email: string): Member | null {
   return (tables.Members ?? []).map(toMember).find((m) => m.email === target) ?? null;
 }
 
+/** Track management (order, names, notes, delete/restore): the crew — operators and admins (src/lib/permissions.ts). */
 export function isRadioAdmin(member: Member | null): member is Member {
-  return Boolean(member && member.status === "active" && member.role === "admin");
+  return Boolean(member && can(member, "radio"));
 }
 
 export interface TrackInput {
@@ -194,11 +196,11 @@ export function planAddTrack(
   };
 }
 
-/** Admin: take a track off the list (status = deleted). The row and its history stay in the sheet. */
+/** Crew: take a track off the list (status = deleted). The row and its history stay in the sheet. */
 export function planDeleteTrack(data: Tables, ctx: { now: number; email: string; trackId: string }): Planned<{ trackId: string }> {
   if (data.RadioTracks === undefined) return { refuse: RADIO_TAB_MISSING };
   const member = memberByEmail(data, ctx.email);
-  if (!isRadioAdmin(member)) return { refuse: "곡 삭제는 ADMIN만 할 수 있어요." };
+  if (!isRadioAdmin(member)) return { refuse: "곡 삭제는 운영진만 할 수 있어요." };
   const row = (data.RadioTracks ?? []).find((r) => cellText(r.track_id) === ctx.trackId);
   if (!row || cellText(row.status).trim().toLowerCase() === "deleted") return { refuse: "이미 삭제됐거나 없는 곡이에요." };
   const commitId = newId("C", ctx.now, 8);
@@ -207,7 +209,7 @@ export function planDeleteTrack(data: Tables, ctx: { now: number; email: string;
     commit: {
       id: commitId,
       checks: [
-        { type: "exists", table: "Members", id: member.id, fields: { role: "admin", status: "active" } },
+        { type: "exists", table: "Members", id: member.id, fields: { role: ["operator", "admin"], status: "active" } },
         { type: "exists", table: "RadioTracks", id: ctx.trackId, fields: { status: cellText(row.status) } },
       ],
       ops: [
@@ -219,7 +221,7 @@ export function planDeleteTrack(data: Tables, ctx: { now: number; email: string;
   };
 }
 
-const ADMIN_ONLY = "라디오 트랙 관리는 ADMIN만 할 수 있어요.";
+const ADMIN_ONLY = "라디오 트랙 관리는 운영진만 할 수 있어요.";
 
 function adminAndRow(data: Tables, email: string, trackId: string): { refuse: string } | { member: Member; row: Row } {
   if (data.RadioTracks === undefined) return { refuse: RADIO_TAB_MISSING };
@@ -230,7 +232,7 @@ function adminAndRow(data: Tables, email: string, trackId: string): { refuse: st
   return { member, row };
 }
 
-const adminCheck = (member: Member): Check => ({ type: "exists", table: "Members", id: member.id, fields: { role: "admin", status: "active" } });
+const adminCheck = (member: Member): Check => ({ type: "exists", table: "Members", id: member.id, fields: { role: ["operator", "admin"], status: "active" } });
 
 /**
  * Admin: fix a track's title/artist, the name shown for it (display_name) and its

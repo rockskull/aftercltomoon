@@ -5,7 +5,8 @@ import { after } from "next/server";
 import { toDateKey } from "@/lib/dates";
 import { monthBounds } from "@/lib/membership";
 import { deliverDue } from "@/server/notify";
-import { operatorForAction } from "@/server/auth/viewer";
+import { ADMIN_ONLY_ACTION } from "@/lib/permissions";
+import { crewForAction, operatorForAction } from "@/server/auth/viewer";
 import { matchDeposits, parseBankFile, type DepositMatch } from "@/server/domain/bank";
 import { parsePrivate, type Membership, type Role } from "@/server/domain/model";
 import { CLUB_FEED_TAG } from "@/lib/club-data";
@@ -53,6 +54,8 @@ export interface AdminState {
 }
 
 const DENIED: AdminState = { status: "error", message: "운영진만 할 수 있어요." };
+/** Money, member records, plans and settings other than the club notice: admins only (src/lib/permissions.ts). */
+const ADMIN_DENIED: AdminState = { status: "error", message: ADMIN_ONLY_ACTION };
 const field = (fd: FormData, name: string) => String(fd.get(name) ?? "").trim();
 const isDay = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
 
@@ -68,8 +71,8 @@ function sendSoon() {
 }
 
 export async function approvePayment(_prev: AdminState, fd: FormData): Promise<AdminState> {
-  const op = await operatorForAction();
-  if (!op) return DENIED;
+  const op = await crewForAction("money");
+  if (!op) return ADMIN_DENIED;
   // The start is chosen by month (memberships always run from the 1st to the last day of a month).
   const startMonth = field(fd, "start_month");
   const startOverride = startMonth ? monthBounds(startMonth)?.start : null;
@@ -95,8 +98,8 @@ export async function approvePayment(_prev: AdminState, fd: FormData): Promise<A
 }
 
 export async function rejectPayment(_prev: AdminState, fd: FormData): Promise<AdminState> {
-  const op = await operatorForAction();
-  if (!op) return DENIED;
+  const op = await crewForAction("money");
+  if (!op) return ADMIN_DENIED;
   const reason = field(fd, "reason");
   const outcome = await runCommit(NEEDS.payments, (data) =>
     planRejection(data, { now: Date.now(), actorId: op.member.id, paymentId: field(fd, "payment_id"), reason }),
@@ -107,8 +110,8 @@ export async function rejectPayment(_prev: AdminState, fd: FormData): Promise<Ad
 }
 
 export async function cancelApproval(_prev: AdminState, fd: FormData): Promise<AdminState> {
-  const op = await operatorForAction();
-  if (!op) return DENIED;
+  const op = await crewForAction("money");
+  if (!op) return ADMIN_DENIED;
   const reason = field(fd, "reason");
   if (!reason) return { status: "error", message: "취소 사유를 적어 주세요." };
   const outcome = await runCommit(NEEDS.payments, (data) =>
@@ -118,8 +121,8 @@ export async function cancelApproval(_prev: AdminState, fd: FormData): Promise<A
 }
 
 export async function refundPayment(_prev: AdminState, fd: FormData): Promise<AdminState> {
-  const op = await operatorForAction();
-  if (!op) return DENIED;
+  const op = await crewForAction("money");
+  if (!op) return ADMIN_DENIED;
   const reason = field(fd, "reason");
   if (!reason) return { status: "error", message: "환불 사유를 적어 주세요." };
   const outcome = await runCommit(NEEDS.payments, (data) =>
@@ -129,8 +132,8 @@ export async function refundPayment(_prev: AdminState, fd: FormData): Promise<Ad
 }
 
 export async function editMembership(_prev: AdminState, fd: FormData): Promise<AdminState> {
-  const op = await operatorForAction();
-  if (!op) return DENIED;
+  const op = await crewForAction("money");
+  if (!op) return ADMIN_DENIED;
   const startMonth = field(fd, "start_month");
   const endMonth = field(fd, "end_month");
   const status = field(fd, "status") as Membership["status"];
@@ -151,8 +154,8 @@ export async function editMembership(_prev: AdminState, fd: FormData): Promise<A
 }
 
 export async function editMember(_prev: AdminState, fd: FormData): Promise<AdminState> {
-  const op = await operatorForAction();
-  if (!op) return DENIED;
+  const op = await crewForAction("members");
+  if (!op) return ADMIN_DENIED;
   const role = field(fd, "role") as Role;
   const status = field(fd, "status");
   if (role && !["member", "operator", "admin"].includes(role)) return { status: "error", message: "권한 값을 확인해 주세요." };
@@ -180,8 +183,8 @@ export async function editMember(_prev: AdminState, fd: FormData): Promise<Admin
 // ---------------------------------------------------------------------------
 
 export async function addMember(_prev: AdminState, fd: FormData): Promise<AdminState> {
-  const op = await operatorForAction();
-  if (!op) return DENIED;
+  const op = await crewForAction("members");
+  if (!op) return ADMIN_DENIED;
   const outcome = await runCommit<{ memberId: string }>(NEEDS.member, (data) =>
     planMemberAdd(data, {
       now: Date.now(),
@@ -202,8 +205,8 @@ export async function addMember(_prev: AdminState, fd: FormData): Promise<AdminS
 }
 
 export async function grantMembership(_prev: AdminState, fd: FormData): Promise<AdminState> {
-  const op = await operatorForAction();
-  if (!op) return DENIED;
+  const op = await crewForAction("money");
+  if (!op) return ADMIN_DENIED;
   const outcome = await runCommit(NEEDS.membershipGrant, (data) =>
     planMembershipGrant(data, {
       now: Date.now(),
@@ -225,8 +228,8 @@ export async function grantMembership(_prev: AdminState, fd: FormData): Promise<
  * until the deposit is confirmed (approvePayment, admin).
  */
 export async function createRegistration(_prev: AdminState, fd: FormData): Promise<AdminState> {
-  const op = await operatorForAction();
-  if (!op) return DENIED;
+  const op = await crewForAction("money");
+  if (!op) return ADMIN_DENIED;
   if (op.member.role !== "admin") return { status: "error", message: REGISTRATION_ADMIN_ONLY };
   const kind = field(fd, "kind");
   const request: RegistrationRequest =
@@ -250,8 +253,8 @@ export async function createRegistration(_prev: AdminState, fd: FormData): Promi
 }
 
 export async function savePlan(_prev: AdminState, fd: FormData): Promise<AdminState> {
-  const op = await operatorForAction();
-  if (!op) return DENIED;
+  const op = await crewForAction("settings");
+  if (!op) return ADMIN_DENIED;
   const planId = field(fd, "plan_id") || null;
   const outcome = await runCommit(NEEDS.plans, (data) =>
     planPlanSave(data, {
@@ -289,8 +292,8 @@ export async function saveSettings(_prev: AdminState, fd: FormData): Promise<Adm
 }
 
 export async function saveStampDefinition(_prev: AdminState, fd: FormData): Promise<AdminState> {
-  const op = await operatorForAction();
-  if (!op) return DENIED;
+  const op = await crewForAction("settings");
+  if (!op) return ADMIN_DENIED;
   const stampId = field(fd, "stamp_id");
   const outcome = await runCommit(NEEDS.stampDefinitions, (data) =>
     planStampDefinitionSave(data, {
@@ -465,8 +468,8 @@ function parseLedgerInput(fd: FormData): { ok: true; input: LedgerInput } | { ok
 }
 
 export async function addLedgerEntry(_prev: AdminState, fd: FormData): Promise<AdminState> {
-  const op = await operatorForAction();
-  if (!op) return DENIED;
+  const op = await crewForAction("money");
+  if (!op) return ADMIN_DENIED;
   const parsed = parseLedgerInput(fd);
   if (!parsed.ok) return { status: "error", message: parsed.message };
   const outcome = await runCommit(NEEDS.ledger, (data) => planLedgerAdd(data, { now: Date.now(), actorId: op.member.id, input: parsed.input }));
@@ -476,8 +479,8 @@ export async function addLedgerEntry(_prev: AdminState, fd: FormData): Promise<A
 }
 
 export async function editLedgerEntry(_prev: AdminState, fd: FormData): Promise<AdminState> {
-  const op = await operatorForAction();
-  if (!op) return DENIED;
+  const op = await crewForAction("money");
+  if (!op) return ADMIN_DENIED;
   const parsed = parseLedgerInput(fd);
   if (!parsed.ok) return { status: "error", message: parsed.message };
   const outcome = await runCommit(NEEDS.ledger, (data) =>
@@ -493,8 +496,8 @@ export async function editLedgerEntry(_prev: AdminState, fd: FormData): Promise<
 }
 
 export async function voidLedgerEntry(_prev: AdminState, fd: FormData): Promise<AdminState> {
-  const op = await operatorForAction();
-  if (!op) return DENIED;
+  const op = await crewForAction("money");
+  if (!op) return ADMIN_DENIED;
   const outcome = await runCommit(NEEDS.ledger, (data) =>
     planLedgerVoid(data, { now: Date.now(), actorId: op.member.id, entryId: field(fd, "entry_id"), reason: field(fd, "reason") }),
   );
@@ -561,8 +564,8 @@ const MAX_BANK_FILE = 4 * 1024 * 1024;
  * written (with the transaction key, which blocks re-applying it later).
  */
 export async function analyzeBankFile(_prev: BankState, fd: FormData): Promise<BankState> {
-  const op = await operatorForAction();
-  if (!op) return { status: "error", message: DENIED.message };
+  const op = await crewForAction("money");
+  if (!op) return { status: "error", message: ADMIN_DENIED.message };
   const file = fd.get("file");
   if (!(file instanceof File) || file.size === 0) return { status: "error", message: "거래내역 파일을 골라 주세요." };
   if (file.size > MAX_BANK_FILE) return { status: "error", message: "파일이 너무 커요. (최대 4MB)" };

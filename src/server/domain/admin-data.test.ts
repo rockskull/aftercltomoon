@@ -148,6 +148,17 @@ describe("site settings", () => {
     ]);
     expect(data.AuditLog!.at(-1)).toMatchObject({ action: "settings.edit", target_id: "club_notice" });
   });
+
+  it("operators may change the club notice, and nothing else in the settings", () => {
+    const data = tables();
+    const notice = JSON.stringify([{ title: "청소", body: "마지막 사람이 정리" }]);
+    const planned = planSettingsSave(data, { ...operator, values: { club_notice: notice } });
+    if ("refuse" in planned) throw new Error(planned.refuse);
+    expect(applyCommit(data, planned.commit)).toEqual({ ok: true });
+    expect(planSettingsSave(data, { ...operator, values: { radio_player: "on" } })).toEqual({ refuse: expect.stringContaining("아지트 공지만") });
+    expect(planSettingsSave(data, { ...operator, values: { club_notice: notice, apply_notice: "x" } })).toHaveProperty("refuse");
+    expect(planStampDefinitionSave(data, { ...operator, stampId: "ST-01", name: "X", description: "", active: true, imageKey: "st-01" })).toHaveProperty("refuse");
+  });
 });
 
 describe("stamps", () => {

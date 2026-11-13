@@ -35,7 +35,7 @@ async function EventEdit({ params }: Pick<PageProps<"/admin/events/[id]">, "para
   if (storeMode() === "unconfigured") return <div className="mx-auto max-w-3xl px-4 py-10"><NotReady /></div>;
   const { id: rawId } = await params;
   const now = await requestNow();
-  const { tables } = await requireOperator(`/admin/events/${rawId}`);
+  const { tables, member: me } = await requireOperator(`/admin/events/${rawId}`);
   const id = decodeURIComponent(rawId);
   const rows = (tables.Events ?? []).filter((r) => cellText(r.event_id));
   const row = rows.find((r) => cellText(r.event_id) === id);
@@ -46,7 +46,7 @@ async function EventEdit({ params }: Pick<PageProps<"/admin/events/[id]">, "para
   const updated = parseMoment(cellText(row.updated_at));
 
   return (
-    <AdminFrame tab="events" title={cellText(row.title) || id}>
+    <AdminFrame tab="events" title={cellText(row.title) || id} who={me}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Link href="/admin/events" className="text-[13px] font-bold text-ink-soft hover:text-midnight">
           ← 이벤트 목록

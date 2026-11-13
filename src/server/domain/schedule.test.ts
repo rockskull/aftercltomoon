@@ -100,4 +100,22 @@ describe("notification schedule", () => {
     run(t, at("2026-11-11T16:00:00"), []);
     expect(t.Notifications!.filter((n) => n.type === "op_digest").map((n) => n.member_id)).toEqual(["OP"]);
   });
+
+  it("deposits are only in the admins' digest; operators hear about expiring members", () => {
+    const t = tables();
+    t.Members!.push({ member_id: "ADM", name: "ADM", email: "adm@x", role: "admin", status: "active" });
+    t.Payments = [{ payment_id: "P", member_id: "A", amount: 80000, plan_id: "1M", status: "pending" }];
+    run(t, at("2026-11-11T12:00:00"), []);
+    const digest = Object.fromEntries(t.Notifications!.filter((n) => n.type === "op_digest").map((n) => [n.member_id, String(n.body)]));
+    expect(digest.ADM).toContain("입금 확인 대기 1건");
+    expect(digest.OP).toBe("7일 안에 만료 1명");
+
+    // Only a deposit waiting (nobody expiring): the operator gets nothing, the admin still does.
+    const u = tables();
+    u.Members!.push({ member_id: "ADM", name: "ADM", email: "adm@x", role: "admin", status: "active" });
+    u.Memberships = u.Memberships!.map((m) => (m.member_id === "A" ? { ...m, end_date: "2027-01-31" } : m));
+    u.Payments = [{ payment_id: "P", member_id: "A", amount: 80000, plan_id: "1M", status: "pending" }];
+    run(u, at("2026-11-11T12:00:00"), []);
+    expect(u.Notifications!.filter((n) => n.type === "op_digest").map((n) => n.member_id)).toEqual(["ADM"]);
+  });
 });

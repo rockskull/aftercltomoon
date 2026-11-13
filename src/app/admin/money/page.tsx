@@ -15,7 +15,7 @@ import {
   type CategoryTotal,
   type MoneyEntry,
 } from "@/lib/ledger";
-import { requireOperator } from "@/server/auth/viewer";
+import { requireCapability } from "@/server/auth/viewer";
 import { formatWon } from "@/server/domain/model";
 import { moneyFrom } from "@/server/money";
 import { storeMode } from "@/server/store";
@@ -45,7 +45,7 @@ const monthLabel = (m: string) => `${m.slice(0, 4)}.${m.slice(5, 7)}`;
 async function Money({ searchParams }: Pick<PageProps<"/admin/money">, "searchParams">) {
   if (storeMode() === "unconfigured") return <div className="mx-auto max-w-3xl px-4 py-10"><NotReady /></div>;
   const now = await requestNow();
-  const { tables } = await requireOperator("/admin/money");
+  const { tables, member: me } = await requireCapability("/admin/money", "money");
   const params = await searchParams;
   const month = typeof params.month === "string" && /^\d{4}-\d{2}$/.test(params.month) ? params.month : "";
   const kind = params.kind === "income" || params.kind === "expense" ? params.kind : "";
@@ -67,7 +67,7 @@ async function Money({ searchParams }: Pick<PageProps<"/admin/money">, "searchPa
   };
 
   return (
-    <AdminFrame tab="money" title="Club money">
+    <AdminFrame tab="money" title="Club money" who={me}>
       {/* Headline figures (whole history) */}
       <section aria-label="요약" className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="지금 남은 돈" value={overall.balance} hero />

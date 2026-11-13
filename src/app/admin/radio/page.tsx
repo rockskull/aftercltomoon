@@ -5,6 +5,7 @@ import { SiteFooter, SiteHeader } from "@/components/site";
 import { NotReady } from "@/components/ui";
 import { requestNow } from "@/lib/club-data";
 import { ARTIST_MAX, MESSAGE_MAX, TITLE_MAX } from "@/lib/radio";
+import { can } from "@/lib/permissions";
 import { requireOperator } from "@/server/auth/viewer";
 import { activeTracks, deletedTracks, DISPLAY_NAME_MAX, RADIO_TAB_MISSING, type StoredTrack } from "@/server/domain/radio";
 import { readTables, storeMode } from "@/server/store";
@@ -34,13 +35,14 @@ async function RadioAdmin() {
   if (storeMode() === "unconfigured") return <div className="mx-auto max-w-3xl px-4 py-10"><NotReady /></div>;
   await requestNow();
   const viewer = await requireOperator("/admin/radio");
-  const isAdmin = viewer.member.role === "admin";
+  // Operators and admins both manage the radio (src/lib/permissions.ts).
+  const isAdmin = can(viewer.member, "radio");
   const tables = await readTables(["RadioTracks"], { admin: true });
   const nameOf = (id: string) => viewer.club.members.find((m) => m.id === id)?.name || id;
 
   if (storeMode() === "sheets" && tables.RadioTracks === undefined) {
     return (
-      <AdminFrame tab="radio" title="Radio">
+      <AdminFrame tab="radio" title="Radio" who={viewer.member}>
         <Box title="아직 준비 중">
           <p className="text-[14px] text-brown">{RADIO_TAB_MISSING}</p>
         </Box>
@@ -52,7 +54,7 @@ async function RadioAdmin() {
   const deleted = deletedTracks(tables);
 
   return (
-    <AdminFrame tab="radio" title="Radio">
+    <AdminFrame tab="radio" title="Radio" who={viewer.member}>
       <div className="flex flex-col gap-6">
         <p className="text-[14px] leading-relaxed text-ink-soft">
           AFTER HOURS RADIO의 재생 순서와 곡 정보를 관리해요. 표시 이름과 메모(사연)는{" "}
@@ -60,7 +62,7 @@ async function RadioAdmin() {
             라디오 목록
           </Link>
           에 그대로 보여요. 멤버 신청곡의 표시 이름·메모는 로그인한 회원에게만, 기본곡의 메모는 모두에게 보여요.
-          {!isAdmin && <span className="mt-1 block font-semibold text-brown">수정·순서 변경·삭제·복원은 admin만 할 수 있어요. 지금은 보기만 가능해요.</span>}
+          {!isAdmin && <span className="mt-1 block font-semibold text-brown">수정·순서 변경·삭제·복원은 운영진만 할 수 있어요. 지금은 보기만 가능해요.</span>}
         </p>
 
         <Box title={`재생 순서 · ${active.length}곡`}>

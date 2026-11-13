@@ -50,7 +50,7 @@ function baseTables(): Tables {
     note: "",
   });
   return {
-    Members: [member("OP", "op@x.dev", "active", "operator"), member("NEW", "new@x.dev", "applicant"), member("OLD", "old@x.dev")],
+    Members: [member("OP", "op@x.dev", "active", "operator"), member("ADM", "adm@x.dev", "active", "admin"), member("NEW", "new@x.dev", "applicant"), member("OLD", "old@x.dev")],
     Plans: [
       // 1개월: 100,000 the very first time, 80,000 after that. 6개월 has no first-time price.
       { plan_id: "1M", name: "1개월", price: 80000, first_price: 100000, duration_months: 1, bonus_months: 0, active: true, sort_order: 1, description: "" },
@@ -229,7 +229,7 @@ describe("payment approval", () => {
 describe("application", () => {
   const input = (consentConfirmed: boolean) => ({ name: "새 회원", depositorName: "김새회원", planId: "1M", requestedStart: null, consentConfirmed });
 
-  it("registers a new Google account as an applicant with a pending payment and alerts operators", async () => {
+  it("registers a new Google account as an applicant with a pending payment and alerts the admins (money)", async () => {
     const store = new MemoryStore(baseTables());
     const data = await store.read(["Members", "Plans", "Payments", "Notifications"]);
     const planned = planApplication(data, { now: NOW, actorId: "", email: "Fresh@X.dev", input: input(true) });
@@ -242,7 +242,8 @@ describe("application", () => {
     expect(fresh.consentAt).toBe("2026-11-11T12:00:00+09:00");
     // First membership: the 1개월 first-time price (100,000), not 80,000 + a fee.
     expect(club.payments.find((p) => p.memberId === fresh.id)).toMatchObject({ status: "pending", amount: 100000, firstJoin: true });
-    expect(club.notifications.filter((n) => n.type === "op_payment_pending").map((n) => n.memberId)).toEqual(["OP"]);
+    // Deposits are admin business: the operator gets no payment alert, the admin does.
+    expect(club.notifications.filter((n) => n.type === "op_payment_pending").map((n) => n.memberId)).toEqual(["ADM"]);
 
     const again = planApplication(store.tables, { now: NOW, actorId: "", email: "fresh@x.dev", input: input(true) });
     expect(again).toEqual({ refuse: "이미 입금 확인을 기다리는 신청이 있어요." });

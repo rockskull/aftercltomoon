@@ -2,6 +2,7 @@ import { normalizeNotices, noticeProblem, serializeNotices, type NoticeItem } fr
 import { toDateKey } from "@/lib/dates";
 import { monthBounds, overlapping } from "@/lib/membership";
 import { quoteRegistration, serializeRegistration } from "@/lib/registration";
+import { can } from "@/lib/permissions";
 import { isStampId } from "@/lib/stamps";
 import { earliestStart, FIRST_START_DAY, START_TOO_EARLY } from "@/lib/start-months";
 import { pickText, type Check, type Op } from "../store/commit";
@@ -374,7 +375,10 @@ export const SETTING_KEYS = {
 export type SettingKey = keyof typeof SETTING_KEYS;
 
 export function planSettingsSave(data: Tables, ctx: Ctx & { values: Partial<Record<SettingKey, string>> }): Planned {
-  if (ctx.actorRole !== "admin") return { refuse: ADMIN_ONLY };
+  // Operators may change the club notice only; everything else is for admins (src/lib/permissions.ts).
+  const keys = Object.keys(ctx.values);
+  const allowed = keys.every((k) => (k === "club_notice" ? can({ role: ctx.actorRole, status: "active" }, "notice") : can({ role: ctx.actorRole, status: "active" }, "settings")));
+  if (!keys.length || !allowed) return { refuse: ctx.actorRole === "operator" ? "운영자는 설정 중 아지트 공지만 바꿀 수 있어요." : ADMIN_ONLY };
   const values = Object.fromEntries(Object.entries(ctx.values).map(([k, v]) => [k, (v ?? "").trim()])) as Partial<Record<SettingKey, string>>;
   if (values.apply_notice !== undefined && values.apply_notice.length > 500) return { refuse: "안내 문구는 500자까지 쓸 수 있어요." };
   for (const key of ["consent_daily_url", "consent_member_url"] as const) {

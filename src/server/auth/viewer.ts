@@ -1,5 +1,6 @@
 import "server-only";
 import { notFound, redirect } from "next/navigation";
+import { can, type Capability } from "@/lib/permissions";
 import { parsePrivate, type ClubPrivate, type Member } from "../domain/model";
 import { ADMIN_TABLES, PRIVATE_TABLES, type TableName, type Tables } from "../store/schema";
 import { readTables, storeMode, StoreUnavailableError } from "../store";
@@ -64,6 +65,19 @@ export async function requireOperator(returnTo = "/admin"): Promise<Viewer & { m
 export async function operatorForAction(): Promise<(Viewer & { member: Member }) | null> {
   const viewer = await getViewer({ fresh: true });
   return viewer && isOperator(viewer.member) ? (viewer as Viewer & { member: Member }) : null;
+}
+
+/** For server actions limited by src/lib/permissions.ts (e.g. "money" → admins only); null when not allowed. */
+export async function crewForAction(cap: Capability): Promise<(Viewer & { member: Member }) | null> {
+  const op = await operatorForAction();
+  return op && can(op.member, cap) ? op : null;
+}
+
+/** For admin pages that are admin-only (deposits, statement, ledger): operators get the same 404 as everyone else. */
+export async function requireCapability(returnTo: string, cap: Capability): Promise<Viewer & { member: Member }> {
+  const viewer = await requireOperator(returnTo);
+  if (!can(viewer.member, cap)) notFound();
+  return viewer;
 }
 
 export { StoreUnavailableError };

@@ -7,6 +7,7 @@ import { ArrowRight, NotReady } from "@/components/ui";
 import { requestNow } from "@/lib/club-data";
 import { toDateKey } from "@/lib/dates";
 import { accessUntil } from "@/lib/membership";
+import { can } from "@/lib/permissions";
 import { requireOperator } from "@/server/auth/viewer";
 import { daysUntil } from "@/server/domain/operations";
 import { storeMode } from "@/server/store";
@@ -50,40 +51,66 @@ async function Overview() {
     })
     .slice(0, 10);
   const newProposals = proposals.filter((p) => String(p.review_status ?? "new") === "new" || !p.review_status);
+  // Operators see the club's activities, never deposits (src/lib/permissions.ts).
+  const money = can(me, "money");
 
   return (
-    <AdminFrame tab="overview" title="Club desk">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="입금 확인 대기" value={pending.length} href="/admin/payments" warn={pending.length > 0} />
+    <AdminFrame tab="overview" title="Club desk" who={me}>
+      <div className={`grid grid-cols-2 gap-3 ${money ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
+        {money && <Stat label="입금 확인 대기" value={pending.length} href="/admin/payments" warn={pending.length > 0} />}
         <Stat label="14일 내 만료" value={expiring.length} href="/admin/members?filter=expiring" />
         <Stat label="이용 중 회원" value={activeMembers.filter((m) => accessUntil(club.memberships.filter((ms) => ms.memberId === m.id), todayKey)).length} href="/admin/members" />
         <Stat label="새 제안" value={newProposals.length} href="/admin/proposals" warn={newProposals.length > 0} />
       </div>
 
       <div className="mt-6 flex flex-col gap-6">
-        <Box
-          title="입금 확인 대기"
-          action={
-            <Link href="/admin/bank" className="text-[13px] font-bold text-midnight underline underline-offset-4">
-              거래내역으로 확인
-            </Link>
-          }
-        >
-          {pending.length === 0 ? (
-            <p className="text-[14px] text-ink-soft">기다리는 입금이 없어요.</p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {pending.slice(0, 5).map((p) => (
-                <PendingPaymentCard key={p.id} payment={p} club={club} todayKey={todayKey} canConfirmRegistration={me.role === "admin"} />
+        {money ? (
+          <Box
+            title="입금 확인 대기"
+            action={
+              <Link href="/admin/bank" className="text-[13px] font-bold text-midnight underline underline-offset-4">
+                거래내역으로 확인
+              </Link>
+            }
+          >
+            {pending.length === 0 ? (
+              <p className="text-[14px] text-ink-soft">기다리는 입금이 없어요.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {pending.slice(0, 5).map((p) => (
+                  <PendingPaymentCard key={p.id} payment={p} club={club} todayKey={todayKey} canConfirmRegistration={me.role === "admin"} />
+                ))}
+                {pending.length > 5 && (
+                  <Link href="/admin/payments" className="text-[14px] font-bold text-midnight underline underline-offset-4">
+                    {pending.length - 5}건 더 보기
+                  </Link>
+                )}
+              </div>
+            )}
+          </Box>
+        ) : (
+          <Box title="운영자 메뉴">
+            <p className="text-[14px] leading-relaxed text-ink-soft">
+              운영자는 이벤트·제안·라디오·MOON PROBLEMS·아지트 공지와 회원 스탬프 발급을 관리해요. 회비·회계·회원권·회원 정보는 admin이 맡아요.
+            </p>
+            <ul className="mt-3 flex flex-wrap gap-2 text-[13px] font-bold">
+              {[
+                ["/admin/events", "이벤트"],
+                ["/admin/proposals", "제안"],
+                ["/admin/radio", "라디오"],
+                ["/problems", "MOON PROBLEMS"],
+                ["/admin/settings", "아지트 공지"],
+                ["/admin/members", "회원 · 스탬프"],
+              ].map(([href, label]) => (
+                <li key={href}>
+                  <Link href={href} className="inline-flex h-10 items-center rounded-md border-2 border-midnight px-3.5 text-midnight hover:bg-midnight hover:text-cream">
+                    {label}
+                  </Link>
+                </li>
               ))}
-              {pending.length > 5 && (
-                <Link href="/admin/payments" className="text-[14px] font-bold text-midnight underline underline-offset-4">
-                  {pending.length - 5}건 더 보기
-                </Link>
-              )}
-            </div>
-          )}
-        </Box>
+            </ul>
+          </Box>
+        )}
 
         <Box title="만료 예정 회원 (14일 이내)">
           {expiring.length === 0 ? (
@@ -92,7 +119,7 @@ async function Overview() {
             <ul className="divide-y divide-plywood-400">
               {expiring.map(({ member, until }) => {
                 const d = daysUntil(todayKey, until);
-                const hasPending = pending.some((p) => p.memberId === member.id);
+                const hasPending = money && pending.some((p) => p.memberId === member.id);
                 return (
                   <li key={member.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
                     <Link href={`/admin/members/${encodeURIComponent(member.id)}`} className="text-[15px] font-bold text-midnight hover:underline">
@@ -122,7 +149,7 @@ async function Overview() {
           </a>
         ) : (
           <Link href="/admin/settings" className="flex items-center justify-between rounded-lg border-2 border-dashed border-midnight/40 px-4 py-3 text-[14px] font-bold text-midnight">
-            회원권 상품 · 사이트 설정 · 스탬프 편집
+            {money ? "회원권 상품 · 사이트 설정 · 아지트 공지 · 스탬프 편집" : "아지트 공지 편집"}
             <ArrowRight />
           </Link>
         )}

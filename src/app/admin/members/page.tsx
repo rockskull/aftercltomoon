@@ -8,6 +8,7 @@ import { requestNow } from "@/lib/club-data";
 import { toDateKey } from "@/lib/dates";
 import { chatHint, memberAccess, type ChatHint, type MemberAccess } from "@/lib/access";
 import { accessUntil } from "@/lib/membership";
+import { can } from "@/lib/permissions";
 import { requireOperator } from "@/server/auth/viewer";
 import { daysUntil } from "@/server/domain/operations";
 import { storeMode } from "@/server/store";
@@ -109,7 +110,7 @@ async function Members({ searchParams }: Pick<PageProps<"/admin/members">, "sear
     .sort((a, b) => (a.until ?? "9999").localeCompare(b.until ?? "9999") || a.member.name.localeCompare(b.member.name));
 
   return (
-    <AdminFrame tab="members" title="Members">
+    <AdminFrame tab="members" title="Members" who={me}>
       <form className="flex flex-wrap items-center gap-2" role="search">
         <input type="hidden" name="filter" value={filter} />
         <input name="q" defaultValue={q} placeholder="이름, 이메일, 입금자명" aria-label="회원 검색" className={cn(smallInput, "min-w-0 flex-1 sm:max-w-xs")} />
@@ -134,6 +135,10 @@ async function Members({ searchParams }: Pick<PageProps<"/admin/members">, "sear
         ))}
       </ul>
 
+      {!can(me, "members") && (
+        <p className="mt-4 text-[13px] text-ink-soft">회원 상태 확인과 스탬프 발급은 운영자도 할 수 있어요. 회원 추가·정보 수정·회원권·회비는 admin이 맡아요.</p>
+      )}
+      {can(me, "members") && (
       <details className="mt-4 rounded-lg border-2 border-dashed border-midnight/30 bg-ivory/70 p-3">
         <summary className="cursor-pointer text-[14px] font-bold text-midnight">+ 회원 직접 추가 (사이트 이전부터 있던 회원, 운영진)</summary>
         <p className="mt-2 text-[12px] text-ink-soft">
@@ -184,6 +189,7 @@ async function Members({ searchParams }: Pick<PageProps<"/admin/members">, "sear
           </div>
         </ActionForm>
       </details>
+      )}
 
       <p className="mt-4 text-[13px] text-ink-soft">{rows.length}명</p>
       {filter === "chat" && (
@@ -205,7 +211,7 @@ async function Members({ searchParams }: Pick<PageProps<"/admin/members">, "sear
                   {chat && <Pill tone="warn">{CHAT_LABEL[chat]}</Pill>}
                   {member.role !== "member" && <Pill tone="ok">{member.role}</Pill>}
                   {member.status !== "active" && <Pill tone="warn">{member.status}</Pill>}
-                  {pending && <Pill>입금 대기</Pill>}
+                  {pending && can(me, "money") && <Pill>입금 대기</Pill>}
                   {!member.consentAt && member.status !== "inactive" && <Pill tone="warn">동의서 미확인</Pill>}
                 </span>
                 <span className="block truncate font-mono text-[12px] text-ink-soft">

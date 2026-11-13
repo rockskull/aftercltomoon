@@ -11,7 +11,7 @@ import { stampDefinitions } from "@/server/domain/stamps";
 import { readTables, storeMode } from "@/server/store";
 import { cellText, type Row } from "@/server/store/schema";
 import { savePlan, saveSettings, saveStampDefinition } from "../actions";
-import { ClubNoticeView } from "@/components/club-notice-view";
+import { can } from "@/lib/permissions";
 import { ActionForm } from "../admin-ui";
 import { AdminFrame, AdminSkeleton, Box, Pill, smallInput, smallPrimary } from "../shared";
 import { NoticeEditor } from "./notice-editor";
@@ -44,10 +44,24 @@ async function Settings() {
   const settings = toSettings(tables.Settings);
   const plans = [...(tables.Plans ?? [])].sort((a, b) => Number(cellText(a.sort_order)) - Number(cellText(b.sort_order)));
 
+  // Operators: the club notice only (src/lib/permissions.ts); plans, site settings and stamp definitions are for admins.
+  if (!can(viewer.member, "settings")) {
+    return (
+      <AdminFrame tab="settings" title="Settings" who={viewer.member}>
+        <div className="flex flex-col gap-6">
+          <p className="text-[14px] text-ink-soft">운영자는 설정 중 아지트 공지만 바꿀 수 있어요. 회원권 상품·사이트 설정·스탬프 정의는 admin이 맡아요.</p>
+          <Box title="아지트 공지">
+            <p className="mb-3 text-[13px] text-ink-soft">홈과 MY 화면의 &lsquo;아지트 공지&rsquo;예요. 항목을 고치고 추가·삭제·순서 변경을 한 뒤 저장하면 바로 반영돼요.</p>
+            <NoticeEditor initial={settings.clubNotice} />
+          </Box>
+        </div>
+      </AdminFrame>
+    );
+  }
+
   return (
-    <AdminFrame tab="settings" title="Settings">
+    <AdminFrame tab="settings" title="Settings" who={viewer.member}>
       <div className="flex flex-col gap-6">
-        {!isAdmin && <p className="text-[14px] font-semibold text-brown">이 화면의 설정은 admin만 바꿀 수 있어요. 지금은 보기만 가능해요.</p>}
 
         <Box title="회원권 상품">
           <p className="mb-3 text-[13px] text-ink-soft">
@@ -126,11 +140,7 @@ async function Settings() {
 
         <Box title="아지트 공지">
           <p className="mb-3 text-[13px] text-ink-soft">홈과 MY 화면의 &lsquo;아지트 공지&rsquo;예요. 항목을 고치고 추가·삭제·순서 변경을 한 뒤 저장하면 바로 반영돼요.</p>
-          {isAdmin ? (
-            <NoticeEditor initial={settings.clubNotice} />
-          ) : (
-            <ClubNoticeView items={settings.clubNotice} headingId="notice-readonly-title" className="max-w-2xl" />
-          )}
+          <NoticeEditor initial={settings.clubNotice} />
         </Box>
 
         <Box title="MOON STAMPS">

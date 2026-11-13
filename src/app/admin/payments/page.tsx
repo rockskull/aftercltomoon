@@ -4,7 +4,7 @@ import { SiteFooter, SiteHeader } from "@/components/site";
 import { NotReady } from "@/components/ui";
 import { requestNow } from "@/lib/club-data";
 import { toDateKey } from "@/lib/dates";
-import { requireOperator } from "@/server/auth/viewer";
+import { requireCapability } from "@/server/auth/viewer";
 import { formatWon } from "@/server/domain/model";
 import { storeMode } from "@/server/store";
 import { ApprovedPaymentRow, PendingPaymentCard } from "../payment-cards";
@@ -29,7 +29,7 @@ export default function PaymentsPage() {
 async function Payments() {
   if (storeMode() === "unconfigured") return <div className="mx-auto max-w-3xl px-4 py-10"><NotReady /></div>;
   const now = await requestNow();
-  const { club, member: me } = await requireOperator("/admin/payments");
+  const { club, member: me } = await requireCapability("/admin/payments", "money");
   const todayKey = toDateKey(now);
   const byRequested = (a: { requestedAt: string }, b: { requestedAt: string }) => a.requestedAt.localeCompare(b.requestedAt);
 
@@ -44,7 +44,7 @@ async function Payments() {
     .slice(0, 20);
 
   return (
-    <AdminFrame tab="payments" title="Deposits">
+    <AdminFrame tab="payments" title="Deposits" who={me}>
       <p className="mb-5 max-w-2xl text-[14px] leading-relaxed text-ink-soft">
         모임통장 앱에서 입금을 확인한 뒤 승인하세요. 승인하는 순간 회원권 기간이 계산되어 생성되고, 회원에게 알림이 가요.
         같은 입금은 두 번 승인되지 않아요.

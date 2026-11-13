@@ -1,6 +1,7 @@
 import { formatKeyKo, toDateKey } from "@/lib/dates";
 import { memberAccess } from "@/lib/access";
 import { monthBounds, nextMembershipPeriod, overlapping, totalMonths } from "@/lib/membership";
+import { can, type Capability } from "@/lib/permissions";
 import { quoteRegistration } from "@/lib/registration";
 import { FIRST_START_DAY, START_TOO_EARLY } from "@/lib/start-months";
 import { pickText, type Check, type Op } from "../store/commit";
@@ -85,11 +86,14 @@ export function notificationRow(args: {
   };
 }
 
-/** Heads-up for every active operator (delivered outside quiet hours). */
-function notifyOperators(data: Tables, ctx: Ctx, n: { type: string; title: string; body: string; url: string; key: string }) {
+/**
+ * Heads-up for the crew members who handle it (delivered outside quiet hours):
+ * money matters (deposits) go to admins only, club activities to every operator.
+ */
+function notifyOperators(data: Tables, ctx: Ctx, n: { type: string; title: string; body: string; url: string; key: string; cap: Capability }) {
   const checks: Check[] = [];
   const ops: Op[] = [];
-  for (const op of operatorsOf(data)) {
+  for (const op of operatorsOf(data).filter((m) => can(m, n.cap))) {
     const r = notify(
       data,
       notificationRow({
@@ -259,6 +263,7 @@ export function planApplication(
     body: `${ctx.input.name}(${ctx.input.depositorName}) · ${plan.name} ${formatWon(amount)}${firstPriceApplied ? " (첫 등록)" : ""}`,
     url: "/admin/payments",
     key: `op_payment_pending:${paymentId}`,
+    cap: "money",
   });
   checks.push(...heads.checks);
   ops.push(...heads.ops);
@@ -628,6 +633,7 @@ export function planProposal(data: Tables, ctx: Ctx & { payload: Record<string, 
     body: String(ctx.payload.event_title ?? ""),
     url: "/admin/proposals",
     key: `op_proposal_new:${proposalId}`,
+    cap: "proposals",
   });
   const checks: Check[] = [...heads.checks];
   const ops: Op[] = [{ type: "append", table: "Proposals", row }, ...heads.ops];

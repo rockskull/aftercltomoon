@@ -207,13 +207,14 @@ describe("adding a track", () => {
   });
 });
 
-describe("track management (admin)", () => {
+describe("track management (crew: operators and admins)", () => {
   const edit = (data: Tables, email: string, over: Partial<{ title: string; artist: string; displayName: string; message: string }> = {}) =>
     planEditTrack(data, { now: NOW, email, trackId: "RT-SEED-03", set: { title: "Peg", artist: "Steely Dan", displayName: "AFTER CL TO MOON", message: "", ...over } });
 
-  it("lets only an admin edit the name shown and the memo (message)", () => {
+  it("lets only the crew edit the name shown and the memo (message)", () => {
     const data = tables();
-    for (const email of ["amy@x.dev", "oper@x.dev"]) expect(edit(data, email, { message: "x" })).toHaveProperty("refuse");
+    expect(edit(data, "amy@x.dev", { message: "x" })).toHaveProperty("refuse");
+    expect(edit(data, "oper@x.dev", { message: "x" })).not.toHaveProperty("refuse"); // operators manage the radio too
     const planned = edit(data, "admin@x.dev", { displayName: "운영진 추천", message: "벽 세팅 끝나고 첫 곡" });
     if ("refuse" in planned) throw new Error(planned.refuse);
     expect(applyCommit(data, planned.commit)).toEqual({ ok: true });
@@ -252,7 +253,8 @@ describe("track management (admin)", () => {
     expect(move("RT-SEED-03", "up")).toBe("RT-SEED-03,RT-SEED-01,RT-SEED-02,RT-SEED-04");
     expect(move("RT-SEED-03", "up")).toBe("이미 맨 위예요.");
     expect(move("RT-SEED-03", "down")).toBe("RT-SEED-01,RT-SEED-03,RT-SEED-02,RT-SEED-04");
-    expect(planMoveTrack(data, { now: NOW, email: "oper@x.dev", trackId: "RT-SEED-01", direction: "down" })).toHaveProperty("refuse");
+    expect(planMoveTrack(data, { now: NOW, email: "amy@x.dev", trackId: "RT-SEED-01", direction: "down" })).toHaveProperty("refuse");
+    expect(planMoveTrack(data, { now: NOW, email: "oper@x.dev", trackId: "RT-SEED-01", direction: "down" })).not.toHaveProperty("refuse");
   });
 
   it("pulls apart two tracks saved with the same order", () => {
@@ -285,8 +287,8 @@ describe("track management (admin)", () => {
     const del2 = planDeleteTrack(other, { now: NOW, email: "admin@x.dev", trackId: "RT-SEED-03" });
     if ("refuse" in del2) throw new Error(del2.refuse);
     applyCommit(other, del2.commit);
-    expect(planRestoreTrack(other, { now: NOW, email: "oper@x.dev", trackId: "RT-SEED-03" })).toHaveProperty("refuse");
-    const restore = planRestoreTrack(other, { now: NOW, email: "admin@x.dev", trackId: "RT-SEED-03" });
+    expect(planRestoreTrack(other, { now: NOW, email: "amy@x.dev", trackId: "RT-SEED-03" })).toHaveProperty("refuse");
+    const restore = planRestoreTrack(other, { now: NOW, email: "oper@x.dev", trackId: "RT-SEED-03" });
     if ("refuse" in restore) throw new Error(restore.refuse);
     applyCommit(other, restore.commit);
     expect(activeTracks(other)[2]).toMatchObject({ id: "RT-SEED-03", status: "active", deletedAt: "", deletedBy: "" });
@@ -294,11 +296,12 @@ describe("track management (admin)", () => {
 });
 
 describe("deleting a track", () => {
-  it("only an admin can, and it is a soft delete", () => {
+  it("only the crew can, and it is a soft delete", () => {
     const data = tables();
-    for (const email of ["amy@x.dev", "oper@x.dev", "stranger@gmail.com"]) {
-      expect(planDeleteTrack(data, { now: NOW, email, trackId: "RT-SEED-01" })).toEqual({ refuse: "곡 삭제는 ADMIN만 할 수 있어요." });
+    for (const email of ["amy@x.dev", "stranger@gmail.com"]) {
+      expect(planDeleteTrack(data, { now: NOW, email, trackId: "RT-SEED-01" })).toEqual({ refuse: "곡 삭제는 운영진만 할 수 있어요." });
     }
+    expect(planDeleteTrack(data, { now: NOW, email: "oper@x.dev", trackId: "RT-SEED-02" })).not.toHaveProperty("refuse");
     const planned = planDeleteTrack(data, { now: NOW, email: "admin@x.dev", trackId: "RT-SEED-01" });
     if ("refuse" in planned) throw new Error(planned.refuse);
     expect(applyCommit(data, planned.commit)).toEqual({ ok: true });

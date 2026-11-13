@@ -1,6 +1,7 @@
 import { formatDateTimeKo, toDateKey } from "@/lib/dates";
 import { eventHref } from "@/lib/event-format";
 import { accessUntil } from "@/lib/membership";
+import { can } from "@/lib/permissions";
 import { getEventStatus, registrationCloseMs } from "@/lib/status";
 import type { ClubEvent } from "@/lib/types";
 import type { Check, Op } from "../store/commit";
@@ -119,10 +120,12 @@ export function planSchedule(data: Tables, ctx: { now: number; events: ClubEvent
     const until = accessUntil(memberships.filter((ms) => ms.memberId === m.id), todayKey);
     return until !== null && daysUntil(todayKey, until) <= 7;
   }).length;
-  if (pending > 0 || expiringSoon > 0) {
-    for (const op of members.filter((m) => (m.role === "operator" || m.role === "admin") && prefs(m).operator)) {
-      note(op.id, "op_digest", "오늘의 운영 현황", `입금 확인 대기 ${pending}건 · 7일 안에 만료 ${expiringSoon}명`, "/admin", `op_digest:${toDateKey(at)}:${op.id}`);
-    }
+  // Deposits are for admins only (src/lib/permissions.ts); operators hear about expiring members (group chat).
+  for (const op of members.filter((m) => (m.role === "operator" || m.role === "admin") && prefs(m).operator)) {
+    const money = can(op, "money");
+    if (money ? pending === 0 && expiringSoon === 0 : expiringSoon === 0) continue;
+    const body = money ? `입금 확인 대기 ${pending}건 · 7일 안에 만료 ${expiringSoon}명` : `7일 안에 만료 ${expiringSoon}명`;
+    note(op.id, "op_digest", "오늘의 운영 현황", body, "/admin", `op_digest:${toDateKey(at)}:${op.id}`);
   }
 
   return ops.length ? { commit: { id: newId("C", now, 8), checks, ops }, created: ops.filter((o) => o.table === "Notifications").length } : null;

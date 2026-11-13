@@ -32,14 +32,14 @@ const REVIEW = { new: "새 제안", reviewing: "검토 중", accepted: "진행 �
 
 async function Proposals() {
   if (storeMode() === "unconfigured") return <div className="mx-auto max-w-3xl px-4 py-10"><NotReady /></div>;
-  const { tables } = await requireOperator("/admin/proposals");
+  const { tables, member: me } = await requireOperator("/admin/proposals");
   const eventIds = new Set((tables.Events ?? []).map((r) => cellText(r.event_id)));
   const proposals = [...(tables.Proposals ?? [])].sort((a, b) => cellText(b.submitted_at).localeCompare(cellText(a.submitted_at)));
   const events = [...(tables.Events ?? [])].sort((a, b) => cellText(b.start_at).localeCompare(cellText(a.start_at))).slice(0, 30);
   const t = (v: unknown) => cellText(v as string).trim();
 
   return (
-    <AdminFrame tab="proposals" title="Ideas & events">
+    <AdminFrame tab="proposals" title="Ideas & events" who={me}>
       <div className="flex flex-col gap-6">
         <Box title={`이벤트 제안 ${proposals.length}건`}>
           <p className="mb-3 text-[13px] text-ink-soft">

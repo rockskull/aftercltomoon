@@ -10,6 +10,7 @@ import { toDateKey } from "@/lib/dates";
 import { randomUUID } from "node:crypto";
 import { membershipPhase, monthBounds, overlapping, totalMonths } from "@/lib/membership";
 import { addMonths, monthRange } from "@/lib/registration";
+import { can } from "@/lib/permissions";
 import { earliestStart, FIRST_START_MONTH } from "@/lib/start-months";
 import { requireOperator } from "@/server/auth/viewer";
 import { monthlyPlan } from "@/server/domain/admin-data";
@@ -52,6 +53,9 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
   if (!member) notFound();
   const todayKey = toDateKey(now);
   const isAdmin = viewer.member.role === "admin";
+  // Operators: member states and stamps only — no money, no member records (src/lib/permissions.ts).
+  const money = can(viewer.member, "money");
+  const manageMembers = can(viewer.member, "members");
 
   const memberships = club.memberships.filter((m) => m.memberId === member.id).sort((a, b) => b.startDate.localeCompare(a.startDate));
   const payments = club.payments.filter((p) => p.memberId === member.id).sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
@@ -71,7 +75,7 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
   });
 
   return (
-    <AdminFrame tab="members" title={member.name || member.id}>
+    <AdminFrame tab="members" title={member.name || member.id} who={viewer.member}>
       <Link href="/admin/members" className="text-[13px] font-bold text-ink-soft hover:text-midnight">
         ← 회원 목록
       </Link>
@@ -88,6 +92,7 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
               <span className="font-medium text-brown">미확인 (회원이 MY 화면에서 제출 후 확인해야 해요)</span>
             )}
           </p>
+          {manageMembers ? (
           <ActionForm action={editMember} className="grid gap-3 sm:grid-cols-2">
             <input type="hidden" name="member_id" value={member.id} />
             <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
@@ -124,6 +129,23 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
               </button>
             </div>
           </ActionForm>
+          ) : (
+            <dl className="grid grid-cols-[96px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[14px]" data-member-readonly>
+              <dt className="text-ink-soft">이름</dt>
+              <dd className="text-midnight">{member.name}</dd>
+              <dt className="text-ink-soft">계정 상태</dt>
+              <dd className="text-midnight">{member.status}</dd>
+              <dt className="text-ink-soft">권한</dt>
+              <dd className="text-midnight">{member.role}</dd>
+              {member.memo && (
+                <>
+                  <dt className="text-ink-soft">운영 메모</dt>
+                  <dd className="text-midnight">{member.memo}</dd>
+                </>
+              )}
+              <dd className="col-span-2 mt-1 text-[12px] text-ink-soft">회원 정보 수정은 admin만 할 수 있어요.</dd>
+            </dl>
+          )}
         </Box>
 
         <Box title="회원권">
@@ -146,6 +168,7 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
                     <Pill tone={membershipPhase(m, todayKey) === "active" ? "ok" : "muted"}>{membershipPhase(m, todayKey)}</Pill>
                   </div>
                   {m.note && <p className="mt-1 text-[12px] text-ink-soft">{m.note}</p>}
+                  {money && (
                   <details className="mt-2">
                     <summary className="cursor-pointer text-[13px] font-bold text-midnight">기간·상태 수정</summary>
                     <ActionForm action={editMembership} className="mt-2 flex flex-wrap items-end gap-2" confirmText="회원권을 수정할까요? 변경 이력이 남아요.">
@@ -175,12 +198,14 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
                       </button>
                     </ActionForm>
                   </details>
+                  )}
                 </li>
               ))}
             </ul>
           )}
         </Box>
 
+        {money && (
         <Box title="MEMBERSHIP REGISTRATION">
           {openPayments.length > 0 ? (
             <div className="flex flex-col gap-3">
@@ -216,7 +241,9 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
             <p className="text-[13px] text-ink-soft">새 회원권 등록 계산과 확정은 admin만 할 수 있어요.</p>
           )}
         </Box>
+        )}
 
+        {money && (
         <details className="-mt-3 rounded-lg border-2 border-dashed border-midnight/30 bg-ivory/70 p-3">
           <summary className="cursor-pointer text-[14px] font-bold text-midnight">+ 회원권 직접 등록 (입금 기록 없이 — 사이트 이전 회원권, 현금 납부 등)</summary>
           <p className="mt-2 text-[12px] text-ink-soft">
@@ -253,11 +280,13 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
             </div>
           </ActionForm>
         </details>
+        )}
 
         <Suspense fallback={<Box title="Moon stamps"><div className="h-24 animate-pulse rounded-md bg-white/40" /></Box>}>
           <MemberStamps member={member} members={club.members} memberships={club.memberships} plans={club.plans} todayKey={todayKey} />
         </Suspense>
 
+        {money && (
         <Box title="회비">
           {payments.length === 0 ? (
             <p className="text-[14px] text-ink-soft">회비 기록이 없어요.</p>
@@ -283,6 +312,7 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
             </div>
           )}
         </Box>
+        )}
       </div>
     </AdminFrame>
   );
