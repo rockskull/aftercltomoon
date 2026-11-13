@@ -2,21 +2,24 @@ import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
 import type { Commit, CommitResult } from "./commit";
 import { demoStore } from "./memory";
+import { commitToDb, readFromDb } from "./postgres";
 import type { TableName, Tables } from "./schema";
 
-/** Cache tag for private sheet data; invalidated after every successful commit. */
+/** Cache tag for private club data; invalidated after every successful commit. */
 export const PRIVATE_TAG = "club-private";
 
-export type StoreMode = "sheets" | "demo" | "unconfigured";
+export type StoreMode = "postgres" | "sheets" | "demo" | "unconfigured";
 
 /**
- * - sheets:       CLUB_API_URL + CLUB_API_SECRET → the real spreadsheet via Apps Script
- * - demo:         no sheet connected yet → in-memory demo data with demo logins
+ * - postgres:     DATABASE_URL → the club database (Neon). The source of truth.
+ * - sheets:       CLUB_API_URL + CLUB_API_SECRET → the old spreadsheet via Apps Script
+ *                 (before the move to the database; still used once to copy the data over)
+ * - demo:         nothing connected → in-memory demo data with demo logins
  *                 (member and admin screens can be tried; nothing real is stored)
- * - unconfigured: DEMO_MODE=false without a sheet → member features show "준비 중"
- * Connecting the sheet switches demo off automatically.
+ * - unconfigured: DEMO_MODE=false without a data store → member features show "준비 중"
  */
 export function storeMode(): StoreMode {
+  if (process.env.DATABASE_URL) return "postgres";
   if (process.env.CLUB_API_URL && process.env.CLUB_API_SECRET) return "sheets";
   if (process.env.DEMO_MODE === "false") return "unconfigured";
   return "demo";
@@ -51,12 +54,17 @@ async function readFromSheets(tables: TableName[]): Promise<Tables> {
   return body.tables;
 }
 
+/** The live store: the database once it is connected, otherwise the sheet. */
+function readSource(tables: TableName[]): Promise<Tables> {
+  return storeMode() === "postgres" ? readFromDb(tables) : readFromSheets(tables);
+}
+
 /** Shared, short-lived cache of private tables (server-side only, never sent to other users). */
 async function readFromSheetsCached(key: string): Promise<Tables> {
   "use cache: remote";
   cacheLife({ stale: 30, revalidate: 30, expire: 300 });
   cacheTag(PRIVATE_TAG);
-  return readFromSheets(key.split(",") as TableName[]);
+  return readSource(key.split(",") as TableName[]);
 }
 
 /**
@@ -69,7 +77,7 @@ async function readAdminCached(key: string): Promise<Tables> {
   "use cache: remote";
   cacheLife({ stale: 30, revalidate: 30, expire: 60 });
   cacheTag(PRIVATE_TAG);
-  return readFromSheets(key.split(",") as TableName[]);
+  return readSource(key.split(",") as TableName[]);
 }
 
 /** Cache tag of the radio playlist; adding or deleting a track clears it. */
@@ -80,7 +88,7 @@ async function readRadioCached(key: string): Promise<Tables> {
   "use cache: remote";
   cacheLife({ stale: 15, revalidate: 15, expire: 120 });
   cacheTag(RADIO_TAG, PRIVATE_TAG);
-  return readFromSheets(key.split(",") as TableName[]);
+  return readSource(key.split(",") as TableName[]);
 }
 
 /**
@@ -96,8 +104,9 @@ export async function readTables(tables: TableName[], opts: { fresh?: boolean; a
       return demoStore().read(tables);
     case "unconfigured":
       throw new StoreUnavailableError();
+    case "postgres":
     case "sheets": {
-      if (opts.fresh) return readFromSheets(tables);
+      if (opts.fresh) return readSource(tables);
       const key = [...tables].sort().join(",");
       if (opts.radio) return readRadioCached(key);
       return opts.admin ? readAdminCached(key) : readFromSheetsCached(key);
@@ -111,6 +120,8 @@ async function sendCommit(commit: Commit): Promise<CommitResult> {
       return demoStore().commit(commit);
     case "unconfigured":
       throw new StoreUnavailableError();
+    case "postgres":
+      return commitToDb(commit);
     case "sheets":
       return callGateway<CommitResult>("commit", { commit }, 30_000);
   }
@@ -145,7 +156,7 @@ export async function runCommit<R = unknown>(
         result = await sendCommit(planned.commit);
       } catch (retryError) {
         console.error("[store] commit retry failed", retryError);
-        return { ok: false, message: "시트에 저장하지 못했어요. 잠시 후 다시 시도해 주세요." };
+        return { ok: false, message: "저장하지 못했어요. 잠시 후 다시 시도해 주세요." };
       }
     }
 

@@ -1,17 +1,24 @@
-# 집에서 이어하기 — 실데이터 연결 체크리스트
+# 이어하기 — 체크리스트
 
-> 2026-11-11 기준 정리. 위에서부터 순서대로 하면 됩니다. 자세한 설명은 [README](../README.md).
+> 2026-11-13 기준 정리. 자세한 설명은 [README](../README.md).
 > Claude Code로 이어서 할 때는 "docs/HANDOFF.md 보고 이어서 하자"로 시작하면 됩니다.
 
 ## 지금 상태
 
 | 항목 | 상태 |
 |---|---|
-| 사이트 | https://aftercltomoon.vercel.app — **데모 모드** (시트 미연결, 데모 계정으로 회원·운영진 화면 확인 가능) |
+| 사이트 | https://aftercltomoon.vercel.app — 실데이터, Google 로그인 |
+| 데이터 | **Postgres (Neon, Vercel Storage)** — 2026-11-13 Google Sheets에서 이전. 시트는 백업으로만 남김 |
 | 코드 | GitHub `rockskull/aftercltomoon` `main` · Vercel이 연결되어 **push하면 자동 배포** |
-| 완료 | 캘린더·이벤트·제안서(로그인 필요), Google 로그인 코드, 회원권 기간 계산(**달 단위: 1일 시작 · 말일 종료**), 첫 등록 가격(1개월 10만 원), 입금 승인, 거래내역 매칭, 알림, PWA, 관리 화면, 동의서, 회계 장부, 사이트 결제 요청 제거, 초대장(`/invite`), 포스터 생성기(08), MOON STAMPS(06) |
-| 실서비스 반영 | 스탬프(**StampDefinitions · StampAwards**)와 라디오(**RadioTracks**)는 시트 탭이 있고 Apps Script 배포가 새 버전이어야 동작해요 → 아래 "새 Code.gs 반영" |
-| 남은 일 | ① Apps Script로 시트 연결 ② Google 로그인 설정 ③ Vercel 환경변수 ④ 데이터 채우기 |
+| 완료 | 캘린더·이벤트·제안서(로그인 필요), Google 로그인, 회원권(**달 단위: 1일 시작 · 말일 종료**), 첫 등록 가격, 입금 승인, 거래내역 매칭, 알림, PWA, 관리 화면, 동의서, 회계 장부, 초대장, 포스터 생성기, MOON STAMPS, AFTER HOURS RADIO, 관리 화면에서 회원 추가·상품·설정·등록 기간·스탬프 편집 |
+
+### DB로 바꾼 뒤 (2026-11-13)
+
+- 예전에 시트에서 고치던 것은 모두 관리 화면에 있어요: **회원 직접 추가**(회원 탭), **회원권 상품·가격 / 신청 안내·동의서 링크·라디오 플레이어 / 스탬프 이름**(설정 탭), **등록 기간(캘린더 막대)**(이벤트 탭), 스탬프 **발급 취소**(회원 상세).
+- Vercel 프로젝트 환경변수에 `DATABASE_URL`이 있어야 해요(Storage에서 Neon을 프로젝트에 Connect하면 자동). 확인: 관리 화면 → 설정 → **데이터: 저장소 = 데이터베이스 (Neon)**.
+- 이제 **Apps Script(Code.gs, setupSheets, Tick.gs, 배포 버전)는 할 일이 없어요.** 아래 1번 섹션의 Apps Script 내용은 예전 기록이에요.
+- Vercel 환경변수의 `CLUB_API_URL`·`CLUB_API_SECRET`은 이전이 끝났으니 지워도 돼요(남아 있어도 DB가 우선).
+- ⚠️ 로컬 `.env.local`에 `DATABASE_URL`이 있으면 `npm run dev`도 **실제 DB**를 써요. 시험은 Neon 개발 브랜치나 데모(DATABASE_URL 없이)로.
 
 ---
 

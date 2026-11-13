@@ -8,10 +8,10 @@ import { formatDateKo, formatDateTimeKo, formatTime, parseMoment, toDateKey } fr
 import { requireOperator } from "@/server/auth/viewer";
 import { eventDraftFromProposal, eventIdForProposal, isPublicEvent } from "@/server/domain/event-input";
 import { cellText, type Row } from "@/server/store/schema";
-import { storeMode } from "@/server/store";
-import { createEvent } from "../actions";
+import { readTables, storeMode } from "@/server/store";
+import { createEvent, saveEnrollment } from "../actions";
 import { ActionForm } from "../admin-ui";
-import { AdminFrame, AdminSkeleton, Box, Pill, smallPrimary } from "../shared";
+import { AdminFrame, AdminSkeleton, Box, Pill, smallInput, smallPrimary } from "../shared";
 import { EventFields, STATUS_LABEL, usedCategories, VISIBILITY_LABEL } from "./event-fields";
 
 export const metadata: Metadata = { title: "이벤트", robots: { index: false } };
@@ -113,7 +113,7 @@ async function Events({ searchParams }: Pick<PageProps<"/admin/events">, "search
         <Box
           title={`다가오는 이벤트 ${upcoming.length}건`}
           action={
-            club.settings.sheetUrl ? (
+            storeMode() === "sheets" && club.settings.sheetUrl ? (
               <a href={club.settings.sheetUrl} target="_blank" rel="noopener noreferrer" className="text-[13px] font-bold text-midnight underline underline-offset-4">
                 시트에서 보기
               </a>
@@ -128,8 +128,85 @@ async function Events({ searchParams }: Pick<PageProps<"/admin/events">, "search
             <EventList items={past} empty="" />
           </Box>
         )}
+
+        <Enrollments today={today} />
       </div>
     </AdminFrame>
+  );
+}
+
+/** Enrollment periods: the bars on the calendar ("12월 신규 등록" etc.). */
+async function Enrollments({ today }: { today: string }) {
+  const rows = ((await readTables(["Enrollment"], { admin: true })).Enrollment ?? []).filter((r) => cellText(r.enrollment_id));
+  const sorted = [...rows].sort((a, b) => cellText(b.start_date).localeCompare(cellText(a.start_date)));
+  return (
+    <Box title={`등록 기간 (캘린더 막대) ${rows.length}건`}>
+      <p className="mb-3 text-[13px] text-ink-soft">회원 등록·연장을 받는 기간을 캘린더에 막대로 보여 줘요. 공개(published)나 마감(closed)이면 캘린더에 보이고, 초안(draft)이면 숨겨져요.</p>
+      <ul className="flex flex-col gap-2">
+        {sorted.map((r) => (
+          <li key={cellText(r.enrollment_id)} className="rounded-md border border-midnight/20 bg-white/40 p-3">
+            <p className="flex flex-wrap items-center gap-2 text-[15px] font-bold text-midnight">
+              {cellText(r.title)}
+              <Pill tone={cellText(r.status) === "published" ? "ok" : "muted"}>{cellText(r.status) || "draft"}</Pill>
+            </p>
+            <p className="font-mono text-[12px] text-ink-soft">
+              {cellText(r.start_date)} – {cellText(r.end_date) || cellText(r.start_date)}
+            </p>
+            <details className="mt-2 border-t border-dashed border-midnight/20 pt-2">
+              <summary className="cursor-pointer text-[13px] font-bold text-midnight">수정</summary>
+              <EnrollmentForm row={r} today={today} />
+            </details>
+          </li>
+        ))}
+      </ul>
+      <details className="mt-3 rounded-md border-2 border-dashed border-midnight/30 p-3">
+        <summary className="cursor-pointer text-[14px] font-bold text-midnight">+ 등록 기간 추가</summary>
+        <EnrollmentForm row={null} today={today} />
+      </details>
+    </Box>
+  );
+}
+
+function EnrollmentForm({ row, today }: { row: Row | null; today: string }) {
+  const v = (k: string) => (row ? cellText(row[k]) : "");
+  const label = "flex flex-col gap-1 text-[12px] font-medium text-ink-soft";
+  return (
+    <ActionForm action={saveEnrollment} className="mt-2 grid gap-2 sm:grid-cols-2">
+      {row && <input type="hidden" name="enrollment_id" value={cellText(row.enrollment_id)} />}
+      <label className={`${label} sm:col-span-2`}>
+        제목
+        <input name="title" defaultValue={v("title")} required maxLength={60} placeholder="예: 12월 신규 회원 등록" className={smallInput} />
+      </label>
+      <label className={label}>
+        시작일
+        <input type="date" name="start_date" defaultValue={v("start_date").slice(0, 10) || today} required className={smallInput} />
+      </label>
+      <label className={label}>
+        종료일
+        <input type="date" name="end_date" defaultValue={v("end_date").slice(0, 10)} className={smallInput} />
+      </label>
+      <label className={`${label} sm:col-span-2`}>
+        설명
+        <input name="description" defaultValue={v("description")} maxLength={300} className={smallInput} />
+      </label>
+      <label className={label}>
+        신청 링크 (선택, https://)
+        <input name="application_url" type="url" defaultValue={v("application_url")} className={smallInput} />
+      </label>
+      <label className={label}>
+        상태
+        <select name="status" defaultValue={v("status") || "published"} className={smallInput}>
+          <option value="published">공개 (캘린더에 표시)</option>
+          <option value="closed">마감 (표시, 마감으로)</option>
+          <option value="draft">초안 (숨김)</option>
+        </select>
+      </label>
+      <div className="sm:col-span-2">
+        <button type="submit" className={smallPrimary}>
+          {row ? "저장" : "추가"}
+        </button>
+      </div>
+    </ActionForm>
   );
 }
 

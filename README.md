@@ -1,9 +1,9 @@
 # AFTER CL TO MOON — 클럽 웹사이트
 
 석촌호수 근처 사설 볼더링 클럽 **AFTER CL TO MOON**의 모바일 우선 웹사이트(PWA)입니다.
-멤버는 일정과 회원권을 확인하고 이벤트를 제안합니다. 운영진은 **Google Sheets 하나**로 일정·회원·회비를 관리하고, 입금만 확인·승인하면 회원권 기간과 알림이 자동으로 처리됩니다.
+멤버는 일정과 회원권을 확인하고 이벤트를 제안합니다. 운영진은 **관리 화면(ADMIN)** 에서 일정·회원·회비·설정을 관리하고, 입금만 확인·승인하면 회원권 기간과 알림이 자동으로 처리됩니다. 데이터는 **Postgres 데이터베이스(Neon, Vercel Storage)** 에 저장됩니다(2026-11-13 Google Sheets에서 이전).
 
-> **실데이터 연결을 이어서 할 때는 [docs/HANDOFF.md](docs/HANDOFF.md) 체크리스트부터 보세요.**
+> **이어서 작업할 때는 [docs/HANDOFF.md](docs/HANDOFF.md) 체크리스트부터 보세요.**
 
 - **v0.1** 월간 캘린더(멤버 등록기간 / 이벤트 신청기간 / 이벤트), 이벤트 목록·상세, 이벤트 제안서
 - **v0.2** Google 로그인, 회원권(기간 자동 계산·연장), 모임통장 입금 승인, 거래내역 엑셀 매칭, 운영진 화면, PWA 설치, 웹 푸시 알림
@@ -14,25 +14,36 @@
 ## 구조
 
 ```
-브라우저(PWA) ──▶ Next.js 16 (Vercel) ──▶ Apps Script 웹앱 ──▶ Google Sheets (단일 스프레드시트)
-                     │  서버에서만 시트 접근        │  GET: 공개 일정만
-                     │  로그인·권한 매 요청 검증    │  POST read/commit: 비밀키 + LockService 잠금
-                     └─ Vercel Cron / Apps Script 트리거 ──▶ /api/cron/notifications ──▶ Web Push
+브라우저(PWA) ──▶ Next.js 16 (Vercel) ──▶ Postgres (Neon · Vercel Storage)
+                     │  서버에서만 DB 접근 (DATABASE_URL)
+                     │  로그인·권한 매 요청 검증
+                     └─ Vercel Cron ──▶ /api/cron/notifications ──▶ Web Push
 ```
 
-- **정본은 Google Sheets뿐입니다.** 별도 DB 없이, 웹은 Apps Script 웹앱을 통해서만 시트를 읽고 씁니다.
-- **쓰기는 모두 `commit` 하나로 처리합니다.** Apps Script가 `LockService` 잠금 안에서 ① 같은 요청의 재시도인지 확인(AuditLog의 `commit_id`)하고 ② 전제조건을 실시간 시트로 다시 검증한 뒤 ③ 쓰기 전체를 검사하고 ④ 순서대로 씁니다. 이 구조로 같은 입금의 중복 승인, 동시 승인으로 인한 기간 겹침, 네트워크 재시도로 인한 중복 반영을 막습니다. 같은 규칙이 `src/server/store/commit.ts`(로컬·테스트용)와 `apps-script/Code.gs`(운영용)에 함께 구현되어 있습니다.
-- **공개 API에는 공개 일정만 나갑니다.** `visibility=public` 이고 `status`가 published/closed/canceled인 이벤트와 공개 열만 내보냅니다. 회원·회비·제안·구독 정보는 비밀키가 있는 서버 요청으로만 읽을 수 있습니다.
+- **정본은 데이터베이스입니다.** 예전 시트의 탭마다 같은 이름·같은 열의 테이블이 하나씩 있습니다(`members`, `payments`, `radio_tracks` …, 값은 모두 text, 행 순서는 `_seq`). 운영진은 시트 대신 관리 화면에서 편집하고, 꼭 필요하면 Neon 콘솔의 표 편집기로 직접 볼 수 있습니다.
+- **쓰기는 모두 `commit` 하나로 처리합니다.** 한 트랜잭션 안에서 잠금(`pg_advisory_xact_lock`)을 잡고 ① 같은 요청의 재시도인지 확인(AuditLog의 `commit_id`)하고 ② 전제조건을 실시간 데이터로 다시 검증한 뒤 ③ 쓰기 전체를 검사하고 ④ 씁니다. 이 구조로 같은 입금의 중복 승인, 동시 승인으로 인한 기간 겹침, 네트워크 재시도로 인한 중복 반영을 막습니다. 규칙은 `src/server/store/commit.ts` 한 곳에 있고, DB(`postgres.ts`)와 데모용 메모리 저장소가 함께 씁니다.
+- **공개 일정에는 공개된 것만 나갑니다.** `visibility=public` 이고 `status`가 published/closed/canceled인 이벤트와 공개 열만 씁니다(`src/server/store/public-feed.ts`). 회원·회비·제안·구독 정보는 서버 안에서만 읽습니다.
+- 저장소는 환경변수로 정해집니다: `DATABASE_URL`이 있으면 DB, 없고 `CLUB_API_URL`+`CLUB_API_SECRET`이 있으면 예전 시트(Apps Script), 둘 다 없으면 데모. 시트 방식 코드(`apps-script/`)는 이전용으로만 남겨 두었습니다.
+
+### 데이터베이스 (Neon)
+
+- `npm run db:status` — 연결된 DB와 테이블별 행 수(비밀값은 출력하지 않음)
+- `npm run db:migrate` — 테이블을 만들고 시트 데이터를 한 번에 복사(트랜잭션, 행 수 검증). DB에 데이터가 있으면 멈추고, `-- --replace`는 **DB로 전환하기 전에만** 다시 복사할 때 씁니다.
+- `npm run db:compare` — 시트와 DB의 내용이 같은지 읽기만 해서 비교(표별 행 수·내용 해시)
+- DB 통합 테스트(임시 스키마를 만들었다 지움): `DB_TEST=1 npx vitest run postgres.integration`
+- ⚠️ `.env.local`에 `DATABASE_URL`이 있으면 **로컬 `npm run dev`도 실제 DB를 씁니다.** 로컬에서 마음껏 시험하려면 Neon에서 개발용 브랜치를 만들어 그 주소를 쓰거나, `.env.local`에서 `DATABASE_URL`을 빼고 데모로 실행하세요.
 
 | 폴더 | 내용 |
 |---|---|
 | `src/app` | 페이지: `/`, `/events`, `/events/[id]/poster`, `/host`, `/invite`, `/radio`, `/consent`, `/login`, `/me`, `/notifications`, `/admin/*`, `/offline`, API 라우트 |
 | `src/lib` | 날짜(Asia/Seoul), 이벤트 상태, 캘린더 배치, **회원권 기간 엔진**(`membership.ts`) |
 | `src/lib/canvas` | 브랜드 이미지 렌더러(브라우저 Canvas): 이벤트 포스터, 초대장 PNG |
-| `src/server/store` | 시트 스키마, commit 규칙, Apps Script 클라이언트, 데모용 메모리 저장소 |
+| `src/server/store` | 테이블 스키마, commit 규칙, Postgres 저장소(`postgres.ts`), 공개 일정 필터, 데모용 메모리 저장소, (이전용) Apps Script 클라이언트 |
+| `scripts/db` | DB 상태 확인, 시트 → DB 이전 스크립트 |
 | `src/server/domain` | 승인·반려·환불·수정 규칙, 알림 스케줄, 거래내역 파서·매칭 |
 | `src/server/auth` | Google OIDC(PKCE), 서명 세션 쿠키, 권한 확인 |
-| `apps-script/Code.gs` | 시트 게이트웨이(Apps Script 편집기에 붙여넣기) |
+| `apps-script/Code.gs` | (이전용) 예전 시트 게이트웨이 |
+| `src/app/admin/settings` | 회원권 상품·가격, 사이트 설정(신청 안내·동의서 링크·라디오 플레이어), 스탬프 이름 |
 | `public/sw.js` | 서비스 워커(오프라인 화면, 푸시) |
 
 ---

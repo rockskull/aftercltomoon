@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/components/ui";
 import { AdminToasts } from "./admin-ui";
 
-export type AdminTab = "overview" | "payments" | "members" | "events" | "money" | "bank" | "proposals" | "radio";
+export type AdminTab = "overview" | "payments" | "members" | "events" | "money" | "bank" | "proposals" | "radio" | "settings";
 
 const TABS: Array<{ key: AdminTab; href: string; label: string }> = [
   { key: "overview", href: "/admin", label: "현황" },
@@ -14,6 +14,7 @@ const TABS: Array<{ key: AdminTab; href: string; label: string }> = [
   { key: "bank", href: "/admin/bank", label: "거래내역" },
   { key: "proposals", href: "/admin/proposals", label: "제안" },
   { key: "radio", href: "/admin/radio", label: "라디오" },
+  { key: "settings", href: "/admin/settings", label: "설정" },
 ];
 
 export function AdminFrame({ tab, title, children }: { tab: AdminTab; title: string; children: ReactNode }) {

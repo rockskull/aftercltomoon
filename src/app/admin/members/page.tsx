@@ -10,7 +10,9 @@ import { accessUntil } from "@/lib/membership";
 import { requireOperator } from "@/server/auth/viewer";
 import { daysUntil } from "@/server/domain/operations";
 import { storeMode } from "@/server/store";
-import { AdminFrame, AdminSkeleton, Pill, smallInput } from "../shared";
+import { addMember } from "../actions";
+import { ActionForm } from "../admin-ui";
+import { AdminFrame, AdminSkeleton, Pill, smallInput, smallPrimary } from "../shared";
 
 export const metadata: Metadata = { title: "회원", robots: { index: false } };
 
@@ -40,7 +42,8 @@ export default function MembersPage({ searchParams }: PageProps<"/admin/members"
 async function Members({ searchParams }: Pick<PageProps<"/admin/members">, "searchParams">) {
   if (storeMode() === "unconfigured") return <div className="mx-auto max-w-3xl px-4 py-10"><NotReady /></div>;
   const now = await requestNow();
-  const { club } = await requireOperator("/admin/members");
+  const { club, member: me } = await requireOperator("/admin/members");
+  const isAdmin = me.role === "admin";
   const params = await searchParams;
   const q = (typeof params.q === "string" ? params.q : "").trim().toLowerCase();
   const filter = typeof params.filter === "string" ? params.filter : "all";
@@ -101,6 +104,57 @@ async function Members({ searchParams }: Pick<PageProps<"/admin/members">, "sear
           </li>
         ))}
       </ul>
+
+      <details className="mt-4 rounded-lg border-2 border-dashed border-midnight/30 bg-ivory/70 p-3">
+        <summary className="cursor-pointer text-[14px] font-bold text-midnight">+ 회원 직접 추가 (사이트 이전부터 있던 회원, 운영진)</summary>
+        <p className="mt-2 text-[12px] text-ink-soft">
+          메일은 그 사람이 로그인할 <strong>Google 계정 메일</strong>이어야 해요. 기존 회원은 가입일을 꼭 넣어 주세요(비어 있으면 첫 신청 때 첫 등록 가격이 적용돼요).
+          새로 오는 사람은 직접 추가하지 않아도 MY 화면에서 신청하면 자동으로 등록돼요.
+        </p>
+        <ActionForm action={addMember} className="mt-3 grid gap-2 sm:grid-cols-3">
+          <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
+            이름
+            <input name="name" required maxLength={40} className={smallInput} />
+          </label>
+          <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
+            Google 로그인 메일
+            <input name="email" type="email" required className={smallInput} />
+          </label>
+          <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
+            입금자명 (비우면 이름)
+            <input name="depositor_name" maxLength={20} className={smallInput} />
+          </label>
+          <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
+            권한 {isAdmin ? "" : "(운영진 지정은 admin만)"}
+            <select name="role" defaultValue="member" className={smallInput}>
+              <option value="member">member</option>
+              {isAdmin && <option value="operator">operator (운영진)</option>}
+              {isAdmin && <option value="admin">admin</option>}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
+            상태
+            <select name="status" defaultValue="active" className={smallInput}>
+              <option value="active">active (회원)</option>
+              <option value="applicant">applicant (신청자)</option>
+              <option value="inactive">inactive (이용 중지)</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
+            가입일
+            <input name="joined_at" type="date" className={smallInput} />
+          </label>
+          <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft sm:col-span-3">
+            운영 메모 (회원에게 보이지 않음)
+            <input name="memo" maxLength={300} className={smallInput} />
+          </label>
+          <div className="sm:col-span-3">
+            <button type="submit" className={smallPrimary}>
+              추가
+            </button>
+          </div>
+        </ActionForm>
+      </details>
 
       <p className="mt-4 text-[13px] text-ink-soft">{rows.length}명</p>
       <ul className="mt-2 flex flex-col gap-2">

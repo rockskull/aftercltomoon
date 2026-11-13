@@ -74,7 +74,7 @@ async function LoginOptions({ searchParams }: Pick<PageProps<"/login">, "searchP
             Demo accounts
           </h2>
           <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
-            시트 연결 전 데모 모드예요. 계정을 골라 각 역할의 화면을 확인할 수 있어요. 데이터는 서버 메모리에만 있어요.
+            데이터 연결 전 데모 모드예요. 계정을 골라 각 역할의 화면을 확인할 수 있어요. 데이터는 서버 메모리에만 있어요.
           </p>
           <ul className="mt-3 flex flex-col gap-2">
             {DEMO_ACCOUNTS.map((account) => (

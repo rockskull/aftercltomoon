@@ -115,11 +115,16 @@ async function Overview() {
           )}
         </Box>
 
-        {club.settings.sheetUrl && (
+        {storeMode() === "sheets" && club.settings.sheetUrl ? (
           <a href={club.settings.sheetUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between rounded-lg border-2 border-dashed border-midnight/40 px-4 py-3 text-[14px] font-bold text-midnight">
             원본 스프레드시트 열기 (이벤트·상품·설정 편집)
             <ArrowRight />
           </a>
+        ) : (
+          <Link href="/admin/settings" className="flex items-center justify-between rounded-lg border-2 border-dashed border-midnight/40 px-4 py-3 text-[14px] font-bold text-midnight">
+            회원권 상품 · 사이트 설정 · 스탬프 편집
+            <ArrowRight />
+          </Link>
         )}
       </div>
     </AdminFrame>

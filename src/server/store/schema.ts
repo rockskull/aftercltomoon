@@ -115,6 +115,8 @@ export const TABLES = {
   AuditLog: ["log_id", "commit_id", "actor_id", "action", "target_id", "before_value", "after_value", "created_at"],
   Settings: ["key", "value", "description"],
   // v0.1 tables (read by the public feed / written by the proposal form)
+  /** Member enrollment periods shown as bars on the calendar. */
+  Enrollment: ["enrollment_id", "title", "start_date", "end_date", "description", "application_url", "status"],
   Events: [
     "event_id",
     "title",
@@ -168,6 +170,45 @@ export type Tables = Partial<Record<TableName, Row[]>>;
 
 export function idColumn(table: TableName): string {
   return TABLES[table][0];
+}
+
+// ---------------------------------------------------------------------------
+// Postgres (Neon) layout: one table per tab, the same columns, every value as text,
+// plus `_seq` for row order (like rows in a sheet). Kept import-free so the
+// scripts in scripts/db can load this file directly with Node.
+// ---------------------------------------------------------------------------
+
+/** "PushSubscriptions" → "push_subscriptions". */
+export function sqlTableName(table: TableName): string {
+  return table.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+}
+
+/** Columns the sheet held as numbers / checkboxes; they come back from the DB with the same types. */
+const NUMBER_COLUMNS: Partial<Record<TableName, readonly string[]>> = {
+  Plans: ["price", "first_price", "duration_months", "bonus_months", "sort_order"],
+  Payments: ["amount"],
+  Notifications: ["attempts"],
+  PushSubscriptions: ["failure_count"],
+  Ledger: ["amount"],
+  Events: ["capacity", "public_fee"],
+  Proposals: ["desired_fee"],
+  RadioTracks: ["sort_order"],
+};
+const BOOLEAN_COLUMNS: Partial<Record<TableName, readonly string[]>> = {
+  Plans: ["active"],
+  NotificationPrefs: ["membership", "events", "operator"],
+  StampDefinitions: ["active"],
+};
+
+export function fromDbValue(table: TableName, column: string, value: string | null | undefined): Cell {
+  const s = value ?? "";
+  if (NUMBER_COLUMNS[table]?.includes(column) && /^-?\d+(\.\d+)?$/.test(s)) return Number(s);
+  if (BOOLEAN_COLUMNS[table]?.includes(column) && /^(true|false)$/i.test(s)) return s.toLowerCase() === "true";
+  return s;
+}
+
+export function toDbValue(value: Cell | null | undefined): string {
+  return value === undefined || value === null ? "" : String(value);
 }
 
 /** Every value is compared as a string, exactly like Apps Script does. */

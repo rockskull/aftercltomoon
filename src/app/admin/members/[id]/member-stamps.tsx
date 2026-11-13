@@ -5,9 +5,9 @@ import type { Member } from "@/server/domain/model";
 import { STAMP_TABS_MISSING, stampAwards, stampDefinitions } from "@/server/domain/stamps";
 import { readTables, storeMode } from "@/server/store";
 import { STAMP_TABLES } from "@/server/store/schema";
-import { awardStamp } from "../../actions";
+import { awardStamp, revokeStamp } from "../../actions";
 import { ActionForm } from "../../admin-ui";
-import { Box, Pill, smallInput, smallPrimary } from "../../shared";
+import { Box, Pill, smallButton, smallInput, smallPrimary } from "../../shared";
 
 /**
  * MOON STAMPS for one member. Operators issue a stamp after checking the moment
@@ -56,11 +56,24 @@ export async function MemberStamps({ member, members, todayKey }: { member: Memb
                 </p>
                 <p className="text-[13px] text-ink-soft">{d.description}</p>
                 {award ? (
-                  <p className="mt-1 text-[13px] text-midnight">
-                    <span className="font-mono">{award.awardedAt ? dotDate(award.awardedAt) : "날짜 없음"}</span>
-                    {award.awardedBy && <span className="text-ink-soft"> · 확인 {nameOf(award.awardedBy)}</span>}
-                    {award.note && <span className="block text-[12px] text-ink-soft">메모: {award.note}</span>}
-                  </p>
+                  <>
+                    <p className="mt-1 text-[13px] text-midnight">
+                      <span className="font-mono">{award.awardedAt ? dotDate(award.awardedAt) : "날짜 없음"}</span>
+                      {award.awardedBy && <span className="text-ink-soft"> · 확인 {nameOf(award.awardedBy)}</span>}
+                      {award.note && <span className="block text-[12px] text-ink-soft">메모: {award.note}</span>}
+                    </p>
+                    <details className="mt-1">
+                      <summary className="cursor-pointer text-[12px] font-bold text-ink-soft">발급 취소</summary>
+                      <ActionForm action={revokeStamp} className="mt-1 flex flex-wrap items-end gap-2" confirmText={`${d.name} 스탬프 발급을 취소할까요? 회원 화면에서 사라지고 기록은 남아요.`}>
+                        <input type="hidden" name="member_id" value={member.id} />
+                        <input type="hidden" name="stamp_id" value={d.id} />
+                        <input name="reason" required maxLength={100} placeholder="취소 사유" className={`${smallInput} min-w-40 flex-1`} />
+                        <button type="submit" className={smallButton}>
+                          취소하기
+                        </button>
+                      </ActionForm>
+                    </details>
+                  </>
                 ) : (
                   <ActionForm action={awardStamp} className="mt-2 flex flex-wrap items-end gap-2" confirmText={`${member.name || member.id}님에게 ${d.name} 스탬프를 발급할까요?`}>
                     <input type="hidden" name="member_id" value={member.id} />
@@ -83,7 +96,7 @@ export async function MemberStamps({ member, members, todayKey }: { member: Memb
           );
         })}
       </ul>
-      <p className="mt-3 text-[12px] text-ink-soft">잘못 발급했다면 시트의 StampAwards 탭에서 그 행을 지우면 돼요.</p>
+      <p className="mt-3 text-[12px] text-ink-soft">잘못 발급했다면 &lsquo;발급 취소&rsquo;로 되돌릴 수 있어요. 기록은 남고, 다시 발급할 수 있어요.</p>
     </Box>
   );
 }

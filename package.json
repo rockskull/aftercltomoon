@@ -11,15 +11,20 @@
     "typecheck": "next typegen && tsc --noEmit",
     "secrets": "node scripts/generate-secrets.mjs",
     "ledger:convert": "node scripts/convert-ledger.mjs",
-    "stamps:build": "node scripts/stamps/build-stamps.mjs"
+    "stamps:build": "node scripts/stamps/build-stamps.mjs",
+    "db:status": "node scripts/db/status.mjs",
+    "db:migrate": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/db/migrate-from-sheet.mjs",
+    "db:compare": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/db/compare-sheet.mjs"
   },
   "dependencies": {
+    "@neondatabase/serverless": "1.2.0",
     "jose": "^6.2.17",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "server-only": "^0.0.1",
     "web-push": "^4.0.0",
+    "ws": "8.22.1",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
@@ -28,6 +33,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
+    "@types/ws": "8.18.1",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "opentype.js": "2.0.0",

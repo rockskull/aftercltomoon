@@ -262,7 +262,7 @@ export function RadioStation({ initial }: { initial: RadioState }) {
   }
 
   async function onDelete(track: RadioTrack) {
-    if (!window.confirm(`‘${track.title}’을(를) 라디오에서 삭제할까요?\n목록과 재생 순서에서 빠지고, 기록은 시트에 남아요.`)) return;
+    if (!window.confirm(`‘${track.title}’을(를) 라디오에서 삭제할까요?\n목록과 재생 순서에서 빠지고, 관리 화면에서 되돌릴 수 있어요.`)) return;
     const result = await deleteTrack(track.id);
     if (!result.ok) {
       setNotice({ text: result.message });
@@ -355,7 +355,15 @@ export function RadioStation({ initial }: { initial: RadioState }) {
             ) : (
               <p className="mt-4 rounded-md border border-dashed border-cream/30 px-3 py-3 text-[13px] leading-relaxed text-cream/80">
                 아지트 플레이어는 음악 이용 권한을 확인한 뒤 운영진이 켜요. 그 전에는 곡마다 있는 YouTube 링크로 들어 주세요.
-                {state.canDelete && <span className="mt-1 block text-butter">운영진 안내: 시트 Settings 탭의 radio_player를 on으로 바꾸면 켜져요.</span>}
+                {state.canDelete && (
+                  <span className="mt-1 block text-butter">
+                    운영진 안내:{" "}
+                    <Link href="/admin/settings" className="underline underline-offset-4">
+                      관리 화면 → 설정
+                    </Link>
+                    에서 라디오 플레이어를 켜면 돼요.
+                  </span>
+                )}
               </p>
             )}
             <div aria-live="polite" className="empty:hidden">

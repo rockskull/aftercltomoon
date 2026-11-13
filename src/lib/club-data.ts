@@ -1,5 +1,8 @@
 import { cacheLife, cacheTag } from "next/cache";
 import { connection } from "next/server";
+import { storeMode } from "@/server/store";
+import { readFromDb } from "@/server/store/postgres";
+import { publicFeed } from "@/server/store/public-feed";
 import { normalizeFeed } from "./normalize";
 import { buildSampleData } from "./sample-data";
 import type { ClubData } from "./types";
@@ -27,6 +30,14 @@ export async function requestNow(): Promise<number> {
  * and the sample data is generated relative to today.
  */
 export async function getClubData(): Promise<ClubData> {
+  if (storeMode() === "postgres") {
+    try {
+      return { source: "sheets", ...normalizeFeed(await fetchClubFeedFromDb()) };
+    } catch (error) {
+      console.error("[club-data] could not load the schedule from the database:", error);
+      return { source: "error", events: [], enrollments: [] };
+    }
+  }
   const url = process.env.CLUB_API_URL;
   if (!url) {
     return { source: "sample", ...buildSampleData(Date.now()) };
@@ -39,6 +50,20 @@ export async function getClubData(): Promise<ClubData> {
     console.error("[club-data] could not load the club feed:", error);
     return { source: "error", events: [], enrollments: [] };
   }
+}
+
+/**
+ * The public schedule straight from the database: the same filter the Apps
+ * Script GET applied — public, published/closed/canceled events and
+ * published/closed enrollment periods, public columns only, empty cells left out.
+ * Cached like the sheet feed; any event change in the admin clears it (CLUB_FEED_TAG).
+ */
+async function fetchClubFeedFromDb(): Promise<unknown> {
+  "use cache: remote";
+  cacheLife({ stale: 60, revalidate: 60, expire: 60 * 60 });
+  cacheTag(CLUB_FEED_TAG);
+  const tables = await readFromDb(["Events", "Enrollment"]);
+  return publicFeed(tables.Events ?? [], tables.Enrollment ?? []);
 }
 
 /**

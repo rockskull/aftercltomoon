@@ -114,7 +114,7 @@ async function Proposals() {
                         </button>
                       </ActionForm>
                     ) : (
-                      <p className="mt-2 text-[12px] text-brown">proposal_id가 없는 행이에요. 시트에서 직접 관리해 주세요.</p>
+                      <p className="mt-2 text-[12px] text-brown">proposal_id가 없는 기록이라 여기서 바꿀 수 없어요.</p>
                     )}
                   </li>
                 );
@@ -124,7 +124,7 @@ async function Proposals() {
         </Box>
 
         <Box
-          title="이벤트 (시트 전체)"
+          title="이벤트 (전체)"
           action={
             <Link href="/admin/events" className="text-[13px] font-bold text-midnight underline underline-offset-4">
               이벤트 관리

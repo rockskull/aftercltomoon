@@ -14,6 +14,17 @@ import { isPublicEvent, parseEventForm } from "@/server/domain/event-input";
 import { planStampAward } from "@/server/domain/stamps";
 import { planDeleteTrack, planEditTrack, planMoveTrack, planRestoreTrack } from "@/server/domain/radio";
 import {
+  planEnrollmentSave,
+  planMemberAdd,
+  planPlanSave,
+  planSettingsSave,
+  planStampDefinitionSave,
+  planStampRevoke,
+  SETTING_KEYS,
+  type SettingKey,
+} from "@/server/domain/admin-data";
+import { STAMP_CATALOG } from "@/lib/stamps";
+import {
   EVENT_CHANGED,
   NEEDS,
   planApproval,
@@ -157,6 +168,129 @@ export async function editMember(_prev: AdminState, fd: FormData): Promise<Admin
     }),
   );
   return outcome.ok ? done("회원 정보를 저장했어요.") : { status: "error", message: outcome.message };
+}
+
+// ---------------------------------------------------------------------------
+// Data the crew used to edit in the sheet: members, plans, settings, stamps, enrollment periods
+// ---------------------------------------------------------------------------
+
+export async function addMember(_prev: AdminState, fd: FormData): Promise<AdminState> {
+  const op = await operatorForAction();
+  if (!op) return DENIED;
+  const outcome = await runCommit<{ memberId: string }>(NEEDS.member, (data) =>
+    planMemberAdd(data, {
+      now: Date.now(),
+      actorId: op.member.id,
+      actorRole: op.member.role,
+      input: {
+        name: field(fd, "name"),
+        email: field(fd, "email"),
+        depositorName: field(fd, "depositor_name"),
+        role: field(fd, "role"),
+        status: field(fd, "status"),
+        joinedAt: field(fd, "joined_at"),
+        memo: field(fd, "memo"),
+      },
+    }),
+  );
+  return outcome.ok ? done("회원을 추가했어요. 그 메일로 Google 로그인하면 바로 회원으로 보여요.") : { status: "error", message: outcome.message };
+}
+
+export async function savePlan(_prev: AdminState, fd: FormData): Promise<AdminState> {
+  const op = await operatorForAction();
+  if (!op) return DENIED;
+  const planId = field(fd, "plan_id") || null;
+  const outcome = await runCommit(NEEDS.plans, (data) =>
+    planPlanSave(data, {
+      now: Date.now(),
+      actorId: op.member.id,
+      actorRole: op.member.role,
+      planId,
+      input: {
+        name: field(fd, "name"),
+        price: field(fd, "price"),
+        firstPrice: field(fd, "first_price"),
+        durationMonths: field(fd, "duration_months"),
+        bonusMonths: field(fd, "bonus_months"),
+        active: fd.get("active") === "on",
+        sortOrder: field(fd, "sort_order"),
+        description: field(fd, "description"),
+      },
+    }),
+  );
+  return outcome.ok ? done(planId ? "상품을 고쳤어요. 새 신청부터 적용돼요." : "상품을 추가했어요.") : { status: "error", message: outcome.message };
+}
+
+export async function saveSettings(_prev: AdminState, fd: FormData): Promise<AdminState> {
+  const op = await operatorForAction();
+  if (!op) return DENIED;
+  const values = Object.fromEntries(
+    (Object.keys(SETTING_KEYS) as SettingKey[]).filter((k) => fd.has(k)).map((k) => [k, field(fd, k)]),
+  ) as Partial<Record<SettingKey, string>>;
+  const outcome = await runCommit(NEEDS.settings, (data) =>
+    planSettingsSave(data, { now: Date.now(), actorId: op.member.id, actorRole: op.member.role, values }),
+  );
+  if (!outcome.ok) return { status: "error", message: outcome.message };
+  updateTag(RADIO_TAG);
+  return done("설정을 저장했어요.");
+}
+
+export async function saveStampDefinition(_prev: AdminState, fd: FormData): Promise<AdminState> {
+  const op = await operatorForAction();
+  if (!op) return DENIED;
+  const stampId = field(fd, "stamp_id");
+  const outcome = await runCommit(NEEDS.stampDefinitions, (data) =>
+    planStampDefinitionSave(data, {
+      now: Date.now(),
+      actorId: op.member.id,
+      actorRole: op.member.role,
+      stampId,
+      name: field(fd, "name"),
+      description: field(fd, "description"),
+      active: fd.get("active") === "on",
+      imageKey: STAMP_CATALOG.find((s) => s.id === stampId)?.imageKey ?? "",
+    }),
+  );
+  return outcome.ok ? done("스탬프 정보를 고쳤어요.") : { status: "error", message: outcome.message };
+}
+
+export async function revokeStamp(_prev: AdminState, fd: FormData): Promise<AdminState> {
+  const op = await operatorForAction();
+  if (!op) return DENIED;
+  const outcome = await runCommit(NEEDS.stamps, (data) =>
+    planStampRevoke(data, {
+      now: Date.now(),
+      actorId: op.member.id,
+      actorRole: op.member.role,
+      memberId: field(fd, "member_id"),
+      stampId: field(fd, "stamp_id"),
+      reason: field(fd, "reason"),
+    }),
+  );
+  return outcome.ok ? done("스탬프 발급을 취소했어요. 기록은 남아요.") : { status: "error", message: outcome.message };
+}
+
+export async function saveEnrollment(_prev: AdminState, fd: FormData): Promise<AdminState> {
+  const op = await operatorForAction();
+  if (!op) return DENIED;
+  const enrollmentId = field(fd, "enrollment_id") || null;
+  const outcome = await runCommit(NEEDS.enrollment, (data) =>
+    planEnrollmentSave(data, {
+      now: Date.now(),
+      actorId: op.member.id,
+      actorRole: op.member.role,
+      enrollmentId,
+      input: {
+        title: field(fd, "title"),
+        startDate: field(fd, "start_date"),
+        endDate: field(fd, "end_date"),
+        description: field(fd, "description"),
+        applicationUrl: field(fd, "application_url"),
+        status: field(fd, "status"),
+      },
+    }),
+  );
+  return outcome.ok ? eventDone(enrollmentId ? "등록 기간을 고쳤어요." : "등록 기간을 추가했어요. 공개면 캘린더에 바로 보여요.") : { status: "error", message: outcome.message };
 }
 
 // ---------------------------------------------------------------------------
