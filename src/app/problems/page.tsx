@@ -6,7 +6,8 @@ import { ArrowRight, buttonPrimaryOnDark, cn, NotReady } from "@/components/ui";
 import { requestNow } from "@/lib/club-data";
 import { loadProblemList, problemViewer } from "@/server/problems";
 import { storeMode } from "@/server/store";
-import { ProblemCardView } from "./problem-ui";
+import { gradeLabel } from "@/lib/problems";
+import { GradeBadge, ProblemCardView } from "./problem-ui";
 
 export const metadata: Metadata = {
   title: "Moon Problems",
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
 export default function ProblemsPage({ searchParams }: PageProps<"/problems">) {
   return (
     <>
-      <SiteHeader />
+      <SiteHeader current="problems" />
       <main className="flex-1">
         <header className="night text-cream">
           <div className="mx-auto max-w-6xl px-4 pb-10 pt-10 md:px-6 md:pt-14">
@@ -89,12 +90,13 @@ async function ProblemList({ searchParams }: { searchParams: PageProps<"/problem
                 key={g || "all"}
                 href={g ? `/problems?grade=${encodeURIComponent(g)}` : "/problems"}
                 aria-current={on ? "true" : undefined}
+                title={g ? gradeLabel(g) : undefined}
                 className={cn(
-                  "inline-flex h-9 items-center rounded-md border-2 px-3 font-mono text-[13px] font-semibold",
+                  "inline-flex h-9 items-center rounded-md border-2 px-3 text-[13px] font-semibold",
                   on ? "border-midnight bg-butter text-midnight shadow-[2px_2px_0_0_var(--color-midnight)]" : "border-midnight/25 bg-ivory text-midnight hover:border-midnight",
                 )}
               >
-                {g || "ALL"}
+                {g ? <GradeBadge grade={g} yds={false} /> : <span className="font-mono">ALL</span>}
               </Link>
             );
           })}
@@ -104,7 +106,7 @@ async function ProblemList({ searchParams }: { searchParams: PageProps<"/problem
       {shown.length === 0 ? (
         <div className="rounded-lg border-2 border-dashed border-midnight/30 bg-ivory/70 px-5 py-10 text-center">
           <p className="font-display text-[30px] font-extrabold uppercase leading-none text-midnight">{grade ? "No problems" : "Coming soon"}</p>
-          <p className="mt-2 text-[14px] text-ink-soft">{grade ? `${grade} 문제가 아직 없어요.` : "아직 등록된 문제가 없어요. 벽에서 문제가 완성되면 운영진이 여기에 올려요."}</p>
+          <p className="mt-2 text-[14px] text-ink-soft">{grade ? `${gradeLabel(grade)} 문제가 아직 없어요.` : "아직 등록된 문제가 없어요. 벽에서 문제가 완성되면 운영진이 여기에 올려요."}</p>
         </div>
       ) : (
         <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">

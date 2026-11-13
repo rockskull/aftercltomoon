@@ -20,7 +20,7 @@ export function buildSampleData(now: number) {
         title: "새 문제 오픈 세션",
         short_title: "새 문제 오픈",
         description:
-          "벽 한 면을 새로 세팅했어요. 다 같이 처음 붙어보면서 베타를 나누는 저녁입니다.\n난이도는 V0부터 V5까지 고르게 준비했어요.",
+          "벽 한 면을 새로 세팅했어요. 다 같이 처음 붙어보면서 베타를 나누는 저녁입니다.\n난이도는 빨강부터 파랑까지 고르게 준비했어요.",
         category: "climbing",
         start_at: at(2, "19:30"),
         end_at: at(2, "22:00"),

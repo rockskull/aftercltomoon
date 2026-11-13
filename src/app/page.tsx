@@ -12,6 +12,7 @@ import { toDateKey } from "@/lib/dates";
 import { getEventStatus, splitUpcoming } from "@/lib/status";
 import { readSession } from "@/server/auth/session";
 import { getViewer } from "@/server/auth/viewer";
+import { gradeLabel } from "@/lib/problems";
 import { loadRecentProblems } from "@/server/problems";
 import { storeMode } from "@/server/store";
 
@@ -276,8 +277,8 @@ async function ProblemsTeaser() {
                 <Link href={`/problems/${p.no}`} className="flex h-full flex-col rounded-lg border-2 border-midnight bg-ivory p-4 shadow-[3px_3px_0_0_var(--color-midnight)] hover:-translate-y-0.5">
                   <span className="font-display text-[24px] font-extrabold leading-none text-brown">{p.code}</span>
                   <span className="mt-1.5 text-[17px] font-extrabold leading-snug">{p.title}</span>
-                  <span className="mt-2 font-mono text-[12px] text-ink-soft">
-                    {p.grade} · {p.setterName} · {p.stats.sends} sends
+                  <span className="mt-2 text-[12px] text-ink-soft">
+                    {gradeLabel(p.grade)} · {p.setterName} · <span className="font-mono">{p.stats.sends} sends</span>
                   </span>
                 </Link>
               </li>

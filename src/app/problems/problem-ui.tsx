@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/components/ui";
-import type { Feel, ProblemStatus, SendStatus } from "@/lib/problems";
+import { gradeInfo, type Feel, type ProblemStatus, type SendStatus } from "@/lib/problems";
 import type { ProblemStats } from "@/server/domain/problems";
 import type { ProblemCard } from "@/server/problems";
 
@@ -23,6 +23,20 @@ export const FUN_LABEL = ["", "별로", "아쉬움", "보통", "재미있음", "
 /** Faint ruled lines, like a logbook page. */
 export const ruled =
   "bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_27px,rgba(12,22,32,0.07)_27px,rgba(12,22,32,0.07)_28px)]";
+
+/** The colour grade with its swatch: "● 노랑 (5.10b ~ 5.10d)". `yds={false}` shows the colour only. */
+export function GradeBadge({ grade, yds = true, className }: { grade: string; yds?: boolean; className?: string }) {
+  const g = gradeInfo(grade);
+  return (
+    <span className={cn("inline-flex items-center gap-1.5", className)} data-grade={grade}>
+      {g && <span aria-hidden className="inline-block size-3 shrink-0 rounded-full border border-current/60" style={{ backgroundColor: g.swatch }} />}
+      <span>
+        {g ? g.name : grade}
+        {g && yds && <span className="font-mono text-[0.85em] font-medium opacity-80"> ({g.yds})</span>}
+      </span>
+    </span>
+  );
+}
 
 export function StatusPill({ status, onDark = false }: { status: ProblemStatus; onDark?: boolean }) {
   return (
@@ -107,12 +121,17 @@ export function ProblemCardView({ problem }: { problem: ProblemCard }) {
           {p.title}
         </h3>
         <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
-          <Stat label="Grade">{p.grade}</Stat>
+          <div className="col-span-2 min-w-0">
+            <dt className="font-label text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-soft">Grade</dt>
+            <dd className="text-[14px] font-semibold text-midnight">
+              <GradeBadge grade={p.grade} />
+            </dd>
+          </div>
           <Stat label="Setter" mono={false}>
             {p.setterName}
           </Stat>
           <Stat label="Sends">{p.stats.sends}</Stat>
-          <div className="min-w-0">
+          <div className="col-span-2 min-w-0">
             <dt className="font-label text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-soft">Fun</dt>
             <dd className="text-[12px]">
               <FunMeter value={p.stats.funAverage} />

@@ -112,7 +112,7 @@ describe.skipIf(!enabled)("postgres store (integration)", { timeout: 60_000 }, (
     const created = planProblemCreate(data, {
       now: NOW,
       actorId: "OP",
-      input: { title: "퇴근 후의 중력", grade: "V3", wall: "", setterName: "운영", setterNote: "오른발", beta: "몸을 오른쪽으로" },
+      input: { title: "퇴근 후의 중력", grade: "노랑", wall: "", setterName: "운영", setterNote: "오른발", beta: "몸을 오른쪽으로" },
     });
     if ("refuse" in created) throw new Error(created.refuse);
     expect(await commitToDb(created.commit as Commit)).toEqual({ ok: true });

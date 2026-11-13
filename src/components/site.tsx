@@ -3,12 +3,15 @@ import { Suspense } from "react";
 import { readSession } from "@/server/auth/session";
 import { cn, Logo } from "./ui";
 
-export type NavKey = "calendar" | "events" | "host" | "me" | "notifications" | "admin";
+export type NavKey = "calendar" | "events" | "problems" | "radio" | "host" | "me" | "notifications" | "admin";
 
-const NAV: Array<{ key: NavKey; href: string; label: string }> = [
+/** Every main page is one tap away from anywhere (not only from the bottom of the home page). */
+const NAV: Array<{ key: NavKey; href: string; label: string; short?: string }> = [
   { key: "calendar", href: "/#calendar", label: "Calendar" },
   { key: "events", href: "/events", label: "Events" },
-  { key: "host", href: "/host", label: "Host an event" },
+  { key: "problems", href: "/problems", label: "Problems" },
+  { key: "radio", href: "/radio", label: "Radio" },
+  { key: "host", href: "/host", label: "Host an event", short: "Host" },
 ];
 
 /**
@@ -33,7 +36,8 @@ export function SiteHeader({ current, showLogo = true }: { current?: NavKey; sho
           </Suspense>
         </div>
         <nav aria-label="주요 메뉴" className="w-full border-t border-cream/15 md:ml-auto md:w-auto md:border-t-0">
-          <ul className="grid grid-cols-[1fr_0.85fr_1.3fr] md:flex md:gap-1">
+          {/* Phones: all five in one row (short labels); wider screens: inline next to the logo. */}
+          <ul className="grid grid-cols-[1.15fr_0.95fr_1.15fr_0.8fr_0.8fr] md:flex md:gap-0 lg:gap-1">
             {NAV.map((item) => {
               const active = item.key === current;
               return (
@@ -41,13 +45,21 @@ export function SiteHeader({ current, showLogo = true }: { current?: NavKey; sho
                   <Link
                     href={item.href}
                     aria-current={active ? "page" : undefined}
+                    aria-label={item.short ? item.label : undefined}
                     className={cn(
-                      "flex h-12 items-center justify-center whitespace-nowrap px-1 font-label text-[11px] font-medium uppercase tracking-[0.14em] sm:text-xs md:px-3 md:tracking-[0.2em]",
+                      "flex h-12 items-center justify-center whitespace-nowrap px-0.5 font-label text-[11px] font-medium uppercase tracking-[0.08em] min-[400px]:tracking-[0.12em] sm:text-xs md:px-2 md:text-[11px] md:tracking-[0.12em] lg:px-3 lg:text-xs lg:tracking-[0.2em]",
                       active ? "text-butter" : "text-cream/75 hover:text-cream",
                     )}
                   >
                     <span className={cn("border-b-2 pb-0.5", active ? "border-butter" : "border-transparent")}>
-                      {item.label}
+                      {item.short ? (
+                        <>
+                          <span className="lg:hidden">{item.short}</span>
+                          <span className="hidden lg:inline">{item.label}</span>
+                        </>
+                      ) : (
+                        item.label
+                      )}
                     </span>
                   </Link>
                 </li>
@@ -136,13 +148,8 @@ export function SiteFooter() {
             </li>
           ))}
           <li>
-            <Link href="/problems" className="hover:text-cream">
-              Problems
-            </Link>
-          </li>
-          <li>
-            <Link href="/radio" className="hover:text-cream">
-              Radio
+            <Link href="/invite" className="hover:text-cream">
+              Invitation
             </Link>
           </li>
           <li>

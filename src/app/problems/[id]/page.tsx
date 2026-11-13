@@ -10,7 +10,8 @@ import { loadProblem, type ProblemViewer, type PublicReview } from "@/server/pro
 import { storeMode } from "@/server/store";
 import { ActionForm } from "../../admin/admin-ui";
 import { moderateReview, setProblemStatus } from "../actions";
-import { dotDay, FEEL_LABEL, FeelBars, FUN_LABEL, FunMeter, LogHeading, ruled, SEND_LABEL, StatusPill } from "../problem-ui";
+import { gradeInfo } from "@/lib/problems";
+import { dotDay, FEEL_LABEL, FeelBars, FUN_LABEL, FunMeter, GradeBadge, LogHeading, ruled, SEND_LABEL, StatusPill } from "../problem-ui";
 import { BetaReveal, ReviewForm } from "../review-form";
 
 export const metadata: Metadata = { title: "Moon Problem" };
@@ -18,7 +19,7 @@ export const metadata: Metadata = { title: "Moon Problem" };
 export default function ProblemPage({ params }: PageProps<"/problems/[id]">) {
   return (
     <>
-      <SiteHeader />
+      <SiteHeader current="problems" />
       <main className="flex-1">
         <Suspense fallback={<DetailSkeleton />}>
           <ProblemDetail params={params} />
@@ -54,7 +55,9 @@ async function ProblemDetail({ params }: Pick<PageProps<"/problems/[id]">, "para
           <p className="mt-4 font-display text-[56px] font-extrabold leading-[0.85] text-butter md:text-[80px]">{p.code}</p>
           <h1 className="mt-2 text-[26px] font-extrabold leading-snug md:text-[32px]">{p.title}</h1>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="inline-flex h-7 items-center rounded-[4px] border border-butter px-2 font-mono text-[14px] font-bold text-butter">{p.grade}</span>
+            <span className="inline-flex h-7 items-center rounded-[4px] border border-butter px-2 text-[14px] font-bold text-butter">
+              <GradeBadge grade={p.grade} />
+            </span>
             <StatusPill status={p.status} onDark />
           </div>
         </div>
@@ -70,7 +73,8 @@ async function ProblemDetail({ params }: Pick<PageProps<"/problems/[id]">, "para
               {(
                 [
                   ["번호", p.code, true],
-                  ["난이도", p.grade, true],
+                  ["난이도", <GradeBadge key="g" grade={p.grade} className="font-sans" />, false],
+                  ["단계", gradeInfo(p.grade)?.level ?? "—", false],
                   ["벽 구역", p.wall || "—", false],
                   ["Setter", p.setterName, false],
                   ["등록일", dotDay(p.createdOn), true],

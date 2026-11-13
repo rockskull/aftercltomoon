@@ -276,9 +276,9 @@ export function demoTables(now = Date.now()): Tables {
     ],
     // MOON PROBLEMS (demo only; the real database starts empty).
     Problems: [
-      problem("PR-DEMO-1", 1, "퇴근 후의 중력", "V3", "메인 벽 왼쪽", "현우", "오른발을 잘 활용하면 생각보다 쉽게 풀리는 문제입니다.", "두 번째 홀드에서 몸을 오른쪽으로 돌려보세요.", "active", day(-30)),
-      problem("PR-DEMO-2", 2, "달까지 세 걸음", "V1", "루프 아래", "지호", "", "", "active", day(-12)),
-      problem("PR-DEMO-3", 3, "노란 테이프의 기억", "V5", "메인 벽 오른쪽", "문 운영", "개관 전 첫 세팅.", "", "archived", day(-60)),
+      problem("PR-DEMO-1", 1, "퇴근 후의 중력", "노랑", "메인 벽 왼쪽", "현우", "오른발을 잘 활용하면 생각보다 쉽게 풀리는 문제입니다.", "두 번째 홀드에서 몸을 오른쪽으로 돌려보세요.", "active", day(-30)),
+      problem("PR-DEMO-2", 2, "달까지 세 걸음", "주황", "루프 아래", "지호", "", "", "active", day(-12)),
+      problem("PR-DEMO-3", 3, "노란 테이프의 기억", "파랑", "메인 벽 오른쪽", "문 운영", "개관 전 첫 세팅.", "", "archived", day(-60)),
     ],
     ProblemReviews: [
       review("RV-DEMO-1", "PR-DEMO-1", "M-DEMO-HYUNWOO", "현우", 5, "fair", "sent", "마지막 무브가 정말 재미있었어요.", day(-20)),

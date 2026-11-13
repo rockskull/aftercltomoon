@@ -1,4 +1,4 @@
-import { FEELS, LIMITS, SEND_STATUSES, type Feel, type ProblemStatus, type ReviewStatus, type SendStatus } from "@/lib/problems";
+import { compareGrades, FEELS, gradeInfo, GRADES, LIMITS, SEND_STATUSES, type Feel, type ProblemStatus, type ReviewStatus, type SendStatus } from "@/lib/problems";
 import type { Check, Op } from "../store/commit";
 import { newId, seoulIso } from "../store/ids";
 import { cellText, type Row, type Tables } from "../store/schema";
@@ -122,15 +122,7 @@ export function problemStats(reviews: ProblemReview[], problemId: string): Probl
   };
 }
 
-/** V-grades in order (V0 < V2 < V10), anything else after them alphabetically. */
-export function compareGrades(a: string, b: string): number {
-  const va = /^v(\d+)/i.exec(a.trim());
-  const vb = /^v(\d+)/i.exec(b.trim());
-  if (va && vb) return Number(va[1]) - Number(vb[1]) || a.localeCompare(b);
-  if (va) return -1;
-  if (vb) return 1;
-  return a.localeCompare(b, "ko");
-}
+export { compareGrades };
 
 // ---------------------------------------------------------------------------
 // Writes
@@ -192,7 +184,8 @@ function problemFields(input: ProblemInput): { row: Row } | { refuse: string } {
     beta: clean(input.beta, true),
   };
   if (!row.title || row.title.length > LIMITS.title) return { refuse: `문제명을 ${LIMITS.title}자 이내로 적어 주세요.` };
-  if (!row.grade || row.grade.length > LIMITS.grade) return { refuse: `난이도를 ${LIMITS.grade}자 이내로 적어 주세요. (예: V3)` };
+  // The club's colour grades only (빨강 → 검정).
+  if (!gradeInfo(row.grade)) return { refuse: `난이도를 골라 주세요. (${GRADES.map((g) => g.name).join(" · ")})` };
   if (row.wall.length > LIMITS.wall) return { refuse: `벽 구역은 ${LIMITS.wall}자까지 쓸 수 있어요.` };
   if (!row.setter_name || row.setter_name.length > LIMITS.setter) return { refuse: `Setter 이름을 ${LIMITS.setter}자 이내로 적어 주세요.` };
   if (row.setter_note.length > LIMITS.note) return { refuse: `Setter's Note는 ${LIMITS.note}자까지 쓸 수 있어요.` };

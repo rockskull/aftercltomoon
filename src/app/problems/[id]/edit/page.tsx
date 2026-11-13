@@ -6,7 +6,7 @@ import { SiteFooter, SiteHeader } from "@/components/site";
 import { NotReady } from "@/components/ui";
 import { requestNow } from "@/lib/club-data";
 import { requireOperator } from "@/server/auth/viewer";
-import { loadProblem, loadProblemList } from "@/server/problems";
+import { loadProblem } from "@/server/problems";
 import { storeMode } from "@/server/store";
 import { ProblemForm } from "../../problem-form";
 
@@ -16,7 +16,7 @@ export const metadata: Metadata = { title: "Edit problem", robots: { index: fals
 export default function EditProblemPage({ params }: PageProps<"/problems/[id]/edit">) {
   return (
     <>
-      <SiteHeader />
+      <SiteHeader current="problems" />
       <main className="paper flex-1">
         <div className="mx-auto max-w-2xl px-4 py-8 md:px-6 md:py-12">
           <Suspense fallback={<div className="h-96 animate-pulse rounded-md bg-ivory/60" />}>
@@ -34,7 +34,7 @@ async function EditForm({ params }: Pick<PageProps<"/problems/[id]/edit">, "para
   const { id } = await params;
   await requestNow();
   await requireOperator(`/problems/${id}/edit`);
-  const [loaded, list] = await Promise.all([loadProblem(decodeURIComponent(id)), loadProblemList()]);
+  const loaded = await loadProblem(decodeURIComponent(id));
   if (!loaded) notFound();
   const p = loaded.problem;
   return (
@@ -48,7 +48,6 @@ async function EditForm({ params }: Pick<PageProps<"/problems/[id]/edit">, "para
       <div className="mt-6 rounded-lg border-2 border-midnight bg-ivory p-4 shadow-[4px_4px_0_0_var(--color-midnight)] md:p-6">
         <ProblemForm
           values={{ id: p.id, title: p.title, grade: p.grade, wall: p.wall, setterName: p.setterName, setterNote: p.setterNote, beta: p.beta }}
-          grades={list.grades}
         />
       </div>
     </>

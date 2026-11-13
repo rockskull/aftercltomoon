@@ -5,7 +5,6 @@ import { SiteFooter, SiteHeader } from "@/components/site";
 import { NotReady } from "@/components/ui";
 import { requestNow } from "@/lib/club-data";
 import { requireOperator } from "@/server/auth/viewer";
-import { loadProblemList } from "@/server/problems";
 import { storeMode } from "@/server/store";
 import { ProblemForm } from "../problem-form";
 
@@ -15,7 +14,7 @@ export const metadata: Metadata = { title: "New problem", robots: { index: false
 export default function NewProblemPage() {
   return (
     <>
-      <SiteHeader />
+      <SiteHeader current="problems" />
       <main className="paper flex-1">
         <div className="mx-auto max-w-2xl px-4 py-8 md:px-6 md:py-12">
           <Link href="/problems" className="font-label text-[11px] font-semibold uppercase tracking-[0.24em] text-ink-soft hover:text-midnight">
@@ -40,6 +39,5 @@ async function NewForm() {
   if (storeMode() === "unconfigured") return <NotReady />;
   await requestNow();
   await requireOperator("/problems/new");
-  const { grades } = await loadProblemList().catch(() => ({ grades: [] as string[] }));
-  return <ProblemForm values={{ title: "", grade: "", wall: "", setterName: "", setterNote: "", beta: "" }} grades={grades} />;
+  return <ProblemForm values={{ title: "", grade: "", wall: "", setterName: "", setterNote: "", beta: "" }} />;
 }

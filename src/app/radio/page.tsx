@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 export default function RadioPage() {
   return (
     <>
-      <SiteHeader />
+      <SiteHeader current="radio" />
       <main className="flex-1 bg-midnight text-cream">
         <header className="mx-auto max-w-3xl px-4 pb-8 pt-10 md:px-6 md:pt-14">
           <p className="font-label text-[11px] font-medium uppercase tracking-[0.32em] text-butter">After hours radio</p>

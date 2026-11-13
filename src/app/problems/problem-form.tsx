@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { buttonPrimary, cn } from "@/components/ui";
-import { LIMITS } from "@/lib/problems";
+import { GRADES, LIMITS } from "@/lib/problems";
 import { createProblem, updateProblem, type ProblemState } from "./actions";
 
 const input =
@@ -22,13 +22,11 @@ export interface ProblemFormValues {
 
 /**
  * The crew's problem form (register / edit). The number and the date are set by the
- * server. Grade is free text: the club's own system, nothing is forced (V-grades are
- * only suggestions).
+ * server. Grade is one of the club's colours (빨강 → 검정, YDS in brackets).
  */
-export function ProblemForm({ values, grades }: { values: ProblemFormValues; grades: string[] }) {
+export function ProblemForm({ values }: { values: ProblemFormValues }) {
   const editing = Boolean(values.id);
   const [state, action, pending] = useActionState<ProblemState, FormData>(editing ? updateProblem : createProblem, { status: "idle" });
-  const suggestions = [...new Set([...grades, ...Array.from({ length: 11 }, (_, i) => `V${i}`)])];
 
   return (
     <form action={action} className="flex flex-col gap-5">
@@ -37,21 +35,32 @@ export function ProblemForm({ values, grades }: { values: ProblemFormValues; gra
         문제명 <span className={hint}>필수 · {LIMITS.title}자까지</span>
         <input name="title" required maxLength={LIMITS.title} defaultValue={values.title} className={input} placeholder="예: 퇴근 후의 중력" />
       </label>
-      <div className="grid gap-5 sm:grid-cols-2">
-        <label className={label}>
-          난이도 <span className={hint}>필수 · 클럽에서 쓰는 표기 그대로</span>
-          <input name="grade" required maxLength={LIMITS.grade} defaultValue={values.grade} className={input} list="grade-suggestions" placeholder="예: V3" />
-          <datalist id="grade-suggestions">
-            {suggestions.map((g) => (
-              <option key={g} value={g} />
-            ))}
-          </datalist>
-        </label>
-        <label className={label}>
-          벽 구역 <span className={hint}>선택</span>
-          <input name="wall" maxLength={LIMITS.wall} defaultValue={values.wall} className={input} placeholder="예: 메인 벽 왼쪽" />
-        </label>
-      </div>
+      <fieldset>
+        <legend className="mb-1.5 text-[13px] font-semibold text-midnight">
+          난이도 <span className={hint}>필수 · 쉬운 색부터 (YDS)</span>
+        </legend>
+        <div className="grid gap-1.5 sm:grid-cols-2" data-grade-choices>
+          {GRADES.map((g) => (
+            <label
+              key={g.name}
+              className="flex cursor-pointer items-center gap-3 rounded-md border-2 border-midnight/25 bg-ivory px-3 py-2 hover:border-midnight has-[:checked]:border-midnight has-[:checked]:bg-butter-200/70 has-[:checked]:shadow-[2px_2px_0_0_var(--color-midnight)] has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-midnight"
+            >
+              <input type="radio" name="grade" value={g.name} defaultChecked={values.grade === g.name} required className="sr-only" />
+              <span aria-hidden className="size-5 shrink-0 rounded-full border-2 border-midnight/70" style={{ backgroundColor: g.swatch }} />
+              <span className="min-w-0">
+                <span className="block text-[15px] font-bold text-midnight">
+                  {g.name} <span className="font-mono text-[13px] font-semibold">({g.yds})</span>
+                </span>
+                <span className="block text-[12px] text-ink-soft">{g.level}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <label className={label}>
+        벽 구역 <span className={hint}>선택</span>
+        <input name="wall" maxLength={LIMITS.wall} defaultValue={values.wall} className={input} placeholder="예: 메인 벽 왼쪽" />
+      </label>
       <label className={label}>
         Setter 이름 <span className={hint}>필수</span>
         <input name="setter_name" required maxLength={LIMITS.setter} defaultValue={values.setterName} className={input} />
