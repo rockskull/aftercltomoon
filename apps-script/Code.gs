@@ -45,6 +45,11 @@ var TABLES = {
   StampAwards: ['award_id', 'member_id', 'stamp_id', 'awarded_at', 'awarded_by', 'note'],
   RadioTracks: ['track_id', 'title', 'artist', 'youtube_url', 'youtube_video_id', 'requested_by', 'display_name', 'message',
     'source', 'sort_order', 'created_at', 'status', 'deleted_at', 'deleted_by'],
+  // MOON PROBLEMS lives in the database only (the site moved off the sheet); listed to keep the schemas identical.
+  Problems: ['problem_id', 'problem_no', 'title', 'grade', 'wall', 'setter_name', 'setter_note', 'beta', 'status',
+    'created_at', 'updated_at'],
+  ProblemReviews: ['review_id', 'problem_id', 'member_id', 'display_name', 'fun_rating', 'difficulty_feel', 'send_status',
+    'comment', 'created_at', 'updated_at', 'status'],
   AuditLog: ['log_id', 'commit_id', 'actor_id', 'action', 'target_id', 'before_value', 'after_value', 'created_at'],
   Settings: ['key', 'value', 'description'],
 };

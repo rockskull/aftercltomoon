@@ -114,6 +114,40 @@ export const TABLES = {
     "deleted_at",
     "deleted_by",
   ],
+  /**
+   * MOON PROBLEMS: problems set on the club wall, registered by the crew (text only, no photos).
+   * `problem_no` is the shown number (MOON 001), never reused. status: active | archived | deleted (soft).
+   */
+  Problems: [
+    "problem_id",
+    "problem_no",
+    "title",
+    "grade",
+    "wall",
+    "setter_name",
+    "setter_note",
+    "beta",
+    "status",
+    "created_at",
+    "updated_at",
+  ],
+  /**
+   * One review per member per problem (unique index on problem_id + member_id; the row is reused
+   * after a delete). status: active | deleted (by the member) | hidden (by the crew).
+   */
+  ProblemReviews: [
+    "review_id",
+    "problem_id",
+    "member_id",
+    "display_name",
+    "fun_rating",
+    "difficulty_feel",
+    "send_status",
+    "comment",
+    "created_at",
+    "updated_at",
+    "status",
+  ],
   AuditLog: ["log_id", "commit_id", "actor_id", "action", "target_id", "before_value", "after_value", "created_at"],
   Settings: ["key", "value", "description"],
   // v0.1 tables (read by the public feed / written by the proposal form)
@@ -195,7 +229,19 @@ const NUMBER_COLUMNS: Partial<Record<TableName, readonly string[]>> = {
   Events: ["capacity", "public_fee"],
   Proposals: ["desired_fee"],
   RadioTracks: ["sort_order"],
+  Problems: ["problem_no"],
+  ProblemReviews: ["fun_rating"],
 };
+
+/**
+ * Database-level guarantees beyond the per-table id index (created by `db:migrate -- --schema-only`
+ * and by tests). The commit checks already prevent these under the commit lock; the indexes make
+ * a duplicate impossible even if something bypassed them.
+ */
+export const UNIQUE_INDEXES: ReadonlyArray<{ table: TableName; name: string; columns: readonly string[] }> = [
+  { table: "Problems", name: "problems_no_unique", columns: ["problem_no"] },
+  { table: "ProblemReviews", name: "problem_reviews_member_unique", columns: ["problem_id", "member_id"] },
+];
 const BOOLEAN_COLUMNS: Partial<Record<TableName, readonly string[]>> = {
   Plans: ["active"],
   NotificationPrefs: ["membership", "events", "operator"],

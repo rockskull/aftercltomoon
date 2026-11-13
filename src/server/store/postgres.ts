@@ -5,7 +5,7 @@ import { applyCommit, type Commit, type CommitResult } from "./commit";
 // Commits use a WebSocket connection (an interactive transaction). Node 22+ has a
 // global WebSocket; older runtimes get the `ws` package instead.
 if (typeof globalThis.WebSocket === "undefined") neonConfig.webSocketConstructor = ws;
-import { fromDbValue, idColumn, sqlTableName, TABLES, toDbValue, type Row, type TableName, type Tables } from "./schema";
+import { fromDbValue, idColumn, sqlTableName, TABLES, toDbValue, UNIQUE_INDEXES, type Row, type TableName, type Tables } from "./schema";
 
 /**
  * Club data in Postgres (Neon). Same tables and columns as the old sheet tabs,
@@ -109,5 +109,8 @@ export function schemaStatements(schema = dbSchema()): string[] {
     statements.push(`create index if not exists ${q(`${sqlTableName(table)}_id`)} on ${name} (${q(idColumn(table))})`);
   }
   statements.push(`create index if not exists "audit_log_commit" on ${q(schema)}."audit_log" ("commit_id")`);
+  for (const u of UNIQUE_INDEXES) {
+    statements.push(`create unique index if not exists ${q(u.name)} on ${q(schema)}.${q(sqlTableName(u.table))} (${u.columns.map(q).join(", ")})`);
+  }
   return statements;
 }

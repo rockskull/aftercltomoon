@@ -3,6 +3,7 @@ import { Pool } from "@neondatabase/serverless";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { planRegistration } from "../domain/admin-data";
 import { planApproval } from "../domain/operations";
+import { planProblemCreate, planReviewSave, problemsOf, problemStats, reviewsOf } from "../domain/problems";
 import { planAddTrack, planDeleteTrack, seedRows } from "../domain/radio";
 import { RADIO_SEED } from "@/lib/radio";
 import type { Commit } from "./commit";
@@ -104,6 +105,42 @@ describe.skipIf(!enabled)("postgres store (integration)", { timeout: 60_000 }, (
       ["2026-12-15", "2027-01-31", row.payment_id],
       ["2027-03-01", "2027-03-31", row.payment_id],
     ]);
+  });
+
+  it("MOON PROBLEMS: create, one review per member (also a DB unique constraint), stats from the stored rows", async () => {
+    const data = await readFromDb(["Members", "Problems"]);
+    const created = planProblemCreate(data, {
+      now: NOW,
+      actorId: "OP",
+      input: { title: "퇴근 후의 중력", grade: "V3", wall: "", setterName: "운영", setterNote: "오른발", beta: "몸을 오른쪽으로" },
+    });
+    if ("refuse" in created) throw new Error(created.refuse);
+    expect(await commitToDb(created.commit as Commit)).toEqual({ ok: true });
+    const withProblem = await readFromDb(["Members", "Memberships", "Problems", "ProblemReviews"]);
+    const problem = problemsOf(withProblem)[0];
+    expect(problem).toMatchObject({ no: 1, title: "퇴근 후의 중력", status: "active", beta: "몸을 오른쪽으로" });
+
+    const save = (fun: number, send: string) =>
+      planReviewSave(withProblem, { now: NOW, email: "op@x.dev", sessionName: "", problemId: problem.id, input: { fun, feel: "fair", send, comment: "좋아요" } });
+    const first = save(3, "projecting");
+    const second = save(5, "sent"); // planned from the same snapshot (two tabs)
+    if ("refuse" in first || "refuse" in second) throw new Error("refused");
+    expect(await commitToDb(first.commit as Commit)).toEqual({ ok: true });
+    expect(await commitToDb(second.commit as Commit)).toMatchObject({ ok: false, error: "conflict" });
+
+    // Even a raw insert that skips the app's checks can't create a second review for the same member + problem.
+    await expect(
+      pool.query(`insert into "${SCHEMA}"."problem_reviews" (review_id, problem_id, member_id, status) values ('RV-DUP', $1, 'OP', 'active')`, [problem.id]),
+    ).rejects.toMatchObject({ code: "23505" });
+
+    const update = planReviewSave(await readFromDb(["Members", "Memberships", "Problems", "ProblemReviews"]), {
+      now: NOW, email: "op@x.dev", sessionName: "", problemId: problem.id, input: { fun: 5, feel: "hard", send: "sent", comment: "완등!" },
+    });
+    if ("refuse" in update) throw new Error(update.refuse);
+    expect(await commitToDb(update.commit as Commit)).toEqual({ ok: true });
+    const final = await readFromDb(["ProblemReviews"]);
+    expect(final.ProblemReviews).toHaveLength(1);
+    expect(problemStats(reviewsOf(final), problem.id)).toEqual({ reviews: 1, sends: 1, funAverage: 5, feel: { easy: 0, fair: 0, hard: 1 } });
   });
 
   it("refuses a commit whose checks no longer hold (conflict) and writes nothing", async () => {

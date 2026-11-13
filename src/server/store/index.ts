@@ -91,14 +91,28 @@ async function readRadioCached(key: string): Promise<Tables> {
   return readSource(key.split(",") as TableName[]);
 }
 
+/** Cache tag of MOON PROBLEMS (problems + reviews); every problem/review write clears it. */
+export const PROBLEMS_TAG = "club-problems";
+
+async function readProblemsCached(key: string): Promise<Tables> {
+  "use cache: remote";
+  cacheLife({ stale: 30, revalidate: 30, expire: 300 });
+  cacheTag(PROBLEMS_TAG, PRIVATE_TAG);
+  return readSource(key.split(",") as TableName[]);
+}
+
 /**
  * Reads whole tables.
  * - `fresh: true` reads the live sheet; use it for anything an operator acts on.
  *   Mutations re-verify against the live sheet regardless.
  * - `admin: true` uses the short-lived admin cache (page views only).
  * - `radio: true` uses the radio playlist cache.
+ * - `problems: true` uses the MOON PROBLEMS cache.
  */
-export async function readTables(tables: TableName[], opts: { fresh?: boolean; admin?: boolean; radio?: boolean } = {}): Promise<Tables> {
+export async function readTables(
+  tables: TableName[],
+  opts: { fresh?: boolean; admin?: boolean; radio?: boolean; problems?: boolean } = {},
+): Promise<Tables> {
   switch (storeMode()) {
     case "demo":
       return demoStore().read(tables);
@@ -109,6 +123,7 @@ export async function readTables(tables: TableName[], opts: { fresh?: boolean; a
       if (opts.fresh) return readSource(tables);
       const key = [...tables].sort().join(",");
       if (opts.radio) return readRadioCached(key);
+      if (opts.problems) return readProblemsCached(key);
       return opts.admin ? readAdminCached(key) : readFromSheetsCached(key);
     }
   }

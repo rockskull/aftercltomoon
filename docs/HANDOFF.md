@@ -10,7 +10,7 @@
 | 사이트 | https://aftercltomoon.vercel.app — 실데이터, Google 로그인 |
 | 데이터 | **Postgres (Neon, Vercel Storage)** — 2026-11-13 Google Sheets에서 이전. 시트는 백업으로만 남김 |
 | 코드 | GitHub `rockskull/aftercltomoon` `main` · Vercel이 연결되어 **push하면 자동 배포** |
-| 완료 | 캘린더·이벤트·제안서(로그인 필요), Google 로그인, 회원권(**달 단위: 1일 시작 · 말일 종료**), 첫 등록 가격, 입금 승인, 거래내역 매칭, 알림, PWA, 관리 화면, 동의서, 회계 장부, 초대장, 포스터 생성기, MOON STAMPS(6종 · Instagram 공유), AFTER HOURS RADIO, 관리 화면에서 회원 추가·상품·설정·등록 기간·스탬프 편집 |
+| 완료 | 캘린더·이벤트·제안서(로그인 필요), Google 로그인, 회원권(**달 단위: 1일 시작 · 말일 종료**), 첫 등록 가격, 입금 승인, 거래내역 매칭, 알림, PWA, 관리 화면, 동의서, 회계 장부, 초대장, 포스터 생성기, MOON STAMPS(6종 · Instagram 공유), AFTER HOURS RADIO, MOON PROBLEMS, 회원권 등록 계산(admin), 관리 화면에서 회원 추가·상품·설정·등록 기간·스탬프 편집 |
 
 ### DB로 바꾼 뒤 (2026-11-13)
 
@@ -19,6 +19,11 @@
 - 이제 **Apps Script(Code.gs, setupSheets, Tick.gs, 배포 버전)는 할 일이 없어요.** 아래 1번 섹션의 Apps Script 내용은 예전 기록이에요.
 - Vercel 환경변수의 `CLUB_API_URL`·`CLUB_API_SECRET`은 이전이 끝났으니 지워도 돼요(남아 있어도 DB가 우선).
 - ⚠️ 로컬 `.env.local`에 `DATABASE_URL`이 있으면 `npm run dev`도 **실제 DB**를 써요. 시험은 Neon 개발 브랜치나 데모(DATABASE_URL 없이)로.
+
+### v2.0 — MOON PROBLEMS (`/problems`)
+
+- 운영진이 벽에서 만든 문제를 등록(`/problems/new`)·수정·보관·삭제하고, 회원권이 유효한 회원이 재미·체감 난이도·완등·한 줄 후기로 평가해요. 홈에 최근 문제 3개, 푸터에 Problems 링크. 자세한 규칙은 README "MOON PROBLEMS".
+- ⚠️ **배포 순서:** 새 테이블 `problems`, `problem_reviews`와 유니크 인덱스가 필요해요. **코드를 배포하기 전에** 운영 DB에 `npm run db:migrate -- --schema-only`를 먼저 실행해 주세요(없는 것만 만들고 기존 데이터는 그대로). 순서가 바뀌면 문제 화면이 "불러오지 못했어요"로 나와요(다른 화면은 영향 없음).
 
 ### v1.6 — 회원권 등록 계산 (MEMBERSHIP REGISTRATION, admin)
 
@@ -132,6 +137,7 @@ Vercel → `aftercltomoon` → **Settings → Environment Variables** → 환경
 - [ ] 휴대폰에서 받은 스탬프 → **SHARE THIS STAMP → STORY / FEED → 공유하기** → 공유 시트에서 Instagram 선택 (취소하면 "공유를 취소했어요"), PC에서는 **PNG 저장**
 - [x] ST-02가 **100 HOLDS**로 보인다 (2026-11-13 관리 화면에서 직접 변경)
 - [ ] 회원권 신청 화면 시작 월이 **2026년 12월**부터 4개월이다 / 관리 화면 승인·직접 등록의 시작 월도 2026년 12월부터다
+- [ ] 운영진으로 `/problems` → **+ New problem** → 등록하면 MOON 001로 보이고, Edit에서 Beta를 넣으면 상세의 REVEAL BETA로 보인다 / 회원으로 평가 → 수정 → 삭제가 되고 완등 인원·평균 재미가 맞게 바뀐다 / 일반 회원은 `/problems/new`가 404
 - [ ] admin으로 회원 상세 → MEMBERSHIP REGISTRATION에서 12월(15일 시작)+1월 → 123,871원 → 청구 만들기 → 그 회원 MY에 "운영진이 회원권 등록을 준비했어요"(금액 없음) → CONFIRM REGISTRATION → 12.15–01.31 회원권 생성
 - [ ] (새 Code.gs 반영 후) `/radio`에 기본곡 14곡이 보이고, 회원으로 YouTube 링크를 신청하면 바로 15번째로 붙는다. admin 계정에만 **Delete track**이 보인다
 - [ ] admin으로 **ADMIN → 라디오**에서 순서 ▲▼, 표시 이름·메모 수정, 삭제 → 되돌리기가 된다 (operator는 보기만)

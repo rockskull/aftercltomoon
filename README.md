@@ -165,7 +165,7 @@ Google 로그인만으로는 클럽 참여 권한이 생기지 않습니다. 상
 
 - 장기 회원권(6+1, 12+2)과 선납은 실제 종료일로 판단합니다. 매달 납부 여부로 만료시키지 않습니다. 취소·환불된 회원권은 세지 않습니다.
 - 확정됐지만 아직 시작 전인 회원권은 시작일부터 열립니다. 운영진(활성 operator/admin)은 회원권이 없어도 참여 기능을 쓸 수 있습니다.
-- **차단되는 쓰기**: AFTER HOURS RADIO 선곡 등록(곡 정보 조회 포함), Host an Event 제안서 제출. 서버 처리(`requireParticipant`)가 먼저 막고, 저장 규칙(`participantCheck`)이 같은 규칙으로 한 번 더 막습니다. 막히면 공통 코드 `MEMBERSHIP_REQUIRED`로 응답하고 화면은 같은 **MEMBERSHIP REQUIRED** 안내와 **REGISTER MEMBERSHIP**(→ 회원권 신청)을 보여 줍니다. *(Guestbook·MOON PROBLEMS는 아직 이 사이트에 없는 기능이라 해당 없음. 새로 만드는 회원 쓰기 기능은 반드시 `requireParticipant`를 거칩니다.)*
+- **차단되는 쓰기**: AFTER HOURS RADIO 선곡 등록(곡 정보 조회 포함), Host an Event 제안서 제출, MOON PROBLEMS 평가·완등 기록·후기(작성·수정·삭제). 서버 처리(`requireParticipant`)가 먼저 막고, 저장 규칙(`participantCheck`)이 같은 규칙으로 한 번 더 막습니다. 막히면 공통 코드 `MEMBERSHIP_REQUIRED`로 응답하고 화면은 같은 **MEMBERSHIP REQUIRED** 안내와 **REGISTER MEMBERSHIP**(→ 회원권 신청)을 보여 줍니다. *(Guestbook은 아직 이 사이트에 없는 기능이라 해당 없음. 새로 만드는 회원 쓰기 기능은 반드시 `requireParticipant`를 거칩니다.)*
 - **허용**: 공개 페이지·일정·공지 열람, 회원권 상태 확인, 회원권 신청·동의서 확인(재등록), 받은 스탬프 보기·공유 이미지 만들기(읽기 전용), 알림 설정. 만료돼도 기존 기록(신청곡, 스탬프 등)은 지우지 않습니다.
 - **회원이 아닌 계정**(Members에 없음)이 사이트에 넣을 수 있는 것은 **회원권 신청 하나뿐**입니다. 알림·푸시·동의서 확인은 Members에 있어야 하고, 데모 로그인은 실데이터에서 꺼져 있습니다. 새 계정의 미승인 신청이 20건 이상 쌓이면 새 계정의 신청을 잠시 받지 않습니다(가입 폭주 방지, 기존 회원의 재등록은 영향 없음).
 - **상단 안내 배너**(홈·MY, 로그인한 본인에게만): 월말 7일 갱신 안내(RENEW YOUR MOON), 다음 달 입금 확인 중, 만료(MEMBERSHIP REQUIRED), 시작 전. 팝업이 아니라 닫을 수 있는 배너이고, 닫으면 그 기기에서 그달에는 다시 뜨지 않습니다.
@@ -281,6 +281,17 @@ Vercel 무료(Hobby) 요금제는 비상업적 용도로만 쓸 수 있고, 상�
 - 스탬프 그림 6종은 완성된 정적 에셋입니다(`public/stamps/st-0N.svg`). 글자는 사이트 폰트를 외곽선으로 바꿔 넣어 어디서나 같게 보입니다. 디자인을 고칠 때만 `scripts/stamps/build-stamps.mjs`를 수정하고 `npm run stamps:build`로 다시 만듭니다(스탬프마다 고정 시드라 하나를 고쳐도 다른 그림은 바이트 단위로 그대로).
 - DB: **StampDefinitions**(stamp_id, name, description, image_key, active)는 **관리 화면 → 설정 → MOON STAMPS**에서 문구를 바꾸거나 끌 수 있습니다(이미 받은 회원에게는 계속 보임). 행이 없으면 코드 기본값을 씁니다. ST-01~06 외의 행은 무시합니다. **StampAwards**(award_id, member_id, stamp_id, awarded_at, awarded_by, note)는 발급 기록입니다.
 - v1.4 데이터 반영(선택): `npm run db:v14-stamps`(미리보기) → `npm run db:v14-stamps -- --apply`. ST-02 정의 행이 아직 `FIRST TOP`일 때만 100 HOLDS로 바꾸고(운영진이 이미 고친 문구는 그대로), ST-05·06 행이 없으면 추가합니다(감사 로그 포함, 다시 실행해도 안전). **기존 ST-02 발급 기록은 바꾸지 않고** 운영진 확인용으로 목록만 보여 줍니다.
+
+### MOON PROBLEMS (`/problems`)
+
+SET BY US. CLIMBED BY US. — 문제는 벽에서 만들고, 기록은 웹에 남깁니다. 텍스트만 다루는 작은 볼더링 문제 도감입니다(사진·홀드 표시·온라인 세팅·AI 없음). 홈의 MOON PROBLEMS 섹션(최근 ACTIVE 3개)과 푸터의 **Problems**로 들어갑니다(상단 메뉴는 그대로).
+
+- **누가 무엇을**: 누구나 목록·상세·후기를 봅니다. **운영진(operator·admin)** 만 문제 등록(`/problems/new`)·수정(`/problems/번호/edit`, Setter's Note·Beta 포함)·보관·삭제·복구와 후기 숨기기를 합니다. **회원권이 유효한 회원**(운영진 포함)만 평가를 남기고 고치고 지웁니다. 화면에서 버튼을 숨기는 것과 별개로 모든 쓰기를 서버가 다시 확인합니다(운영진은 매번 DB를 새로 읽어 확인).
+- **문제**: 번호(MOON 001…)는 자동으로 다음 번호가 붙고 다시 쓰지 않습니다(DB 유니크 인덱스). 난이도는 클럽 표기를 그대로 적는 자유 입력입니다(V0~V10은 추천만). 상태는 ACTIVE / ARCHIVED / 삭제(소프트 삭제: 행과 후기는 남고, 운영진은 목록 아래에서 되살릴 수 있음). 보관된 문제는 기존 기록을 그대로 보여 주고 새 평가는 받지 않습니다.
+- **평가(RATE THIS PROBLEM)**: 재미 1~5, 체감 난이도 EASY/FAIR/HARD, SENT/PROJECTING, 한 줄 후기(200자). **회원당 문제별 1건**: 다시 저장하면 수정되고(PROJECTING → SENT 포함), 지웠다가 다시 쓰면 같은 행을 재사용합니다. DB에도 `problem_reviews (problem_id, member_id)` 유니크 인덱스가 있어 중복 행이 생길 수 없습니다. 완등은 자기 신고입니다.
+- **통계**: 유효한(지우거나 숨기지 않은) 평가만으로 계산합니다. 완등 인원 = SENT 수, 평균 재미 = 실제 평가 평균(소수 첫째 자리), 체감 난이도 분포. 평가가 없으면 0점 대신 "아직 평가가 없습니다".
+- **후기 관리**: 운영진이 부적절한 후기를 숨기면 공개 화면과 통계에서 빠지고, 작성자는 다시 살릴 수 없습니다(운영진은 "다시 보이기" 가능).
+- DB: `problems`, `problem_reviews` 테이블(운영 DB 반영은 `npm run db:migrate -- --schema-only`). 모든 변경은 AuditLog에 남습니다.
 
 ### AFTER HOURS RADIO (`/radio`)
 

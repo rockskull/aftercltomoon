@@ -8,7 +8,7 @@
 // The sheet is only read, never changed. Everything is copied in one transaction.
 import { Pool } from "@neondatabase/serverless";
 import { existsSync } from "node:fs";
-import { idColumn, sqlTableName, TABLES, toDbValue } from "../../src/server/store/schema.ts";
+import { idColumn, sqlTableName, TABLES, toDbValue, UNIQUE_INDEXES } from "../../src/server/store/schema.ts";
 import { RADIO_SEED, watchUrl } from "../../src/lib/radio.ts";
 import { STAMP_CATALOG } from "../../src/lib/stamps.ts";
 
@@ -30,6 +30,8 @@ function schemaSql() {
     out.push(`create index if not exists ${q(`${sqlTableName(t)}_id`)} on ${tableRef(t)} (${q(idColumn(t))})`);
   }
   out.push(`create index if not exists "audit_log_commit" on ${tableRef("AuditLog")} ("commit_id")`);
+  // e.g. one review per member per problem (MOON PROBLEMS)
+  for (const u of UNIQUE_INDEXES) out.push(`create unique index if not exists ${q(u.name)} on ${tableRef(u.table)} (${u.columns.map(q).join(", ")})`);
   return out.join(";\n");
 }
 

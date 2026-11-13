@@ -12,6 +12,7 @@ import { toDateKey } from "@/lib/dates";
 import { getEventStatus, splitUpcoming } from "@/lib/status";
 import { readSession } from "@/server/auth/session";
 import { getViewer } from "@/server/auth/viewer";
+import { loadRecentProblems } from "@/server/problems";
 import { storeMode } from "@/server/store";
 
 const UPCOMING_LIMIT = 4;
@@ -40,6 +41,9 @@ export default function HomePage() {
         </section>
         <ProposeInvite />
         <PassItOn />
+        <Suspense fallback={null}>
+          <ProblemsTeaser />
+        </Suspense>
         <RadioTeaser />
       </main>
       <SiteFooter />
@@ -245,7 +249,56 @@ function PassItOn() {
   );
 }
 
-/** ⑥ AFTER HOURS RADIO — the members' playlist. */
+/** ⑥ MOON PROBLEMS — the latest problems from the wall (a failed read just leaves the list out). */
+async function ProblemsTeaser() {
+  if (storeMode() === "unconfigured") return null;
+  await requestNow();
+  let recent: Awaited<ReturnType<typeof loadRecentProblems>> = [];
+  try {
+    recent = await loadRecentProblems(3);
+  } catch (error) {
+    console.error("[problems] home teaser failed", error);
+  }
+  return (
+    <section aria-labelledby="problems-title" className="paper border-t border-dashed border-midnight/20 text-midnight">
+      <div className="mx-auto max-w-6xl px-4 py-12 md:px-6 md:py-16">
+        <p className="font-label text-[11px] font-medium uppercase tracking-[0.32em] text-brown">Moon problems</p>
+        <h2 id="problems-title" className="mt-2 font-display text-[40px] font-extrabold uppercase leading-[0.9] md:text-[56px]">
+          Set by us.
+          <br />
+          Climbed by us.
+        </h2>
+        <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-ink-soft">벽에서 만든 우리 클럽의 볼더링 문제들. 풀어 보고 기록을 남겨 주세요.</p>
+        {recent.length > 0 ? (
+          <ul className="mt-6 grid gap-3 md:grid-cols-3">
+            {recent.map((p) => (
+              <li key={p.id}>
+                <Link href={`/problems/${p.no}`} className="flex h-full flex-col rounded-lg border-2 border-midnight bg-ivory p-4 shadow-[3px_3px_0_0_var(--color-midnight)] hover:-translate-y-0.5">
+                  <span className="font-display text-[24px] font-extrabold leading-none text-brown">{p.code}</span>
+                  <span className="mt-1.5 text-[17px] font-extrabold leading-snug">{p.title}</span>
+                  <span className="mt-2 font-mono text-[12px] text-ink-soft">
+                    {p.grade} · {p.setterName} · {p.stats.sends} sends
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-6 rounded-lg border border-dashed border-midnight/30 px-4 py-5 text-[14px] text-ink-soft">곧 첫 문제가 올라와요.</p>
+        )}
+        <Link
+          href="/problems"
+          className="mt-5 inline-flex h-11 items-center gap-2 font-label text-[12px] font-semibold uppercase tracking-[0.2em] text-midnight underline decoration-butter decoration-2 underline-offset-[6px]"
+        >
+          Explore problems
+          <ArrowRight />
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+/** ⑦ AFTER HOURS RADIO — the members' playlist. */
 function RadioTeaser() {
   return (
     <section aria-labelledby="radio-title" className="paper border-t border-dashed border-midnight/20 text-midnight">
