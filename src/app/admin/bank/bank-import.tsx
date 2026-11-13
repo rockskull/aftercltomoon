@@ -88,12 +88,16 @@ export function BankImport() {
                           <input type="hidden" name="payment_id" value={c.paymentId} />
                           <input type="hidden" name="bank_transaction_id" value={m.deposit.key} />
                           <input type="hidden" name="deposited_at" value={m.deposit.dateKey} />
-                          <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
-                            시작 월 (바꿀 때만)
-                            <MonthSelect name="start_month" todayKey={m.deposit.dateKey} from={FIRST_START_MONTH} emptyLabel="자동" />
-                          </label>
+                          {c.registration ? (
+                            <span className="text-[12px] text-ink-soft">등록 계산 청구 — 정해진 기간으로 확정돼요 (admin만)</span>
+                          ) : (
+                            <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
+                              시작 월 (바꿀 때만)
+                              <MonthSelect name="start_month" todayKey={m.deposit.dateKey} from={FIRST_START_MONTH} emptyLabel="자동" />
+                            </label>
+                          )}
                           <button type="submit" className={smallPrimary}>
-                            이 입금으로 승인
+                            {c.registration ? "이 입금으로 등록 확정" : "이 입금으로 승인"}
                           </button>
                         </ActionForm>
                       </li>

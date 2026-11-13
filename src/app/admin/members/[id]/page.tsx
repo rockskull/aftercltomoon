@@ -7,10 +7,14 @@ import { SiteFooter, SiteHeader } from "@/components/site";
 import { NotReady } from "@/components/ui";
 import { requestNow } from "@/lib/club-data";
 import { toDateKey } from "@/lib/dates";
-import { membershipPhase } from "@/lib/membership";
+import { randomUUID } from "node:crypto";
+import { membershipPhase, monthBounds, overlapping, totalMonths } from "@/lib/membership";
+import { addMonths, monthRange } from "@/lib/registration";
 import { earliestStart, FIRST_START_MONTH } from "@/lib/start-months";
 import { requireOperator } from "@/server/auth/viewer";
-import { formatWon } from "@/server/domain/model";
+import { monthlyPlan } from "@/server/domain/admin-data";
+import { formatWon, isFirstJoin, priceFor } from "@/server/domain/model";
+import { RegistrationCalculator } from "./registration-calculator";
 import { storeMode } from "@/server/store";
 import { memberAccess, type AccessStatus } from "@/lib/access";
 import { editMember, editMembership, grantMembership } from "../../actions";
@@ -55,6 +59,16 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
   const access = memberAccess({ member, memberships: club.memberships, payments: club.payments, todayKey });
   // New memberships start from the club's first month (2026-12) at the earliest.
   const grantDefault = earliestStart(todayKey).slice(0, 7);
+
+  // MEMBERSHIP REGISTRATION (admin): open charges, the monthly fee, and which months are already covered.
+  const openPayments = payments.filter((p) => p.status === "pending" || p.status === "matched");
+  const feePlan = monthlyPlan(club.plans);
+  const firstJoin = isFirstJoin(club, member);
+  const valid = memberships.filter((m) => m.status === "active");
+  const calculatorMonths = monthRange(grantDefault, addMonths(grantDefault, 12)).map((ym) => {
+    const bounds = monthBounds(ym)!;
+    return { ym, taken: overlapping(valid, bounds.start, bounds.end).length > 0 };
+  });
 
   return (
     <AdminFrame tab="members" title={member.name || member.id}>
@@ -167,6 +181,42 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
           )}
         </Box>
 
+        <Box title="MEMBERSHIP REGISTRATION">
+          {openPayments.length > 0 ? (
+            <div className="flex flex-col gap-3">
+              <p className="text-[13px] text-ink-soft">입금 확인을 기다리는 청구·신청이 있어요. 확정하거나 취소한 뒤에 새로 계산할 수 있어요(중복 청구 방지).</p>
+              {openPayments.map((p) => (
+                <PendingPaymentCard key={p.id} payment={p} club={club} todayKey={todayKey} canConfirmRegistration={isAdmin} />
+              ))}
+            </div>
+          ) : isAdmin ? (
+            <RegistrationCalculator
+              memberId={member.id}
+              memberName={member.name || member.id}
+              depositorName={member.depositorName || member.name}
+              fee={feePlan?.price ?? null}
+              feePlanName={feePlan?.name ?? "1개월"}
+              firstJoinNote={
+                firstJoin && feePlan && feePlan.firstPrice > 0 && feePlan.firstPrice !== feePlan.price
+                  ? `이 회원은 첫 등록이에요. 월 단위 계산은 월 회비 ${formatWon(feePlan.price)} 기준이고, ${feePlan.name} 첫 등록 가격(${formatWon(feePlan.firstPrice)})은 적용하지 않아요.`
+                  : null
+              }
+              months={calculatorMonths}
+              longPlans={club.plans
+                .filter((p) => p.active && p.id !== feePlan?.id)
+                .map((p) => {
+                  const price = priceFor(p, firstJoin);
+                  return { id: p.id, name: p.name, totalMonths: totalMonths(p), amount: price.amount, firstPriceApplied: price.firstPriceApplied };
+                })}
+              existing={memberships.map((m) => ({ id: m.id, startDate: m.startDate, endDate: m.endDate, status: m.status }))}
+              todayKey={todayKey}
+              requestId={randomUUID()}
+            />
+          ) : (
+            <p className="text-[13px] text-ink-soft">새 회원권 등록 계산과 확정은 admin만 할 수 있어요.</p>
+          )}
+        </Box>
+
         <details className="-mt-3 rounded-lg border-2 border-dashed border-midnight/30 bg-ivory/70 p-3">
           <summary className="cursor-pointer text-[14px] font-bold text-midnight">+ 회원권 직접 등록 (입금 기록 없이 — 사이트 이전 회원권, 현금 납부 등)</summary>
           <p className="mt-2 text-[12px] text-ink-soft">
@@ -215,13 +265,16 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
             <div className="flex flex-col gap-2">
               {payments.map((p) =>
                 p.status === "pending" || p.status === "matched" ? (
-                  <PendingPaymentCard key={p.id} payment={p} club={club} todayKey={todayKey} />
+                  <p key={p.id} className="rounded-md border border-dashed border-midnight/30 px-3 py-2 text-[13px] text-ink-soft">
+                    {p.registration ? `월 단위 등록 ${p.registration.months.length}개월` : planName(p.planId)} · {formatWon(p.amount)} — 입금 확인 대기 (위 MEMBERSHIP REGISTRATION에서 확정)
+                  </p>
                 ) : p.status === "approved" ? (
                   <ApprovedPaymentRow key={p.id} payment={p} club={club} />
                 ) : (
                   <p key={p.id} className="flex justify-between rounded-md border border-dashed border-midnight/20 px-3 py-2 text-[14px]">
                     <span>
-                      {planName(p.planId)} · {formatWon(p.amount)} {p.note && <span className="text-ink-soft">({p.note})</span>}
+                      {p.registration ? `월 단위 등록 ${p.registration.months.length}개월` : planName(p.planId)} · {formatWon(p.amount)}{" "}
+                      {p.note && <span className="text-ink-soft">({p.note})</span>}
                     </span>
                     <Pill tone="muted">{p.status}</Pill>
                   </p>

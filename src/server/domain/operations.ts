@@ -1,6 +1,7 @@
 import { formatKeyKo, toDateKey } from "@/lib/dates";
 import { memberAccess } from "@/lib/access";
 import { monthBounds, nextMembershipPeriod, overlapping, totalMonths } from "@/lib/membership";
+import { quoteRegistration } from "@/lib/registration";
 import { FIRST_START_DAY, START_TOO_EARLY } from "@/lib/start-months";
 import { pickText, type Check, type Op } from "../store/commit";
 import { newId, seoulIso } from "../store/ids";
@@ -291,6 +292,8 @@ export function planMemberConsent(data: Tables, ctx: Ctx & { memberId: string })
 export function planApproval(
   data: Tables,
   ctx: Ctx & {
+    /** Needed for MEMBERSHIP REGISTRATION charges, which only an admin confirms. */
+    actorRole?: Role;
     paymentId: string;
     startOverride?: string | null;
     depositedAt?: string | null;
@@ -313,37 +316,57 @@ export function planApproval(
   const tx = ctx.bankTransactionId?.trim() || "";
   if (tx && club.payments.some((p) => p.bankTransactionId === tx)) return { refuse: "이 거래는 이미 다른 입금에 반영됐어요." };
 
-  if (ctx.startOverride && ctx.startOverride < FIRST_START_DAY) return { refuse: START_TOO_EARLY };
-
   const todayKey = toDateKey(ctx.now);
   const existing = memberMemberships(data, member.id);
-  const period = nextMembershipPeriod({
-    existing,
-    plan,
-    todayKey,
-    requestedStart: payment.requestedStart || null,
-    startOverride: ctx.startOverride || null,
-    earliestStart: FIRST_START_DAY,
-  });
-  if (ctx.startOverride && overlapping(existing, period.startDate, period.endDate).length) {
-    return { refuse: "지정한 기간이 기존 회원권과 겹쳐요. 시작일을 다시 확인해 주세요." };
+  // The stretches of access this approval creates (one membership row each).
+  let periods: Array<{ startDate: string; endDate: string; note: string }>;
+  let months: number;
+  let label: string;
+  if (payment.registration) {
+    // MEMBERSHIP REGISTRATION (v1.6): the admin's charge fixed the months and the first day; only an admin confirms it.
+    if (ctx.actorRole !== "admin") return { refuse: "회원권 등록 계산으로 만든 청구는 admin만 확정할 수 있어요." };
+    if (ctx.startOverride) return { refuse: "등록 계산으로 만든 청구는 시작 월을 바꿀 수 없어요. 반려하고 다시 만들어 주세요." };
+    const q = quoteRegistration(payment.registration);
+    if ("error" in q || q.total !== payment.amount) return { refuse: "청구 내용이 계산과 맞지 않아요. 반려하고 다시 만들어 주세요." };
+    const taken = q.periods.filter((p) => overlapping(existing, p.start, p.end).length);
+    if (taken.length) return { refuse: `이미 등록된 기간과 겹쳐요 (${taken.map((p) => `${formatKeyKo(p.start)} – ${formatKeyKo(p.end)}`).join(", ")}). 반려하고 다시 만들어 주세요.` };
+    periods = q.periods.map((p) => ({ startDate: p.start, endDate: p.end, note: `월 단위 등록 ${q.months.length}개월` }));
+    months = q.months.length;
+    label = `월 단위 등록 ${months}개월`;
+  } else {
+    if (ctx.startOverride && ctx.startOverride < FIRST_START_DAY) return { refuse: START_TOO_EARLY };
+    const period = nextMembershipPeriod({
+      existing,
+      plan,
+      todayKey,
+      requestedStart: payment.requestedStart || null,
+      startOverride: ctx.startOverride || null,
+      earliestStart: FIRST_START_DAY,
+    });
+    if (ctx.startOverride && overlapping(existing, period.startDate, period.endDate).length) {
+      return { refuse: "지정한 기간이 기존 회원권과 겹쳐요. 시작일을 다시 확인해 주세요." };
+    }
+    periods = [{ startDate: period.startDate, endDate: period.endDate, note: period.extendsExisting ? "기존 회원권에 이어서 연장" : "" }];
+    months = totalMonths(plan);
+    label = `${plan.name} 회원권`;
   }
+  const first = periods[0];
+  const last = periods[periods.length - 1];
 
   const commitId = newId("C", ctx.now, 8);
-  const membershipId = newId("MS", ctx.now);
   const nowIso = seoulIso(ctx.now);
-  const membershipRow: Row = {
-    membership_id: membershipId,
+  const membershipRows: Row[] = periods.map((p) => ({
+    membership_id: newId("MS", ctx.now),
     member_id: member.id,
     plan_id: plan.id,
-    start_date: period.startDate,
-    end_date: period.endDate,
+    start_date: p.startDate,
+    end_date: p.endDate,
     status: "active",
     source_payment_id: payment.id,
     created_at: nowIso,
     updated_at: nowIso,
-    note: period.extendsExisting ? "기존 회원권에 이어서 연장" : "",
-  };
+    note: p.note,
+  }));
   const paymentSet: Row = {
     status: "approved",
     approved_by: ctx.actorId,
@@ -361,7 +384,7 @@ export function planApproval(
   if (tx) checks.push({ type: "absent", table: "Payments", where: { bank_transaction_id: tx } });
 
   const ops: Op[] = [
-    { type: "append", table: "Memberships", row: membershipRow },
+    ...membershipRows.map((row): Op => ({ type: "append", table: "Memberships", row })),
     { type: "update", table: "Payments", id: payment.id, set: paymentSet },
   ];
   if (member.status !== "active" || !member.joinedAt) {
@@ -369,9 +392,10 @@ export function planApproval(
       type: "update",
       table: "Members",
       id: member.id,
-      set: { status: "active", ...(member.joinedAt ? {} : { joined_at: period.startDate }) },
+      set: { status: "active", ...(member.joinedAt ? {} : { joined_at: first.startDate }) },
     });
   }
+  const ranges = periods.map((p) => `${formatKeyKo(p.startDate)} – ${formatKeyKo(p.endDate)}`).join(", ");
   const n = notify(
     data,
     notificationRow({
@@ -379,7 +403,7 @@ export function planApproval(
       memberId: member.id,
       type: "payment_approved",
       title: "회비 입금이 확인됐어요",
-      body: `${plan.name} 회원권 · ${formatKeyKo(period.startDate)} – ${formatKeyKo(period.endDate)}`,
+      body: `${label} · ${ranges}`,
       url: "/me",
       dedupKey: `payment_approved:${payment.id}`,
     }),
@@ -389,11 +413,21 @@ export function planApproval(
   ops.push(
     audit(ctx, commitId, "payment.approve", payment.id, pickText(payment.raw, ["status", "deposited_at", "bank_transaction_id"]), {
       ...paymentSet,
-      membership: membershipRow,
+      ...(membershipRows.length === 1 ? { membership: membershipRows[0] } : { memberships: membershipRows }),
     }),
   );
 
-  return { commit: { id: commitId, checks, ops }, result: { membershipId, ...period, months: totalMonths(plan) } };
+  return {
+    commit: { id: commitId, checks, ops },
+    result: {
+      membershipId: membershipRows[0].membership_id,
+      membershipIds: membershipRows.map((r) => r.membership_id),
+      startDate: first.startDate,
+      endDate: last.endDate,
+      extendsExisting: periods.length === 1 && periods[0].note === "기존 회원권에 이어서 연장",
+      months,
+    },
+  };
 }
 
 export function planRejection(data: Tables, ctx: Ctx & { paymentId: string; reason: string }): Planned {
@@ -870,6 +904,7 @@ export const NEEDS = {
   payments: ["Payments", "Memberships", "Notifications"],
   membership: ["Memberships"],
   membershipGrant: ["Members", "Plans", "Memberships"],
+  registration: ["Members", "Plans", "Payments", "Memberships"],
   member: ["Members"],
   proposals: ["Proposals"],
   proposalSubmit: ["Members", "Memberships", "Notifications"],

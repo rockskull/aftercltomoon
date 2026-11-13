@@ -65,6 +65,8 @@ export interface PaymentLike {
   status: string;
   depositedAt: string;
   approvedAt: string;
+  /** MEMBERSHIP REGISTRATION charge (several months at once). */
+  registration?: { months: string[] } | null;
 }
 
 /** Approved deposits as income lines (category 회비); refunded or pending ones don't count. */
@@ -79,7 +81,9 @@ export function entriesFromPayments(
       date: p.depositedAt || p.approvedAt.slice(0, 10),
       kind: "income" as const,
       category: "회비",
-      description: `${names.plan(p.planId)} 회원권${p.firstJoin ? " (첫 등록)" : ""}`,
+      description: p.registration
+        ? `회원권 월 단위 등록 ${p.registration.months.length}개월`
+        : `${names.plan(p.planId)} 회원권${p.firstJoin ? " (첫 등록)" : ""}`,
       amount: p.amount,
       person: names.member(p.memberId),
       method: "모임통장",

@@ -32,6 +32,8 @@ export const TABLES = {
     "approved_by",
     "approved_at",
     "note",
+    /** MEMBERSHIP REGISTRATION (admin, v1.6): {"months":[…],"start":"YYYY-MM-DD","fee":n}; empty for ordinary applications. */
+    "registration",
   ],
   Memberships: [
     "membership_id",

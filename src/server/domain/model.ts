@@ -2,6 +2,7 @@ import { CONSENT_DEFAULTS, consentUrl, type ConsentLinks } from "@/lib/consent";
 import { parseMoment, toDateKey } from "@/lib/dates";
 import { kindOf, type MoneyEntry } from "@/lib/ledger";
 import type { MembershipPeriod, MembershipRecordStatus } from "@/lib/membership";
+import { parseRegistration, type RegistrationSpec } from "@/lib/registration";
 import { cellText, type Cell, type Row, type Tables } from "../store/schema";
 
 /** Typed views over sheet rows. Every parser tolerates hand-edited cells. */
@@ -58,6 +59,8 @@ export interface Payment {
   approvedBy: string;
   approvedAt: string;
   note: string;
+  /** Set when an admin made this charge with MEMBERSHIP REGISTRATION (several months, first one prorated). */
+  registration: RegistrationSpec | null;
   raw: Row;
 }
 
@@ -206,6 +209,7 @@ export function toPayment(r: Row): Payment {
     approvedBy: text(r.approved_by),
     approvedAt: text(r.approved_at),
     note: text(r.note),
+    registration: parseRegistration(text(r.registration)),
     raw: r,
   };
 }
@@ -352,7 +356,7 @@ export function parsePrivate(tables: Tables): ClubPrivate {
     payments: (tables.Payments ?? [])
       .map(toPayment)
       .filter((p) => p.id)
-      .map((p) => ({ ...p, firstJoin: firstPrice.get(p.planId) === p.amount })),
+      .map((p) => ({ ...p, firstJoin: !p.registration && firstPrice.get(p.planId) === p.amount })),
     memberships: (tables.Memberships ?? []).map(toMembership).filter((m) => m.id && m.startDate && m.endDate),
     notifications: (tables.Notifications ?? []).map(toNotification).filter((n) => n.id),
     subscriptions: (tables.PushSubscriptions ?? []).map(toSubscription).filter((s) => s.id && s.endpoint),

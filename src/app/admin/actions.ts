@@ -18,10 +18,13 @@ import {
   planMemberAdd,
   planMembershipGrant,
   planPlanSave,
+  planRegistration,
   planSettingsSave,
   planStampDefinitionSave,
   planStampRevoke,
+  REGISTRATION_ADMIN_ONLY,
   SETTING_KEYS,
+  type RegistrationRequest,
   type SettingKey,
 } from "@/server/domain/admin-data";
 import { STAMP_CATALOG } from "@/lib/stamps";
@@ -78,6 +81,7 @@ export async function approvePayment(_prev: AdminState, fd: FormData): Promise<A
     planApproval(data, {
       now: Date.now(),
       actorId: op.member.id,
+      actorRole: op.member.role,
       paymentId: field(fd, "payment_id"),
       startOverride: startOverride || null,
       depositedAt: depositedAt || null,
@@ -213,6 +217,36 @@ export async function grantMembership(_prev: AdminState, fd: FormData): Promise<
     }),
   );
   return outcome.ok ? done("회원권을 등록했어요. 이용 기간 동안 클럽 참여 기능이 열려요.") : { status: "error", message: outcome.message };
+}
+
+/**
+ * MEMBERSHIP REGISTRATION (admin): makes a pending charge from the chosen months
+ * and first day. The amount is recomputed on the server; nothing is activated
+ * until the deposit is confirmed (approvePayment, admin).
+ */
+export async function createRegistration(_prev: AdminState, fd: FormData): Promise<AdminState> {
+  const op = await operatorForAction();
+  if (!op) return DENIED;
+  if (op.member.role !== "admin") return { status: "error", message: REGISTRATION_ADMIN_ONLY };
+  const kind = field(fd, "kind");
+  const request: RegistrationRequest =
+    kind === "plan"
+      ? { kind: "plan", planId: field(fd, "plan_id"), startMonth: field(fd, "start_month") }
+      : { kind: "monthly", months: fd.getAll("months").map(String), start: field(fd, "start") };
+  const outcome = await runCommit<{ paymentId: string; amount: number }>(NEEDS.registration, (data) =>
+    planRegistration(data, {
+      now: Date.now(),
+      actorId: op.member.id,
+      actorRole: op.member.role,
+      memberId: field(fd, "member_id"),
+      depositorName: field(fd, "depositor_name"),
+      requestId: field(fd, "request_id"),
+      request,
+    }),
+  );
+  if (!outcome.ok) return { status: "error", message: outcome.message };
+  if (outcome.duplicate) return done("이미 만든 청구예요.");
+  return done(`청구를 만들었어요${outcome.result ? ` (${outcome.result.amount.toLocaleString("ko-KR")}원)` : ""}. 입금이 확인되면 '등록 확정'을 눌러 주세요.`);
 }
 
 export async function savePlan(_prev: AdminState, fd: FormData): Promise<AdminState> {

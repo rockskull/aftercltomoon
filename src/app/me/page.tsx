@@ -10,6 +10,7 @@ import { ArrowRight, cn, NotReady } from "@/components/ui";
 import { requestNow } from "@/lib/club-data";
 import { toDateKey } from "@/lib/dates";
 import { membershipPhase, totalMonths } from "@/lib/membership";
+import { registrationLabel } from "@/lib/registration";
 import { isOperator, requireViewer } from "@/server/auth/viewer";
 import type { Payment } from "@/server/domain/model";
 import { memberStamps } from "@/server/domain/stamps";
@@ -69,6 +70,9 @@ async function MyMembership() {
     .filter((m) => m.memberId === member?.id)
     .sort((a, b) => b.startDate.localeCompare(a.startDate));
   const planName = (id: string) => club.plans.find((p) => p.id === id)?.name ?? id;
+  // Memberships the crew registered month by month (MEMBERSHIP REGISTRATION) aren't a "1개월" plan.
+  const registered = new Set(club.payments.filter((p) => p.registration).map((p) => p.id));
+  const membershipName = (m: { planId: string; sourcePaymentId: string }) => (registered.has(m.sourcePaymentId) ? "월 단위" : planName(m.planId));
   const activePlans = club.plans.filter((p) => p.active);
   const inactive = member?.status === "inactive";
 
@@ -90,13 +94,17 @@ async function MyMembership() {
       <MembershipCard member={member} summary={summary} />
 
       {summary.pending && (
-        <ApplicationReceived payment={summary.pending} planName={planName(summary.pending.planId)} notice={club.settings.applyNotice} />
+        <ApplicationReceived
+          payment={summary.pending}
+          planName={summary.pending.registration ? registrationLabel(summary.pending.registration) : planName(summary.pending.planId)}
+          notice={club.settings.applyNotice}
+        />
       )}
 
       {member && summary.current && (
         <Panel title="이용 정보">
           <dl className="divide-y divide-plywood-400 text-[15px]">
-            <Row label="회원권">{planName(summary.current.planId)}</Row>
+            <Row label="회원권">{membershipName(summary.current)}</Row>
             <Row label="이용 시작일">
               <span className="font-mono">{dotDate(summary.current.startDate)}</span>
             </Row>
@@ -169,7 +177,7 @@ async function MyMembership() {
             {myMemberships.map((m) => (
               <li key={m.id} className={cn("flex flex-wrap items-baseline justify-between gap-2 rounded-md bg-ivory px-3 py-2.5", m.status !== "active" && "opacity-60")}>
                 <span className="font-medium">
-                  {planName(m.planId)} 회원권
+                  {membershipName(m)} 회원권
                   <span className="ml-2 font-mono text-[11px] uppercase text-ink-soft">{membershipPhase(m, todayKey)}</span>
                 </span>
                 <span className="font-mono text-[13px] text-ink-soft">
@@ -179,7 +187,7 @@ async function MyMembership() {
             ))}
             {myPayments.map((p) => (
               <li key={p.id} className="flex flex-wrap items-baseline justify-between gap-2 rounded-md border border-dashed border-midnight/20 px-3 py-2.5">
-                <span>{planName(p.planId)} 회원권 신청</span>
+                <span>{p.registration ? `회원권 등록 · ${registrationLabel(p.registration)}` : `${planName(p.planId)} 회원권 신청`}</span>
                 <span className="text-[13px] text-ink-soft">
                   {PAYMENT_LABEL[p.status]}
                   {p.depositedAt && <span className="ml-1.5 font-mono">{dotDate(p.depositedAt)}</span>}
@@ -233,10 +241,13 @@ async function MyMoonStamps({ memberId }: { memberId: string }) {
 function ApplicationReceived({ payment, planName, notice }: { payment: Payment; planName: string; notice: string }) {
   return (
     <section aria-labelledby="applied-title" className="rounded-lg border-2 border-midnight bg-butter-200/70 p-5 shadow-[4px_4px_0_0_var(--color-midnight)]">
-      <p className="font-label text-[11px] font-semibold uppercase tracking-[0.28em] text-brown">Application</p>
+      <p className="font-label text-[11px] font-semibold uppercase tracking-[0.28em] text-brown">{payment.registration ? "Registration" : "Application"}</p>
       <h2 id="applied-title" className="mt-1 text-[19px] font-extrabold text-midnight">
-        회원권 신청이 접수됐어요
+        {payment.registration ? "운영진이 회원권 등록을 준비했어요" : "회원권 신청이 접수됐어요"}
       </h2>
+      {payment.registration && (
+        <p className="mt-1 text-[13px] text-ink-soft">입금이 확인되면 등록이 확정되고 이용 기간이 시작돼요. 금액은 운영진 안내를 따라 주세요.</p>
+      )}
       <dl className="mt-4 grid grid-cols-[88px_minmax(0,1fr)] gap-x-3 gap-y-2.5 text-[15px]">
         <dt className="text-ink-soft">회원권</dt>
         <dd className="font-semibold text-midnight">{planName}</dd>

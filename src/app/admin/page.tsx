@@ -32,7 +32,7 @@ export default function AdminPage() {
 async function Overview() {
   if (storeMode() === "unconfigured") return <div className="mx-auto max-w-3xl px-4 py-10"><NotReady /></div>;
   const now = await requestNow();
-  const { club, tables } = await requireOperator("/admin");
+  const { club, tables, member: me } = await requireOperator("/admin");
   const todayKey = toDateKey(now);
   const proposals = tables.Proposals ?? [];
 
@@ -74,7 +74,7 @@ async function Overview() {
           ) : (
             <div className="flex flex-col gap-3">
               {pending.slice(0, 5).map((p) => (
-                <PendingPaymentCard key={p.id} payment={p} club={club} todayKey={todayKey} />
+                <PendingPaymentCard key={p.id} payment={p} club={club} todayKey={todayKey} canConfirmRegistration={me.role === "admin"} />
               ))}
               {pending.length > 5 && (
                 <Link href="/admin/payments" className="text-[14px] font-bold text-midnight underline underline-offset-4">

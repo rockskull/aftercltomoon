@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   accessUntil,
+  continuousUntil,
   currentMembership,
   daysLeft,
   inclusiveDays,
@@ -99,6 +100,17 @@ describe("month helpers", () => {
     expect(monthBounds("2027-02")).toEqual({ start: "2027-02-01", end: "2027-02-28" });
     expect(monthBounds("2027-13")).toBeNull();
     expect(monthBounds("2027-02-01")).toBeNull();
+  });
+});
+
+describe("continuousUntil", () => {
+  const row = (id: string, startDate: string, endDate: string, status: "active" | "canceled" = "active") => ({ id, startDate, endDate, status });
+  it("follows back-to-back memberships and stops at a gap", () => {
+    const rows = [row("a", "2026-12-15", "2027-01-31"), row("b", "2027-03-01", "2027-03-31")];
+    expect(continuousUntil(rows, "2026-12-20")).toBe("2027-01-31");
+    expect(continuousUntil(rows, "2027-02-10")).toBeNull();
+    expect(continuousUntil([...rows, row("c", "2027-02-01", "2027-02-28")], "2026-12-20")).toBe("2027-03-31");
+    expect(continuousUntil([...rows, row("c", "2027-02-01", "2027-02-28", "canceled")], "2026-12-20")).toBe("2027-01-31");
   });
 });
 

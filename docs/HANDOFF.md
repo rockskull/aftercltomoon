@@ -20,6 +20,11 @@
 - Vercel 환경변수의 `CLUB_API_URL`·`CLUB_API_SECRET`은 이전이 끝났으니 지워도 돼요(남아 있어도 DB가 우선).
 - ⚠️ 로컬 `.env.local`에 `DATABASE_URL`이 있으면 `npm run dev`도 **실제 DB**를 써요. 시험은 Neon 개발 브랜치나 데모(DATABASE_URL 없이)로.
 
+### v1.6 — 회원권 등록 계산 (MEMBERSHIP REGISTRATION, admin)
+
+- 회원 상세 → **MEMBERSHIP REGISTRATION**: 등록월 여러 개 선택 + 첫 달 시작일 → 일할 계산된 총 청구액 → **청구 만들기**(입금 대기, 회원권 없음) → 입금 확인 후 **CONFIRM REGISTRATION**(admin만) → 회원권 생성. 자세한 규칙은 README "회원권 등록 계산".
+- ⚠️ **배포 순서:** Payments에 `registration` 컬럼이 새로 생겼어요. **코드를 배포하기 전에** 운영 DB에 `npm run db:migrate -- --schema-only`(없는 컬럼만 추가, 기존 데이터 그대로)를 먼저 실행해야 해요. 순서가 바뀌면 배포 직후 회원권 신청 저장이 실패해요.
+
 ### v1.4 — MOON STAMPS 6종 · Instagram 공유 · 시작 월 (2026-11-13)
 
 - 스탬프 6종: ST-02가 **100 HOLDS**(지정 100홀드 지구력 문제 1개 완등)로 바뀌고, **SIX MOONS**(6+1개월 등록)·**TWELVE MOONS**(12+2개월 등록)가 생겼어요. 모두 운영진 수동 발급, 자동 발급 없음. SIX/TWELVE MOONS 칸에는 그 회원의 6+1 / 12+2 등록 기록이 참고로 보여요.
@@ -127,6 +132,7 @@ Vercel → `aftercltomoon` → **Settings → Environment Variables** → 환경
 - [ ] 휴대폰에서 받은 스탬프 → **SHARE THIS STAMP → STORY / FEED → 공유하기** → 공유 시트에서 Instagram 선택 (취소하면 "공유를 취소했어요"), PC에서는 **PNG 저장**
 - [x] ST-02가 **100 HOLDS**로 보인다 (2026-11-13 관리 화면에서 직접 변경)
 - [ ] 회원권 신청 화면 시작 월이 **2026년 12월**부터 4개월이다 / 관리 화면 승인·직접 등록의 시작 월도 2026년 12월부터다
+- [ ] admin으로 회원 상세 → MEMBERSHIP REGISTRATION에서 12월(15일 시작)+1월 → 123,871원 → 청구 만들기 → 그 회원 MY에 "운영진이 회원권 등록을 준비했어요"(금액 없음) → CONFIRM REGISTRATION → 12.15–01.31 회원권 생성
 - [ ] (새 Code.gs 반영 후) `/radio`에 기본곡 14곡이 보이고, 회원으로 YouTube 링크를 신청하면 바로 15번째로 붙는다. admin 계정에만 **Delete track**이 보인다
 - [ ] admin으로 **ADMIN → 라디오**에서 순서 ▲▼, 표시 이름·메모 수정, 삭제 → 되돌리기가 된다 (operator는 보기만)
 - [ ] **기존 회원 회원권 입력**: 사이트 이전부터 있던 회원은 관리 화면 → 회원 → 회원 상세 → **회원권 직접 등록**으로 현재 이용 기간을 넣는다 (안 넣으면 만료로 보여 참여 기능이 막힘)

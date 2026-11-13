@@ -1,10 +1,12 @@
+import { toDateKey } from "@/lib/dates";
 import { monthBounds, overlapping } from "@/lib/membership";
+import { quoteRegistration, serializeRegistration } from "@/lib/registration";
 import { isStampId } from "@/lib/stamps";
-import { FIRST_START_DAY, START_TOO_EARLY } from "@/lib/start-months";
+import { earliestStart, FIRST_START_DAY, START_TOO_EARLY } from "@/lib/start-months";
 import { pickText, type Check, type Op } from "../store/commit";
 import { newId, seoulIso } from "../store/ids";
 import { cellText, type Row, type Tables } from "../store/schema";
-import { normalizeEmail, toMember, toMembership, type Role } from "./model";
+import { isFirstJoin, normalizeEmail, parsePrivate, priceFor, toMember, toMembership, type Plan, type Role } from "./model";
 
 /**
  * Things the crew used to type straight into the sheet, now done on admin screens
@@ -101,6 +103,128 @@ export function planMemberAdd(data: Tables, ctx: Ctx & { input: MemberInput }): 
       ops: [{ type: "append", table: "Members", row }, audit(ctx, commitId, "member.add", memberId, null, row)],
     },
     result: { memberId },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// MEMBERSHIP REGISTRATION (admin, v1.6): calculate → charge (pending) → confirm after the deposit
+// ---------------------------------------------------------------------------
+
+export const REGISTRATION_ADMIN_ONLY = "회원권 등록 계산과 확정은 admin만 할 수 있어요.";
+
+/** The plan whose regular price is the monthly fee (1개월, no bonus). */
+export function monthlyPlan(plans: Plan[]): Plan | null {
+  return plans.find((p) => p.active && p.durationMonths === 1 && p.bonusMonths === 0 && p.price > 0) ?? null;
+}
+
+export type RegistrationRequest =
+  | { kind: "monthly"; months: string[]; start: string }
+  | { kind: "plan"; planId: string; startMonth: string };
+
+/**
+ * An admin prepares a member's registration and the amount to collect. This only
+ * creates a pending charge (Payments, status pending): no membership exists and
+ * no access is granted until the deposit is confirmed (planApproval, admin).
+ *
+ *  - monthly: several months, the first one optionally from a later day, priced
+ *    by calendar days (src/lib/registration.ts) — recomputed here from the plan's
+ *    current price; the client's numbers are never used.
+ *  - plan:    an existing long plan (6+1, 12+2 …) keeps its own price and period,
+ *    exactly like a member's own application; no proration, no combining.
+ *
+ * Double billing is prevented three ways: one open charge per member at a time,
+ * no month already covered by a valid membership, and a request id that makes a
+ * repeated submit the same commit (applied once).
+ */
+export function planRegistration(
+  data: Tables,
+  ctx: Ctx & { memberId: string; depositorName: string; requestId: string; request: RegistrationRequest },
+): Planned {
+  if (ctx.actorRole !== "admin") return { refuse: REGISTRATION_ADMIN_ONLY };
+  if (!/^[A-Za-z0-9-]{8,64}$/.test(ctx.requestId)) return { refuse: "화면을 새로고침한 뒤 다시 시도해 주세요." };
+  const club = parsePrivate(data);
+  const member = club.members.find((m) => m.id === ctx.memberId);
+  if (!member) return { refuse: "회원을 찾을 수 없어요." };
+  if (member.status === "inactive") return { refuse: "이용 중지된 회원이에요. 먼저 회원 상태를 바꿔 주세요." };
+  const depositorName = ctx.depositorName.trim() || member.depositorName || member.name;
+  if (!depositorName || depositorName.length > 20) return { refuse: "입금자명을 20자 이내로 적어 주세요." };
+  if (club.payments.some((p) => p.memberId === member.id && (p.status === "pending" || p.status === "matched"))) {
+    return { refuse: "이 회원에게 입금 확인 대기 중인 청구·신청이 있어요. 먼저 확정하거나 반려해 주세요." };
+  }
+  const todayKey = toDateKey(ctx.now);
+  const thisMonth = earliestStart(todayKey).slice(0, 7);
+  const mine = club.memberships.filter((m) => m.memberId === member.id);
+
+  let plan: Plan;
+  let amount: number;
+  let requestedStart: string;
+  let registration = "";
+  let detail: unknown;
+  if (ctx.request.kind === "monthly") {
+    const monthly = monthlyPlan(club.plans);
+    if (!monthly) return { refuse: "월 회비로 쓸 1개월 회원권 상품(사용 중)이 없어요. 설정에서 확인해 주세요." };
+    const q = quoteRegistration({ months: ctx.request.months, start: ctx.request.start, fee: monthly.price });
+    if ("error" in q) return { refuse: q.error };
+    if (q.months[0] < thisMonth) return { refuse: "지난 달은 등록할 수 없어요. 이번 달부터 골라 주세요." };
+    const taken = q.lines.filter((l) => overlapping(mine, l.start, l.end).length).map((l) => l.month);
+    if (taken.length) return { refuse: `이미 등록된 기간과 겹쳐요: ${taken.map((m) => `${m.slice(0, 4)}년 ${Number(m.slice(5))}월`).join(", ")}` };
+    plan = monthly;
+    amount = q.total;
+    requestedStart = q.start;
+    registration = serializeRegistration(q);
+    detail = { fee: q.fee, lines: q.lines.map((l) => ({ start: l.start, end: l.end, amount: l.amount })), periods: q.periods, total: q.total };
+  } else {
+    const chosen = club.plans.find((p) => p.id === (ctx.request as { planId: string }).planId && p.active);
+    if (!chosen) return { refuse: "회원권 상품을 골라 주세요." };
+    const bounds = monthBounds(ctx.request.startMonth);
+    if (!bounds) return { refuse: "시작 월을 골라 주세요." };
+    if (bounds.start < earliestStart(todayKey)) return { refuse: START_TOO_EARLY };
+    plan = chosen;
+    amount = priceFor(chosen, isFirstJoin(club, member)).amount;
+    requestedStart = bounds.start;
+    detail = { plan: chosen.id, price: amount };
+  }
+
+  // Same request id → same commit id: a double click or retry is applied once.
+  const commitId = `C-REG-${ctx.requestId}`;
+  const paymentId = newId("PAY", ctx.now);
+  const row: Row = {
+    payment_id: paymentId,
+    member_id: member.id,
+    depositor_name: depositorName,
+    amount,
+    plan_id: plan.id,
+    status: "pending",
+    requested_at: seoulIso(ctx.now),
+    requested_start: requestedStart,
+    deposited_at: "",
+    bank_transaction_id: "",
+    approved_by: "",
+    approved_at: "",
+    note: "운영진 등록",
+    registration,
+  };
+  const memberRows = (data.Memberships ?? []).filter((r) => cellText(r.member_id) === member.id);
+  const planRow = (data.Plans ?? []).find((r) => cellText(r.plan_id) === plan.id);
+  return {
+    commit: {
+      id: commitId,
+      checks: [
+        { type: "exists", table: "Members", id: member.id, fields: { status: ["applicant", "active"] } },
+        // The price the amount was computed from must still be the price when this is written.
+        { type: "exists", table: "Plans", id: plan.id, fields: { price: cellText(planRow?.price) } },
+        { type: "absent", table: "Payments", where: { member_id: member.id, status: "pending" } },
+        { type: "absent", table: "Payments", where: { member_id: member.id, status: "matched" } },
+        {
+          type: "snapshot",
+          table: "Memberships",
+          where: { member_id: member.id },
+          rows: Object.fromEntries(memberRows.map((r) => [cellText(r.membership_id), pickText(r, ["start_date", "end_date", "status"])])),
+        },
+      ],
+      ops: [{ type: "append", table: "Payments", row }, audit(ctx, commitId, "registration.create", paymentId, null, { ...row, detail })],
+    },
+    result: { paymentId, amount },
   };
 }
 

@@ -29,7 +29,7 @@ export default function PaymentsPage() {
 async function Payments() {
   if (storeMode() === "unconfigured") return <div className="mx-auto max-w-3xl px-4 py-10"><NotReady /></div>;
   const now = await requestNow();
-  const { club } = await requireOperator("/admin/payments");
+  const { club, member: me } = await requireOperator("/admin/payments");
   const todayKey = toDateKey(now);
   const byRequested = (a: { requestedAt: string }, b: { requestedAt: string }) => a.requestedAt.localeCompare(b.requestedAt);
 
@@ -56,7 +56,7 @@ async function Payments() {
           ) : (
             <div className="flex flex-col gap-3">
               {pending.map((p) => (
-                <PendingPaymentCard key={p.id} payment={p} club={club} todayKey={todayKey} />
+                <PendingPaymentCard key={p.id} payment={p} club={club} todayKey={todayKey} canConfirmRegistration={me.role === "admin"} />
               ))}
             </div>
           )}

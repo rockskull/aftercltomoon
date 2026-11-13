@@ -30,7 +30,7 @@ var TABLES = {
     'member_consent_at', 'memo'],
   Plans: ['plan_id', 'name', 'price', 'first_price', 'duration_months', 'bonus_months', 'active', 'sort_order', 'description'],
   Payments: ['payment_id', 'member_id', 'depositor_name', 'amount', 'plan_id', 'status', 'requested_at',
-    'requested_start', 'deposited_at', 'bank_transaction_id', 'approved_by', 'approved_at', 'note'],
+    'requested_start', 'deposited_at', 'bank_transaction_id', 'approved_by', 'approved_at', 'note', 'registration'],
   Memberships: ['membership_id', 'member_id', 'plan_id', 'start_date', 'end_date', 'status', 'source_payment_id',
     'created_at', 'updated_at', 'note'],
   Notifications: ['notification_id', 'member_id', 'type', 'title', 'body', 'url', 'scheduled_at', 'sent_at', 'status',

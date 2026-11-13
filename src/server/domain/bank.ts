@@ -145,6 +145,8 @@ export interface MatchCandidate {
   planName: string;
   requestedAt: string;
   notes: string[];
+  /** A MEMBERSHIP REGISTRATION charge: fixed months, confirmed by an admin, no start-month change. */
+  registration: boolean;
 }
 
 export interface DepositMatch {
@@ -186,9 +188,10 @@ export function matchDeposits(deposits: Deposit[], club: ClubPrivate, todayKey: 
           memberName: m?.name ?? p.memberId,
           depositorName: p.depositorName,
           amount: p.amount,
-          planName: planName(p.planId),
+          planName: p.registration ? `월 단위 등록 ${p.registration.months.length}개월` : planName(p.planId),
           requestedAt: p.requestedAt,
           notes,
+          registration: Boolean(p.registration),
         };
       };
       const nameMatches = (p: (typeof open)[number]) => {

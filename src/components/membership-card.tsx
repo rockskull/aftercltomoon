@@ -1,6 +1,6 @@
 import Image from "next/image";
 import moon from "@/app/icon.png";
-import { accessUntil, currentMembership, inclusiveDays, membershipPhase } from "@/lib/membership";
+import { continuousUntil, currentMembership, inclusiveDays, membershipPhase } from "@/lib/membership";
 import type { Member, Membership, Payment, Plan } from "@/server/domain/model";
 import { cn } from "./ui";
 
@@ -26,15 +26,16 @@ export function summarizeMembership(args: {
   const mine = args.memberships.filter((m) => m.memberId === args.memberId);
   const current = currentMembership(mine, args.todayKey);
   const pending = args.payments.find((p) => p.memberId === args.memberId && (p.status === "pending" || p.status === "matched")) ?? null;
-  const until = accessUntil(mine, args.todayKey);
   const plan = args.plans.find((p) => p.id === current?.planId) ?? null;
 
   if (current) {
     const phase = membershipPhase(current, args.todayKey);
+    // Uninterrupted access only: a month left out of a registration ends the stretch.
     if (phase === "active") {
-      return { phase: "active", current, plan, validUntil: until, daysLeft: inclusiveDays(args.todayKey, until!), pending };
+      const until = continuousUntil(mine, args.todayKey) ?? current.endDate;
+      return { phase: "active", current, plan, validUntil: until, daysLeft: inclusiveDays(args.todayKey, until), pending };
     }
-    if (phase === "scheduled") return { phase: "scheduled", current, plan, validUntil: until, daysLeft: 0, pending };
+    if (phase === "scheduled") return { phase: "scheduled", current, plan, validUntil: continuousUntil(mine, current.startDate) ?? current.endDate, daysLeft: 0, pending };
   }
   if (pending) return { phase: "pending", current, plan, validUntil: null, daysLeft: 0, pending };
   if (current) return { phase: "expired", current, plan, validUntil: current.endDate, daysLeft: 0, pending };

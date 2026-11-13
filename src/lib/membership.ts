@@ -120,6 +120,24 @@ export function accessUntil(memberships: MembershipPeriod[], todayKey: string): 
   return ends.at(-1) ?? null;
 }
 
+/**
+ * Last day of uninterrupted access starting at `fromKey` (which must be covered):
+ * follows back-to-back memberships and stops at the first gap, so a registration
+ * of 12월 + 1월 + 3월 reads "until 01.31", not "until 03.31". null when `fromKey`
+ * itself isn't covered.
+ */
+export function continuousUntil(memberships: MembershipPeriod[], fromKey: string): string | null {
+  const rows = valid(memberships);
+  const covers = (day: string) => rows.some((m) => m.startDate <= day && day <= m.endDate);
+  if (!covers(fromKey)) return null;
+  let day = fromKey;
+  for (;;) {
+    const end = rows.filter((m) => m.startDate <= day && m.endDate >= day).map((m) => m.endDate).sort().at(-1)!;
+    if (!covers(addDays(end, 1))) return end;
+    day = addDays(end, 1);
+  }
+}
+
 /** Days of access left including today (today = last day → 1). 0 when not in effect. */
 export function daysLeft(m: MembershipPeriod, todayKey: string): number {
   if (membershipPhase(m, todayKey) !== "active") return 0;
