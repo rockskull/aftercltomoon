@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 import { InstallHint } from "@/components/client-bits";
+import { ClubNotice } from "@/components/club-notice";
+import { MemberBanner } from "@/components/member-banner";
 import { dotDate, MembershipCard, summarizeMembership } from "@/components/membership-card";
 import { SiteFooter, SiteHeader } from "@/components/site";
 import { ArrowRight, cn, NotReady } from "@/components/ui";
@@ -24,6 +26,9 @@ export default function MePage() {
     <>
       <SiteHeader current="me" />
       <main className="paper flex-1">
+        <Suspense fallback={null}>
+          <MemberBanner />
+        </Suspense>
         <div className="mx-auto max-w-2xl px-4 py-8 md:py-12">
           <Suspense fallback={<MeSkeleton />}>
             <MyMembership />
@@ -110,12 +115,15 @@ async function MyMembership() {
       )}
 
       {member && !member.consentAt && !inactive && (
+        // Registration starts here for members without a confirmed consent form (REGISTER MEMBERSHIP → /me#apply).
+        <div id="apply" className="scroll-mt-4">
         <Panel title="회원 등록 동의서">
           <p className="mb-4 text-[14px] leading-relaxed text-ink-soft">
             아직 회원 등록 동의서 제출이 확인되지 않았어요. 동의서를 제출하고 확인해 주세요. 확인 후 회원권을 신청·연장할 수 있어요.
           </p>
           <ConsentConfirm url={club.settings.consent.member} />
         </Panel>
+        </div>
       )}
 
       {inactive ? (
@@ -126,6 +134,7 @@ async function MyMembership() {
         !summary.pending &&
         activePlans.length > 0 &&
         (!member || member.consentAt) && (
+          <div id="apply" className="scroll-mt-4">
           <Panel title={summary.phase === "active" || summary.phase === "scheduled" ? "회원권 연장 신청" : "회원권 신청"}>
             <p className="mb-5 text-[14px] leading-relaxed text-ink-soft">
               신청하면 운영진에게 전달돼요. 회비와 납부 방법은 회원 등록 동의서와 크루 단톡방 안내를 따라 주세요. 운영진이 확인하면
@@ -147,8 +156,12 @@ async function MyMembership() {
               consentUrl={member ? null : club.settings.consent.member}
             />
           </Panel>
+          </div>
         )
       )}
+
+      <ClubNotice headingId="me-notice-title" />
+
 
       {(myMemberships.length > 0 || myPayments.length > 0) && (
         <Panel title="기록">

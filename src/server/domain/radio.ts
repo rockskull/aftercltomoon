@@ -3,6 +3,7 @@ import type { Check, Op } from "../store/commit";
 import { newId, seoulIso } from "../store/ids";
 import { cellText, type Row, type Tables } from "../store/schema";
 import { normalizeEmail, toMember, type Member } from "./model";
+import { participantCheck } from "./operations";
 
 /**
  * AFTER HOURS RADIO rules. Signed-in members add tracks straight to the end of
@@ -99,11 +100,6 @@ export function memberByEmail(tables: Tables, email: string): Member | null {
   return (tables.Members ?? []).map(toMember).find((m) => m.email === target) ?? null;
 }
 
-/** Club members (Members tab) may add tracks; a suspended account may not. */
-export function canAddTrack(member: Member | null): member is Member {
-  return Boolean(member && (member.status === "active" || member.status === "applicant"));
-}
-
 export function isRadioAdmin(member: Member | null): member is Member {
   return Boolean(member && member.status === "active" && member.role === "admin");
 }
@@ -142,8 +138,11 @@ export function planAddTrack(
   ctx: { now: number; email: string; sessionName: string; input: TrackInput },
 ): Planned<{ track: StoredTrack; position: number }> {
   if (data.RadioTracks === undefined) return { refuse: RADIO_TAB_MISSING };
+  // ACTIVE MEMBERS ONLY: a membership in effect (or active staff), checked on the data this write is planned from.
+  const blocked = participantCheck(data, ctx.email, ctx.now);
+  if (blocked) return { refuse: blocked };
   const member = memberByEmail(data, ctx.email);
-  if (!canAddTrack(member)) return { refuse: "곡 신청은 클럽 회원만 할 수 있어요. 회원권을 신청하면 함께할 수 있어요." };
+  if (!member) return { refuse: "회원 정보를 찾을 수 없어요." };
 
   const title = ctx.input.title.trim();
   const artist = ctx.input.artist.trim();

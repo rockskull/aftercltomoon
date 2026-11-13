@@ -1,4 +1,5 @@
-// Builds the four MOON STAMPS artworks → public/stamps/st-0N.svg (run once; commit the SVGs).
+// Builds the six MOON STAMPS artworks → public/stamps/st-0N.svg (run once; commit the SVGs).
+// Each stamp has its own seed, so changing one design never moves another's pixels.
 //
 //   npm run stamps:build
 //
@@ -277,6 +278,63 @@ function arcText(font, text, { size, r, arcDeg, mode, minSpacing = 3, maxSpacing
   return { contours, halfDeg: (theta / 2) * (180 / Math.PI) };
 }
 
+/**
+ * Straight text centred on (cx, cy) by its real outline bounds, `width` wide.
+ * Returns one contour list per character so parts can take different colours.
+ */
+function blockText(font, text, { width, cx, cy, tracking = 0 }) {
+  const chars = [...text];
+  const unit = chars.reduce((a, ch) => a + font.getAdvanceWidth(ch, 100), 0) / 100;
+  const size = (width - tracking * (chars.length - 1)) / unit;
+  let x = 0;
+  const glyphs = chars.map((ch) => {
+    const g = glyphContours(font, ch, size).map((c) => c.map(([gx, gy]) => [x + gx, gy]));
+    x += font.getAdvanceWidth(ch, size) + tracking;
+    return g;
+  });
+  const all = glyphs.flat(2);
+  const minX = Math.min(...all.map((p) => p[0]));
+  const maxX = Math.max(...all.map((p) => p[0]));
+  const minY = Math.min(...all.map((p) => p[1]));
+  const maxY = Math.max(...all.map((p) => p[1]));
+  const dx = cx - (minX + maxX) / 2;
+  const dy = cy - (minY + maxY) / 2;
+  return glyphs.map((g) => g.map((c) => c.map(([px, py]) => [px + dx, py + dy])));
+}
+
+/**
+ * The lit part of a moon. `phase` runs 0 → 1 over one cycle: 0 new, 0.5 full;
+ * waxing is lit on the right, waning on the left.
+ */
+function moonLit(cx, cy, r, phase) {
+  const waxing = phase <= 0.5;
+  const side = waxing ? 1 : -1;
+  const k = Math.cos(phase * TAU); // where the terminator sits, as a share of the limb
+  const n = 40;
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const a = -Math.PI / 2 + (i / n) * Math.PI;
+    pts.push([cx + side * r * Math.cos(a), cy + r * Math.sin(a)]);
+  }
+  for (let i = n - 1; i >= 1; i--) {
+    const a = -Math.PI / 2 + (i / n) * Math.PI;
+    pts.push([cx + side * k * r * Math.cos(a), cy + r * Math.sin(a)]);
+  }
+  return pts;
+}
+
+/** Short dashes along a circular arc (an orbit drawn by hand). */
+function dashedArc(cx, cy, r, fromDeg, toDeg, { dash = 16, gap = 13, w = 4.5 } = {}) {
+  const out = [];
+  const len = ((toDeg - fromDeg) * Math.PI * r) / 180;
+  for (let s = 0; s + dash <= len; s += dash + gap) {
+    const a1 = (fromDeg * Math.PI) / 180 + s / r;
+    const a2 = a1 + dash / r;
+    out.push(capsule(cx + r * Math.cos(a1), cy + r * Math.sin(a1), cx + r * Math.cos(a2), cy + r * Math.sin(a2), w));
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // SVG output
 // ---------------------------------------------------------------------------
@@ -333,6 +391,7 @@ function stampSvg(spec, fonts) {
     fill: (color, contours, o = {}) => art.push({ fill: color, d: pathOf(oriented(contours), o.digits ?? 1), rule: o.rule, opacity: o.opacity }),
     rough: (pts, o) => roughen(pts, rnd, { amp: 1.3, grit: 0.35, step: 3, ...o }),
     rnd,
+    fonts,
   });
 
   // Ink texture: specks of paper showing through, more of them on the worn rim.
@@ -373,8 +432,34 @@ function stampSvg(spec, fonts) {
 }
 
 // ---------------------------------------------------------------------------
-// The four stamps
+// The six stamps
 // ---------------------------------------------------------------------------
+
+const speck = (rough, [x, y, r]) => rough(circle(x, y, r, 1.5), { amp: 0.3, grit: 0.2, step: 1.5 });
+const rotate = (pts, cx, cy, deg) => {
+  const a = (deg * Math.PI) / 180;
+  return pts.map(([x, y]) => [cx + (x - cx) * Math.cos(a) - (y - cy) * Math.sin(a), cy + (x - cx) * Math.sin(a) + (y - cy) * Math.cos(a)]);
+};
+const polar = (r, deg) => [CX + r * Math.cos((deg * Math.PI) / 180), CY + r * Math.sin((deg * Math.PI) / 180)];
+const text = (fill, rough, color, glyphs) =>
+  fill(color, glyphs.flat().map((c) => rough(c, { amp: 0.8, grit: 0.3, step: 2.5 })), { rule: "evenodd" });
+
+/** One moon on an orbit: a navy gap so the orbit line stops short of it, the dim disc, the lit part. */
+function phaseMoon(fill, rough, x, y, r, phase) {
+  fill(C.navy, [circle(x, y, r + 10, 2)]);
+  fill(C.cream, [rough(circle(x, y, r, 2), { amp: 0.6, grit: 0.25, step: 2 })], { opacity: 0.17 });
+  fill(C.cream, [rough(moonLit(x, y, r, phase), { amp: 0.55, grit: 0.25, step: 2 })]);
+}
+
+/** A bonus month: a full butter moon with a couple of faint craters. */
+function bonusMoon(fill, rough, x, y, r) {
+  fill(C.navy, [circle(x, y, r + 10, 2)]);
+  fill(C.butter, [rough(circle(x, y, r, 2), { amp: 0.8, grit: 0.25, step: 2 })]);
+  fill(C.navy, [
+    [x - r * 0.3, y - r * 0.25, r * 0.22],
+    [x + r * 0.32, y + r * 0.22, r * 0.15],
+  ].map(([cx, cy, cr]) => rough(circle(cx, cy, cr, 1.5), { amp: 0.3, grit: 0.2, step: 1.5 })), { opacity: 0.16 });
+}
 
 const STAMPS = [
   {
@@ -403,51 +488,49 @@ const STAMPS = [
   {
     id: "ST-02",
     file: "st-02",
-    name: "FIRST TOP",
-    seed: 202,
-    // A hand reaching the top hold: the first send.
-    draw({ fill, rough, rnd }) {
-      // the hold
-      fill(C.butter, [rough(blob(500, 318, 120, 66, rnd, 0.1), { amp: 1.4 })]);
-      fill(C.navy, [rough(circle(500, 300, 13, 2), { amp: 0.4, grit: 0.2, step: 1.5 })]);
-      fill(C.cream, [rough(capsule(430, 292, 462, 276, 9), { amp: 0.4, grit: 0.2, step: 1.5 })]);
-      // sparks above it
+    name: "100 HOLDS",
+    seed: 212,
+    // One long route of same-colour holds looping around a big "100": the
+    // designated 100-hold endurance problem, climbed in one go.
+    draw({ fill, rough, rnd, fonts }) {
+      const FROM = 122; // start, bottom left
+      const SWEEP = 274; // along the bottom, up the right, over the top → finish upper left
+      const R = 236;
+      const along = (t) => FROM - t * SWEEP;
+      const holds = [];
+      const N = 23;
+      for (let i = 0; i < N; i++) {
+        const t = i / (N - 1);
+        const last = i === N - 1;
+        const [x, y] = polar(R + (i % 2 ? 13 : -11) + (rnd() - 0.5) * 6, along(t));
+        const s = last ? 28 : i === 0 ? 21 : 14.5 + rnd() * 8.5;
+        holds.push({ x, y, s, last, rx: s * (1 + rnd() * 0.35), ry: s * (0.68 + rnd() * 0.25), rot: rnd() * 180 });
+      }
+      // the climber's line, a dotted trail that steps around the holds
+      const trail = [];
+      const len = (SWEEP * Math.PI * R) / 180;
+      for (let s = 0; s <= len; s += 13) {
+        const [x, y] = polar(R, along(s / len));
+        if (holds.every((h) => Math.hypot(h.x - x, h.y - y) > h.s * 1.25 + 7)) trail.push(rough(circle(x, y, 2.6, 1), { amp: 0.25, grit: 0.15, step: 1 }));
+      }
+      fill(C.cream, trail, { opacity: 0.62 });
+      // start tape under the first hold
+      const first = holds[0];
       fill(C.cream, [
-        capsule(500, 238, 500, 212, 10),
-        capsule(430, 252, 410, 230, 9),
-        capsule(570, 252, 590, 230, 9),
-      ].map((c) => rough(c, { amp: 0.5, grit: 0.25, step: 2 })));
-      // the hand: wrist, palm, thumb, four fingers (one cream shape)
-      const hand = [
-        [[442, 690], [563, 690], [572, 860], [434, 860]],
-        [[418, 522], [586, 528], [594, 642], [566, 702], [440, 702], [410, 640]],
-      ].map((poly) => rough(poly, { amp: 1.2 }));
-      hand.push(
-        rough(capsule(424, 606, 368, 508, 46), { amp: 1 }),
-        rough(capsule(448, 545, 441, 394, 40), { amp: 0.9 }),
-        rough(capsule(488, 540, 488, 374, 41), { amp: 0.9 }),
-        rough(capsule(528, 543, 535, 388, 40), { amp: 0.9 }),
-        rough(capsule(565, 556, 578, 430, 36), { amp: 0.9 }),
-      );
-      fill(C.cream, hand);
-      // finger gaps and a knuckle crease
-      fill(C.navy, [
-        capsule(468, 470, 468, 534, 5),
-        capsule(508, 466, 508, 534, 5),
-        capsule(547, 482, 546, 540, 5),
-        capsule(452, 620, 500, 628, 5),
-      ].map((c) => rough(c, { amp: 0.3, grit: 0.2, step: 1.5 })));
-      // the sleeve cuff
-      fill(C.butter, [rough([[432, 738], [574, 738], [577, 790], [429, 790]], { amp: 1 })]);
-      // chalk
-      fill(C.cream, [
-        [392, 380, 4.5],
-        [612, 364, 3.5],
-        [376, 432, 3.5],
-        [630, 408, 4.5],
-        [414, 342, 3],
-        [600, 470, 3],
-      ].map(([x, y, r]) => rough(circle(x, y, r, 1.5), { amp: 0.3, grit: 0.2, step: 1.5 })), { opacity: 0.9 });
+        capsule(first.x - 14, first.y + 26, first.x + 4, first.y + 30, 6),
+        capsule(first.x + 10, first.y + 28, first.x + 28, first.y + 22, 6),
+      ].map((c) => rough(c, { amp: 0.3, grit: 0.2, step: 1.5 })), { opacity: 0.85 });
+      // the holds: one colour, like a set route
+      fill(C.butter, holds.map((h) => rough(rotate(blob(h.x, h.y, h.rx, h.ry, rnd, 0.14), h.x, h.y, h.rot), { amp: 0.7, grit: 0.25, step: 2 })));
+      fill(C.navy, holds.filter((h) => h.s > 17).map((h) => speck(rough, [h.x + 1, h.y - 1, h.last ? 5 : 3.6])), { opacity: 0.8 });
+      // the finish: sparkle over the last hold
+      const top = holds[N - 1];
+      fill(C.cream, [rough(sparkle(top.x + 8, top.y - 58, 22), { amp: 0.4, grit: 0.2, step: 1.5 })]);
+      // the number
+      text(fill, rough, C.butter, blockText(fonts.shoulders, "100", { width: 300, cx: 500, cy: 474, tracking: 12 }));
+      text(fill, rough, C.cream, blockText(fonts.jost, "ENDURANCE", { width: 236, cx: 500, cy: 606, tracking: 9 }));
+      // chalk in the open side
+      fill(C.cream, [[270, 560, 4.5], [298, 610, 3.2], [252, 498, 3.4], [316, 662, 2.8]].map((d) => speck(rough, d)), { opacity: 0.85 });
     },
   },
   {
@@ -559,6 +642,56 @@ const STAMPS = [
         [300, 570, 3.5],
         [640, 450, 3],
       ].map(([x, y, r]) => rough(circle(x, y, r, 1.5), { amp: 0.3, grit: 0.2, step: 1.5 })));
+    },
+  },
+  {
+    id: "ST-05",
+    file: "st-05",
+    name: "SIX MOONS",
+    seed: 505,
+    // Half an orbit (half a year): six moon phases, then one bonus full moon. 6 + 1.
+    draw({ fill, rough, fonts }) {
+      const R = 224;
+      fill(C.cream, dashedArc(CX, CY, R, 183, 357).map((c) => rough(c, { amp: 0.3, grit: 0.2, step: 1.5 })), { opacity: 0.45 });
+      for (let i = 0; i < 7; i++) {
+        const [x, y] = polar(R, 180 + (180 * (i + 0.5)) / 7);
+        if (i < 6) phaseMoon(fill, rough, x, y, 33, (i + 1) / 7);
+        else {
+          bonusMoon(fill, rough, x, y, 38);
+          fill(C.cream, [rough(sparkle(x + 30, y - 46, 15), { amp: 0.3, grit: 0.2, step: 1.2 })]);
+        }
+      }
+      const [six, plus, one] = blockText(fonts.shoulders, "6+1", { width: 276, cx: 500, cy: 540, tracking: 14 });
+      text(fill, rough, C.cream, [six]);
+      text(fill, rough, C.butter, [plus, one]);
+      text(fill, rough, C.cream, blockText(fonts.jost, "MONTHS", { width: 180, cx: 500, cy: 676, tracking: 10 }));
+      fill(C.cream, [rough(sparkle(336, 700, 14), { amp: 0.3, grit: 0.2, step: 1.2 }), rough(sparkle(668, 704, 11), { amp: 0.3, grit: 0.2, step: 1.2 })]);
+      fill(C.cream, [[392, 752, 3.5], [612, 760, 3], [300, 620, 3], [700, 612, 3.5]].map((d) => speck(rough, d)));
+    },
+  },
+  {
+    id: "ST-06",
+    file: "st-06",
+    name: "TWELVE MOONS",
+    seed: 606,
+    // A full orbit (a year and then some): twelve moon phases, then two bonus
+    // full moons meeting at the top. 12 + 2. The pair of SIX MOONS.
+    draw({ fill, rough, fonts }) {
+      const R = 236;
+      const n = 14;
+      const step = 360 / n;
+      const start = -90 - 12.5 * step; // puts the two bonus moons either side of the top
+      fill(C.cream, dashedArc(CX, CY, R, 0, 360, { dash: 14, gap: 12 }).map((c) => rough(c, { amp: 0.3, grit: 0.2, step: 1.5 })), { opacity: 0.45 });
+      for (let i = 0; i < n; i++) {
+        const [x, y] = polar(R, start + i * step);
+        if (i < 12) phaseMoon(fill, rough, x, y, 25, (i + 1) / 13);
+        else bonusMoon(fill, rough, x, y, 28);
+      }
+      fill(C.cream, [rough(sparkle(500, 222, 13), { amp: 0.3, grit: 0.2, step: 1.2 })]);
+      const [one, two, plus, bonus] = blockText(fonts.shoulders, "12+2", { width: 300, cx: 500, cy: 478, tracking: 12 });
+      text(fill, rough, C.cream, [one, two]);
+      text(fill, rough, C.butter, [plus, bonus]);
+      text(fill, rough, C.cream, blockText(fonts.jost, "MONTHS", { width: 168, cx: 500, cy: 604, tracking: 10 }));
     },
   },
 ];

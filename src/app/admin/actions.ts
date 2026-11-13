@@ -16,6 +16,7 @@ import { planDeleteTrack, planEditTrack, planMoveTrack, planRestoreTrack } from 
 import {
   planEnrollmentSave,
   planMemberAdd,
+  planMembershipGrant,
   planPlanSave,
   planSettingsSave,
   planStampDefinitionSave,
@@ -194,6 +195,24 @@ export async function addMember(_prev: AdminState, fd: FormData): Promise<AdminS
     }),
   );
   return outcome.ok ? done("회원을 추가했어요. 그 메일로 Google 로그인하면 바로 회원으로 보여요.") : { status: "error", message: outcome.message };
+}
+
+export async function grantMembership(_prev: AdminState, fd: FormData): Promise<AdminState> {
+  const op = await operatorForAction();
+  if (!op) return DENIED;
+  const outcome = await runCommit(NEEDS.membershipGrant, (data) =>
+    planMembershipGrant(data, {
+      now: Date.now(),
+      actorId: op.member.id,
+      actorRole: op.member.role,
+      memberId: field(fd, "member_id"),
+      planId: field(fd, "plan_id"),
+      startMonth: field(fd, "start_month"),
+      endMonth: field(fd, "end_month"),
+      reason: field(fd, "reason"),
+    }),
+  );
+  return outcome.ok ? done("회원권을 등록했어요. 이용 기간 동안 클럽 참여 기능이 열려요.") : { status: "error", message: outcome.message };
 }
 
 export async function savePlan(_prev: AdminState, fd: FormData): Promise<AdminState> {

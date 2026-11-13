@@ -3,8 +3,11 @@
 import { refresh, updateTag } from "next/cache";
 import { after } from "next/server";
 import { toDateKey } from "@/lib/dates";
+import { isStampId, type MyStamp } from "@/lib/stamps";
 import { deliverDue } from "@/server/notify";
 import { getViewer } from "@/server/auth/viewer";
+import { memberStamps } from "@/server/domain/stamps";
+import { STAMP_TABLES } from "@/server/store/schema";
 import {
   NEEDS,
   planApplication,
@@ -14,7 +17,7 @@ import {
   planSubscribe,
   planUnsubscribe,
 } from "@/server/domain/operations";
-import { PRIVATE_TAG, runCommit } from "@/server/store";
+import { PRIVATE_TAG, readTables, runCommit } from "@/server/store";
 
 export interface ActionState {
   status: "idle" | "success" | "error";
@@ -149,6 +152,26 @@ export async function unsubscribePush(endpoint: string): Promise<{ ok: boolean; 
   );
   updateTag(PRIVATE_TAG);
   return outcome.ok ? { ok: true } : { ok: true, message: outcome.message };
+}
+
+/**
+ * MOON STAMPS share: before the browser draws a share image, the server confirms
+ * from a fresh read that the signed-in member really holds this stamp (a revoked
+ * or never-issued stamp can't be shared). Read-only — nothing is written. Only
+ * the stamp's public facts come back: no award id, issuer or operator note.
+ */
+export async function stampForShare(stampId: unknown): Promise<{ ok: true; stamp: MyStamp } | { ok: false; message: string }> {
+  if (typeof stampId !== "string" || !isStampId(stampId)) return { ok: false, message: "스탬프를 확인하지 못했어요." };
+  const viewer = await getViewer({ fresh: true });
+  if (!viewer?.member) return { ok: false, message: "로그인한 회원만 스탬프를 공유할 수 있어요." };
+  try {
+    const stamp = memberStamps(await readTables(STAMP_TABLES, { fresh: true }), viewer.member.id).find((s) => s.id === stampId);
+    if (!stamp || stamp.awardedAt === null) return { ok: false, message: "받은 스탬프만 공유할 수 있어요." };
+    return { ok: true, stamp };
+  } catch (error) {
+    console.error("[stamps] share check failed", error);
+    return { ok: false, message: "스탬프 기록을 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요." };
+  }
 }
 
 export async function markAllRead(): Promise<void> {

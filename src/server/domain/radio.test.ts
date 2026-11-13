@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { guessTrack, RADIO_SEED, youtubeVideoId } from "@/lib/radio";
 import { applyCommit } from "../store/commit";
+import { MEMBERSHIP_REQUIRED_REFUSAL } from "./operations";
 import { demoTables, MemoryStore } from "../store/memory";
 import type { Row, Tables } from "../store/schema";
 import {
@@ -27,8 +28,17 @@ function tables(): Tables {
       member("ADMIN", "admin@x.dev", "admin"),
       member("OPER", "oper@x.dev", "operator"),
       member("AMY", "amy@x.dev"),
-      member("NEW", "new@x.dev", "member", "applicant"),
+      member("NEW", "new@x.dev"),
+      member("OLD", "old@x.dev"),
+      member("APP", "app@x.dev", "member", "applicant"),
       member("GONE", "gone@x.dev", "member", "inactive"),
+    ],
+    // AMY and NEW are members this month; OLD's membership ended in August; APP never had one.
+    Memberships: [
+      { membership_id: "MS-AMY", member_id: "AMY", plan_id: "1M", start_date: "2026-11-01", end_date: "2026-11-30", status: "active" },
+      { membership_id: "MS-NEW", member_id: "NEW", plan_id: "1M", start_date: "2026-11-01", end_date: "2026-11-30", status: "active" },
+      { membership_id: "MS-OLD", member_id: "OLD", plan_id: "1M", start_date: "2026-08-01", end_date: "2026-08-31", status: "active" },
+      { membership_id: "MS-GONE", member_id: "GONE", plan_id: "1M", start_date: "2026-11-01", end_date: "2026-11-30", status: "active" },
     ],
     RadioTracks: seedRows(RADIO_SEED, "2026-11-12T20:00:00+09:00"),
     AuditLog: [],
@@ -143,10 +153,19 @@ describe("adding a track", () => {
     expect(withName("가".repeat(41))).toEqual({ refuse: "이름은 40자까지 쓸 수 있어요." });
   });
 
-  it("is for club members only (an applicant may, a suspended account or a stranger may not)", () => {
+  it("ACTIVE MEMBERS ONLY: a membership in effect (or active staff); expired, applicants, suspended and strangers can't", () => {
     expect(add(tables(), "new@x.dev")).not.toHaveProperty("refuse");
-    expect(add(tables(), "gone@x.dev")).toHaveProperty("refuse");
-    expect(add(tables(), "stranger@gmail.com")).toHaveProperty("refuse");
+    expect(add(tables(), "oper@x.dev")).not.toHaveProperty("refuse"); // staff without a membership
+    for (const email of ["old@x.dev", "app@x.dev", "gone@x.dev", "stranger@gmail.com"]) {
+      expect(add(tables(), email), email).toEqual({ refuse: MEMBERSHIP_REQUIRED_REFUSAL });
+    }
+  });
+
+  it("access comes back as soon as a renewal is confirmed", () => {
+    const data = tables();
+    expect(add(data, "old@x.dev")).toEqual({ refuse: MEMBERSHIP_REQUIRED_REFUSAL });
+    data.Memberships!.push({ membership_id: "MS-OLD-2", member_id: "OLD", plan_id: "1M", start_date: "2026-11-01", end_date: "2026-11-30", status: "active" });
+    expect(add(data, "old@x.dev")).not.toHaveProperty("refuse");
   });
 
   it("refuses a video that is already on the list, naming the track", () => {

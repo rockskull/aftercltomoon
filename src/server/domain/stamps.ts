@@ -1,12 +1,14 @@
 import { toDateKey } from "@/lib/dates";
-import { isStampId, STAMP_CATALOG, stampImageSrc, type MyStamp, type StampId, type StampInfo } from "@/lib/stamps";
+import { isStampId, STAMP_CATALOG, STAMP_PLAN_TERMS, stampImageSrc, type MyStamp, type StampId, type StampInfo } from "@/lib/stamps";
+import type { Membership, Plan } from "./model";
 import type { Check, Op } from "../store/commit";
 import { newId, seoulIso } from "../store/ids";
 import { cellText, type Row, type Tables } from "../store/schema";
 
 /**
- * MOON STAMPS: four fixed stamps, issued by hand by operators (no automatic
- * checks, no attendance tracking). One stamp of each kind per member.
+ * MOON STAMPS: six fixed stamps, issued by hand by operators (no automatic
+ * checks, no attendance or hold counting, no auto-issue on membership). One
+ * stamp of each kind per member.
  */
 
 export interface StampDefinition extends StampInfo {
@@ -35,9 +37,9 @@ function isFalse(value: unknown): boolean {
 }
 
 /**
- * Exactly the four stamps, in order. The StampDefinitions tab can reword the
+ * Exactly the six stamps, in order. The StampDefinitions table can reword the
  * name/description or switch a stamp off; anything else in it is ignored
- * (unknown ids, ST-05, …). A missing or empty tab simply means the defaults.
+ * (unknown ids, ST-07, …). A missing row simply means the defaults.
  */
 export function stampDefinitions(tables: Tables): StampDefinition[] {
   const rows = tables.StampDefinitions ?? [];
@@ -91,9 +93,36 @@ export function memberStamps(tables: Tables, memberId: string): MyStamp[] {
       id: d.id,
       name: d.name,
       description: d.description,
+      subtitle: d.subtitle ?? null,
+      motto: d.motto ?? null,
       imageSrc: stampImageSrc(d.imageKey, d.id),
       awardedAt: mine.has(d.id) ? mine.get(d.id)!.awardedAt : null,
     }));
+}
+
+/**
+ * For the crew only, next to ST-05 SIX MOONS / ST-06 TWELVE MOONS: this member's
+ * registrations on a plan with the matching terms (6 + 1 / 12 + 2 months).
+ * Reference, not a rule — nothing is issued automatically, and the plan's
+ * current terms are used (a plan edited later would read differently).
+ * Canceled/refunded registrations don't count. Other stamps: always [].
+ */
+export function stampPlanEvidence(
+  stampId: StampId,
+  memberId: string,
+  memberships: Membership[],
+  plans: Plan[],
+): Array<{ membershipId: string; planName: string; startDate: string; endDate: string }> {
+  const terms = STAMP_PLAN_TERMS[stampId];
+  if (!terms) return [];
+  return memberships
+    .filter((m) => m.memberId === memberId && m.status === "active")
+    .flatMap((m) => {
+      const plan = plans.find((p) => p.id === m.planId);
+      if (!plan || plan.durationMonths !== terms.durationMonths || plan.bonusMonths !== terms.bonusMonths) return [];
+      return [{ membershipId: m.id, planName: plan.name || plan.id, startDate: m.startDate, endDate: m.endDate }];
+    })
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
 }
 
 /** Shown when the deployed Apps Script version predates the stamp tabs (it leaves them out of reads). */

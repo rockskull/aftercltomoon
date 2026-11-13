@@ -14,7 +14,8 @@
     "stamps:build": "node scripts/stamps/build-stamps.mjs",
     "db:status": "node scripts/db/status.mjs",
     "db:migrate": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/db/migrate-from-sheet.mjs",
-    "db:compare": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/db/compare-sheet.mjs"
+    "db:compare": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/db/compare-sheet.mjs",
+    "db:v14-stamps": "node scripts/db/v14-stamps.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "1.2.0",

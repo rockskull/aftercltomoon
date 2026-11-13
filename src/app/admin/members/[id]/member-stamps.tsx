@@ -1,8 +1,8 @@
 import Image from "next/image";
 import { dotDate } from "@/components/membership-card";
-import { stampImageSrc } from "@/lib/stamps";
-import type { Member } from "@/server/domain/model";
-import { STAMP_TABS_MISSING, stampAwards, stampDefinitions } from "@/server/domain/stamps";
+import { STAMP_PLAN_TERMS, stampImageSrc } from "@/lib/stamps";
+import type { Member, Membership, Plan } from "@/server/domain/model";
+import { STAMP_TABS_MISSING, stampAwards, stampDefinitions, stampPlanEvidence } from "@/server/domain/stamps";
 import { readTables, storeMode } from "@/server/store";
 import { STAMP_TABLES } from "@/server/store/schema";
 import { awardStamp, revokeStamp } from "../../actions";
@@ -11,9 +11,23 @@ import { Box, Pill, smallButton, smallInput, smallPrimary } from "../../shared";
 
 /**
  * MOON STAMPS for one member. Operators issue a stamp after checking the moment
- * themselves; there is no automatic judging or attendance tracking.
+ * themselves; there is no automatic judging, hold counting or attendance
+ * tracking. For SIX MOONS / TWELVE MOONS the member's matching registrations are
+ * shown as a reference only.
  */
-export async function MemberStamps({ member, members, todayKey }: { member: Member; members: Member[]; todayKey: string }) {
+export async function MemberStamps({
+  member,
+  members,
+  memberships,
+  plans,
+  todayKey,
+}: {
+  member: Member;
+  members: Member[];
+  memberships: Membership[];
+  plans: Plan[];
+  todayKey: string;
+}) {
   let tables;
   try {
     tables = await readTables(STAMP_TABLES, { admin: true });
@@ -40,11 +54,13 @@ export async function MemberStamps({ member, members, todayKey }: { member: Memb
   return (
     <Box title="Moon stamps">
       <p className="mb-3 text-[13px] leading-relaxed text-ink-soft">
-        활동을 직접 확인한 뒤 발급해 주세요. 종류별로 한 번만 발급돼요. 메모는 운영진만 보고, 회원 화면과 카드에는 나오지 않아요.
+        활동을 직접 확인한 뒤 발급해 주세요. 종류별로 한 번만 발급돼요. 메모는 운영진만 보고, 회원 화면과 공유 이미지에는 나오지 않아요. 100 HOLDS는 운영진이 지정한 100홀드 지구력 문제 하나를 완등했을 때만 발급해요(누적 완등·누적 홀드 아님).
       </p>
       <ul className="flex flex-col gap-3">
         {stampDefinitions(tables).map((d) => {
           const award = awards.get(d.id);
+          const terms = STAMP_PLAN_TERMS[d.id];
+          const evidence = stampPlanEvidence(d.id, member.id, memberships, plans);
           return (
             <li key={d.id} className="flex flex-wrap items-start gap-3 rounded-md border border-midnight/20 bg-white/40 p-3">
               <Image src={stampImageSrc(d.imageKey, d.id)} alt="" width={64} height={64} className={award ? "" : "opacity-40 grayscale"} />
@@ -55,6 +71,26 @@ export async function MemberStamps({ member, members, todayKey }: { member: Memb
                   {award ? <Pill tone="ok">발급됨</Pill> : !d.active && <Pill tone="muted">사용 안 함</Pill>}
                 </p>
                 <p className="text-[13px] text-ink-soft">{d.description}</p>
+                {terms && (
+                  <p data-stamp-hint={d.id} className="mt-1 rounded border border-dashed border-midnight/25 bg-ivory px-2 py-1 text-[12px] leading-relaxed text-ink-soft">
+                    <span className="font-bold text-midnight">참고 · </span>
+                    {evidence.length > 0 ? (
+                      <>
+                        {terms.durationMonths}+{terms.bonusMonths}개월 회원권 등록 기록이 있어요:{" "}
+                        {evidence.map((e, i) => (
+                          <span key={e.membershipId} className="font-mono">
+                            {i > 0 && ", "}
+                            {e.planName} {dotDate(e.startDate)}~{dotDate(e.endDate)}
+                          </span>
+                        ))}
+                        .
+                      </>
+                    ) : (
+                      <>사이트에 {terms.durationMonths}+{terms.bonusMonths}개월 회원권 등록 기록이 없어요. 등록을 확인한 뒤 발급해 주세요.</>
+                    )}{" "}
+                    자동 발급되지 않아요. 누적 이용 기간과는 별개예요.
+                  </p>
+                )}
                 {award ? (
                   <>
                     <p className="mt-1 text-[13px] text-midnight">
@@ -84,7 +120,12 @@ export async function MemberStamps({ member, members, todayKey }: { member: Memb
                     </label>
                     <label className="flex min-w-40 flex-1 flex-col gap-1 text-[12px] font-medium text-ink-soft">
                       메모 (운영진만, 선택)
-                      <input name="note" maxLength={200} placeholder="예: 노란 V1 완등 확인" className={smallInput} />
+                      <input
+                        name="note"
+                        maxLength={200}
+                        placeholder={d.id === "ST-02" ? "예: 지정 100홀드 문제 완등 확인" : terms ? `예: ${terms.durationMonths}+${terms.bonusMonths}개월 등록 확인` : "예: 첫 방문 확인"}
+                        className={smallInput}
+                      />
                     </label>
                     <button type="submit" className={smallPrimary}>
                       스탬프 발급

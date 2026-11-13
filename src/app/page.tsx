@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { ClubCalendar } from "@/components/calendar/club-calendar";
+import { ClubNotice } from "@/components/club-notice";
 import { EventCard } from "@/components/event-card";
+import { MemberBanner } from "@/components/member-banner";
 import { SiteFooter, SiteHeader } from "@/components/site";
 import { ArrowRight, buttonPrimary, buttonPrimaryOnDark, DataNotice, Logo, SectionTitle } from "@/components/ui";
 import { MembershipCard, summarizeMembership } from "@/components/membership-card";
@@ -19,6 +21,9 @@ export default function HomePage() {
     <>
       <SiteHeader current="calendar" showLogo={false} />
       <main className="flex-1">
+        <Suspense fallback={null}>
+          <MemberBanner />
+        </Suspense>
         <BrandHeader />
         <Suspense fallback={null}>
           <HomeMembership />
@@ -27,6 +32,11 @@ export default function HomePage() {
           <Suspense fallback={<BoardSkeleton />}>
             <ClubBoard />
           </Suspense>
+        </section>
+        <section className="paper">
+          <div className="mx-auto max-w-6xl px-4 pb-12 md:px-6 md:pb-16">
+            <ClubNotice className="max-w-3xl" />
+          </div>
         </section>
         <ProposeInvite />
         <PassItOn />

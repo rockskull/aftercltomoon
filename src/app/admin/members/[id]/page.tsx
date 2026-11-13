@@ -11,7 +11,10 @@ import { membershipPhase } from "@/lib/membership";
 import { requireOperator } from "@/server/auth/viewer";
 import { formatWon } from "@/server/domain/model";
 import { storeMode } from "@/server/store";
-import { editMember, editMembership } from "../../actions";
+import { memberAccess, type AccessStatus } from "@/lib/access";
+import { editMember, editMembership, grantMembership } from "../../actions";
+
+const STATUS_TEXT: Record<AccessStatus, string> = { ACTIVE: "이용 중", RENEWAL_DUE: "갱신 예정", PENDING: "입금 확인 대기", EXPIRED: "만료 / 회원권 없음" };
 import { ActionForm } from "../../admin-ui";
 import { MonthSelect } from "../../month-select";
 import { MemberStamps } from "./member-stamps";
@@ -48,6 +51,7 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
   const memberships = club.memberships.filter((m) => m.memberId === member.id).sort((a, b) => b.startDate.localeCompare(a.startDate));
   const payments = club.payments.filter((p) => p.memberId === member.id).sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
   const planName = (pid: string) => club.plans.find((p) => p.id === pid)?.name ?? pid;
+  const access = memberAccess({ member, memberships: club.memberships, payments: club.payments, todayKey });
 
   return (
     <AdminFrame tab="members" title={member.name || member.id}>
@@ -106,6 +110,12 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
         </Box>
 
         <Box title="회원권">
+          <p className="mb-3 text-[13px] text-ink-soft">
+            상태: <strong className="text-midnight">{STATUS_TEXT[access.status]}</strong>
+            {access.validUntil && ` · ${dotDate(access.validUntil)}까지`}
+            {access.startsOn && ` · ${dotDate(access.startsOn)}부터`}
+            {!access.canParticipate && " · 클럽 참여 기능 차단 중"}
+          </p>
           {memberships.length === 0 ? (
             <p className="text-[14px] text-ink-soft">회원권 기록이 없어요. 입금이 승인되면 생겨요.</p>
           ) : (
@@ -154,8 +164,45 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
           )}
         </Box>
 
+        <details className="-mt-3 rounded-lg border-2 border-dashed border-midnight/30 bg-ivory/70 p-3">
+          <summary className="cursor-pointer text-[14px] font-bold text-midnight">+ 회원권 직접 등록 (입금 기록 없이 — 사이트 이전 회원권, 현금 납부 등)</summary>
+          <p className="mt-2 text-[12px] text-ink-soft">
+            회비를 사이트 밖에서 이미 받은 경우에만 쓰세요. 입금 기록을 만들지 않으므로 회계의 회비 수입에는 잡히지 않아요(필요하면 회계에서 따로 기록). 1일 시작 · 말일 종료로 등록돼요.
+          </p>
+          <ActionForm action={grantMembership} className="mt-2 grid gap-2 sm:grid-cols-2" confirmText={`${member.name || member.id}님의 회원권을 직접 등록할까요?`}>
+            <input type="hidden" name="member_id" value={member.id} />
+            <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
+              회원권 상품
+              <select name="plan_id" required className={smallInput}>
+                {club.plans.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
+              등록 사유
+              <input name="reason" required maxLength={100} placeholder="예: 사이트 이전 회원권" className={smallInput} />
+            </label>
+            <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
+              시작 월 (1일부터)
+              <MonthSelect name="start_month" todayKey={todayKey} defaultValue={todayKey.slice(0, 7)} required />
+            </label>
+            <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
+              종료 월 (말일까지)
+              <MonthSelect name="end_month" todayKey={todayKey} defaultValue={todayKey.slice(0, 7)} required />
+            </label>
+            <div className="sm:col-span-2">
+              <button type="submit" className={smallPrimary}>
+                등록
+              </button>
+            </div>
+          </ActionForm>
+        </details>
+
         <Suspense fallback={<Box title="Moon stamps"><div className="h-24 animate-pulse rounded-md bg-white/40" /></Box>}>
-          <MemberStamps member={member} members={club.members} todayKey={todayKey} />
+          <MemberStamps member={member} members={club.members} memberships={club.memberships} plans={club.plans} todayKey={todayKey} />
         </Suspense>
 
         <Box title="회비">

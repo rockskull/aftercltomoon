@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useTransition, type FormEvent, type ReactNode } from "react";
+import { MembershipRequired } from "@/components/membership-required";
 import { ArrowUpRight, buttonPrimary, buttonSecondary, cn } from "@/components/ui";
+import { MEMBERSHIP_REQUIRED, type BlockReason } from "@/lib/access";
 import { ARTIST_MAX, DISPLAY_NAME_MAX, MESSAGE_MAX, TITLE_MAX, youtubeVideoId, type RadioState, type RadioTrack } from "@/lib/radio";
 import { loadYouTube, YT_STATE, type YTPlayer } from "@/lib/youtube-player";
 import { addTrack, deleteTrack, lookupTrack, type LookupResult } from "./actions";
@@ -563,6 +565,8 @@ function AddTrack({ state, onAdded }: { state: RadioState; onAdded: (track: Radi
   const [message, setMessage] = useState("");
   const [displayName, setDisplayName] = useState(state.myName ?? "");
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  // Set when the server says MEMBERSHIP_REQUIRED (e.g. the membership ended while the page was open).
+  const [blocked, setBlocked] = useState<BlockReason | null>(null);
   const [pending, startTransition] = useTransition();
   const latest = useRef("");
   const videoId = youtubeVideoId(url);
@@ -581,6 +585,7 @@ function AddTrack({ state, onAdded }: { state: RadioState; onAdded: (track: Radi
     lookupTrack(value)
       .then((r) => {
         if (youtubeVideoId(latest.current) !== id) return;
+        if (!r.ok && r.code === MEMBERSHIP_REQUIRED) setBlocked(r.reason ?? "expired");
         setLookup(r);
         if (r.ok) {
           setTitle(r.title);
@@ -612,7 +617,8 @@ function AddTrack({ state, onAdded }: { state: RadioState; onAdded: (track: Radi
         setTitle("");
         setArtist("");
         setMessage("");
-      } else setResult({ ok: false, text: r.message });
+      } else if (r.code === MEMBERSHIP_REQUIRED) setBlocked(r.reason ?? "expired");
+      else setResult({ ok: false, text: r.message });
     });
   }
 
@@ -630,13 +636,8 @@ function AddTrack({ state, onAdded }: { state: RadioState; onAdded: (track: Radi
             Log in to add a track
           </Link>
         </div>
-      ) : !state.canAdd ? (
-        <p className="mt-3 text-[14px] leading-relaxed text-ink-soft">
-          곡 신청은 클럽 회원만 할 수 있어요.{" "}
-          <Link href="/me" className="font-semibold text-midnight underline underline-offset-4">
-            회원권 신청하기
-          </Link>
-        </p>
+      ) : !state.canAdd || blocked ? (
+        <MembershipRequired reason={blocked ?? state.blockReason ?? "expired"} className="mt-3 shadow-none" />
       ) : (
         <form onSubmit={submit} className="mt-3 flex flex-col gap-3">
           <div>

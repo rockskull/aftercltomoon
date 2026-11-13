@@ -5,7 +5,8 @@ import { STAMP_CATALOG } from "@/lib/stamps";
 import { applyCommit } from "../store/commit";
 import { MemoryStore, demoTables } from "../store/memory";
 import { TABLES, type Row, type Tables } from "../store/schema";
-import { memberStamps, planStampAward, STAMP_TABS_MISSING, stampAwards, stampDefinitions } from "./stamps";
+import type { Membership, Plan } from "./model";
+import { memberStamps, planStampAward, STAMP_TABS_MISSING, stampAwards, stampDefinitions, stampPlanEvidence } from "./stamps";
 
 const NOW = Date.parse("2026-11-12T12:00:00+09:00");
 
@@ -25,19 +26,31 @@ const award = (data: Tables, over: Partial<{ memberId: string; stampId: string; 
   planStampAward(data, { now: NOW, actorId: "M-OPER-77", memberId: "B", stampId: "ST-02", awardedAt: "2026-11-12", note: "", ...over });
 
 describe("stamp catalog", () => {
-  it("has exactly the four stamps, and the sheet can't add more", () => {
-    expect(STAMP_CATALOG.map((s) => s.id)).toEqual(["ST-01", "ST-02", "ST-03", "ST-04"]);
+  it("has exactly the six stamps, and the table can't add more", () => {
+    const six = ["ST-01", "ST-02", "ST-03", "ST-04", "ST-05", "ST-06"];
+    expect(STAMP_CATALOG.map((s) => s.id)).toEqual(six);
     const defs = stampDefinitions({
       StampDefinitions: [
-        { stamp_id: "ST-05", name: "ON AIR", description: "", image_key: "st-05", active: true },
-        { stamp_id: "st-02", name: "", description: "첫 완등!", image_key: "../../etc", active: "FALSE" },
+        { stamp_id: "ST-07", name: "ON AIR", description: "", image_key: "st-07", active: true },
+        { stamp_id: "st-02", name: "", description: "지구력!", image_key: "../../etc", active: "FALSE" },
       ],
     });
-    expect(defs.map((d) => d.id)).toEqual(["ST-01", "ST-02", "ST-03", "ST-04"]);
-    const top = defs[1];
-    expect(top.name).toBe("FIRST TOP"); // empty cell → default
-    expect(top.description).toBe("첫 완등!");
-    expect(top.active).toBe(false);
+    expect(defs.map((d) => d.id)).toEqual(six);
+    const holds = defs[1];
+    expect(holds.name).toBe("100 HOLDS"); // empty cell → default
+    expect(holds.description).toBe("지구력!");
+    expect(holds.active).toBe(false);
+  });
+
+  it("names the v1.4 stamps as handed over", () => {
+    const byId = Object.fromEntries(STAMP_CATALOG.map((s) => [s.id, s]));
+    expect(byId["ST-02"]).toMatchObject({ name: "100 HOLDS", description: "100홀드 지구력 문제 완등", motto: "COMPLETE THE 100-HOLD ENDURANCE CHALLENGE." });
+    expect(byId["ST-05"]).toMatchObject({ name: "SIX MOONS", subtitle: "6 + 1 MONTHS", motto: "SIX MONTHS IN. ONE MORE ON THE MOON." });
+    expect(byId["ST-06"]).toMatchObject({ name: "TWELVE MOONS", subtitle: "12 + 2 MONTHS", motto: "TWELVE MONTHS IN. TWO MORE ON THE MOON." });
+    // ST-01/03/04 are untouched.
+    expect(byId["ST-01"].name).toBe("FIRST MOON");
+    expect(byId["ST-03"].name).toBe("NIGHT OWL");
+    expect(byId["ST-04"].name).toBe("MOON HOST");
   });
 
   it("only ever points at the bundled artwork", () => {
@@ -73,13 +86,13 @@ describe("member collection", () => {
       { stamp_id: "ST-01", active: false },
       { stamp_id: "ST-04", active: false },
     ];
-    expect(memberStamps(data, "A").map((s) => s.id)).toEqual(["ST-01", "ST-02", "ST-03"]);
-    expect(memberStamps(data, "B").map((s) => s.id)).toEqual(["ST-02", "ST-03"]);
+    expect(memberStamps(data, "A").map((s) => s.id)).toEqual(["ST-01", "ST-02", "ST-03", "ST-05", "ST-06"]);
+    expect(memberStamps(data, "B").map((s) => s.id)).toEqual(["ST-02", "ST-03", "ST-05", "ST-06"]);
   });
 
-  it("works before the sheet has stamp tabs (nothing received yet)", () => {
+  it("works before any stamp rows exist (nothing received yet)", () => {
     const stamps = memberStamps({}, "A");
-    expect(stamps).toHaveLength(4);
+    expect(stamps).toHaveLength(6);
     expect(stamps.every((s) => s.awardedAt === null)).toBe(true);
   });
 });
@@ -111,7 +124,9 @@ describe("issuing a stamp", () => {
 
   it("checks the stamp, the member and the date", () => {
     const data = tables();
-    expect(award(data, { stampId: "ST-05" })).toHaveProperty("refuse");
+    expect(award(data, { stampId: "ST-07" })).toHaveProperty("refuse");
+    expect(award(data, { stampId: "ST-05" })).not.toHaveProperty("refuse");
+    expect(award(data, { stampId: "ST-06" })).not.toHaveProperty("refuse");
     expect(award(data, { memberId: "NOPE" })).toHaveProperty("refuse");
     expect(award(data, { awardedAt: "2026-11-13" })).toHaveProperty("refuse"); // tomorrow
     expect(award(data, { awardedAt: "11/12" })).toHaveProperty("refuse");
@@ -132,6 +147,30 @@ describe("issuing a stamp", () => {
     expect((await store.commit(planned.commit)).ok).toBe(true);
     const after = await store.read(["StampDefinitions", "StampAwards"]);
     expect(memberStamps(after, "M-DEMO-SUA").find((s) => s.id === "ST-01")!.awardedAt).toBe("2026-11-12");
+  });
+});
+
+describe("long-registration stamps (reference for the crew)", () => {
+  const plan = (id: string, durationMonths: number, bonusMonths: number): Plan => ({
+    id, name: id, price: 0, firstPrice: 0, durationMonths, bonusMonths, active: true, sortOrder: 0, description: "",
+  });
+  const plans = [plan("PLAN-1M", 1, 0), plan("PLAN-6M", 6, 1), plan("PLAN-12M", 12, 2), plan("PLAN-6M-OLD", 6, 0)];
+  const ms = (id: string, memberId: string, planId: string, status = "active"): Membership =>
+    ({ id, memberId, planId, startDate: "2026-12-01", endDate: "2027-06-30", status, sourcePaymentId: "", createdAt: "", updatedAt: "", note: "", raw: {} }) as Membership;
+
+  it("lists only the member's own, still-valid registrations on matching terms", () => {
+    const memberships = [
+      ms("MS-1", "A", "PLAN-6M"),
+      ms("MS-2", "A", "PLAN-12M"),
+      ms("MS-3", "A", "PLAN-6M-OLD"), // 6 months but no bonus: not SIX MOONS
+      ms("MS-4", "A", "PLAN-12M", "refunded"),
+      ms("MS-5", "B", "PLAN-6M"),
+      ms("MS-6", "A", "PLAN-1M"),
+    ];
+    expect(stampPlanEvidence("ST-05", "A", memberships, plans).map((e) => e.membershipId)).toEqual(["MS-1"]);
+    expect(stampPlanEvidence("ST-06", "A", memberships, plans).map((e) => e.membershipId)).toEqual(["MS-2"]);
+    expect(stampPlanEvidence("ST-02", "A", memberships, plans)).toEqual([]);
+    expect(stampPlanEvidence("ST-05", "C", memberships, plans)).toEqual([]);
   });
 });
 

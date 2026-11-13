@@ -2,8 +2,9 @@
 
 import { updateTag } from "next/cache";
 import { after } from "next/server";
-import { readSession } from "@/server/auth/session";
-import { NEEDS, planProposal } from "@/server/domain/operations";
+import { MEMBERSHIP_REQUIRED } from "@/lib/access";
+import { requireParticipant } from "@/server/auth/access";
+import { MEMBERSHIP_REQUIRED_REFUSAL, NEEDS, planProposal } from "@/server/domain/operations";
 import { deliverDue } from "@/server/notify";
 import { PRIVATE_TAG, runCommit, storeMode } from "@/server/store";
 import { parseProposal, type ProposalFormState } from "./proposal";
@@ -23,11 +24,15 @@ function echo(formData: FormData): Record<string, string> {
  * proposal is ever published; the public feed only reads Events / Enrollment.
  */
 export async function submitProposal(_prev: ProposalFormState, formData: FormData): Promise<ProposalFormState> {
-  // Signed-in people only. Checked here too: the page check alone could be bypassed by posting directly.
-  const session = await readSession();
-  if (!session) {
-    return { status: "error", message: "로그인이 필요해요. 로그인한 뒤 다시 제출해 주세요.", values: echo(formData) };
+  // Members with a membership in effect only (ACTIVE MEMBERS ONLY). Checked here too: the page
+  // check alone could be bypassed by posting directly.
+  const gate = await requireParticipant();
+  if (!gate.ok) {
+    return gate.code === "LOGIN_REQUIRED"
+      ? { status: "error", message: "로그인이 필요해요. 로그인한 뒤 다시 제출해 주세요.", values: echo(formData) }
+      : { status: "error", code: gate.code, reason: gate.reason, message: gate.message, values: echo(formData) };
   }
+  const session = gate.viewer.session;
 
   // Honeypot: real visitors never see or fill this field.
   const honeypot = formData.get("website");
@@ -58,7 +63,10 @@ export async function submitProposal(_prev: ProposalFormState, formData: FormDat
   try {
     // The audit log records who proposed (the account); the demo keeps no real identity.
     const actorId = storeMode() === "demo" ? "visitor" : session.email;
-    const outcome = await runCommit(NEEDS.proposalSubmit, (data) => planProposal(data, { now: Date.now(), actorId, payload }));
+    const outcome = await runCommit(NEEDS.proposalSubmit, (data) => planProposal(data, { now: Date.now(), actorId, payload, email: session.email }));
+    if (!outcome.ok && outcome.message === MEMBERSHIP_REQUIRED_REFUSAL) {
+      return { status: "error", code: MEMBERSHIP_REQUIRED, reason: "expired", message: outcome.message, values: echo(formData) };
+    }
     if (!outcome.ok) throw new Error(outcome.message);
     updateTag(PRIVATE_TAG);
     after(() => deliverDue(Date.now()).catch((e) => console.error("[notify] immediate delivery failed", e)));

@@ -200,6 +200,12 @@ export async function saveImage(blob: Blob, filename: string): Promise<"shared" 
       if (error instanceof DOMException && error.name === "AbortError") return "shared";
     }
   }
+  downloadBlob(blob, filename);
+  return "downloaded";
+}
+
+/** A plain file download of a generated image. */
+export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -208,5 +214,30 @@ export async function saveImage(blob: Blob, filename: string): Promise<"shared" 
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  return "downloaded";
+}
+
+/** Whether this browser can hand image files to the OS share sheet (Web Share API level 2). */
+export function canShareFiles(file: File): boolean {
+  try {
+    return typeof navigator.share === "function" && typeof navigator.canShare === "function" && navigator.canShare({ files: [file] });
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Opens the OS share sheet with one file. "canceled" when the person closed the
+ * sheet (never reported as success); "failed" for anything else, so the caller
+ * can offer a download. "shared" only means a target app took the file — not
+ * that anything was posted.
+ */
+export async function shareFile(file: File): Promise<"shared" | "canceled" | "failed"> {
+  try {
+    await navigator.share({ files: [file] });
+    return "shared";
+  } catch (error) {
+    if ((error as { name?: string } | null)?.name === "AbortError") return "canceled";
+    console.warn("[share] failed", error);
+    return "failed";
+  }
 }

@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { ArrowUpRight, buttonPrimary, cn } from "@/components/ui";
+import { startMonths } from "@/lib/start-months";
 import { applyMembership, confirmMemberConsent, type ActionState } from "./actions";
 
 /** Plans are shown by period only: fees are announced off-site (crew chat / consent form). */
@@ -15,20 +16,6 @@ export interface PlanOption {
 
 const input =
   "block w-full rounded-md border-2 border-midnight/25 bg-ivory px-3.5 py-3 text-[16px] text-midnight focus:border-midnight focus:outline-none";
-
-/** This month and the next three, as the 1st of each month ("YYYY-MM-01"). */
-function startMonths(today: string): Array<{ value: string; label: string }> {
-  const y = Number(today.slice(0, 4));
-  const m = Number(today.slice(5, 7));
-  return [0, 1, 2, 3].map((i) => {
-    const year = y + Math.floor((m - 1 + i) / 12);
-    const month = ((m - 1 + i) % 12) + 1;
-    return {
-      value: `${year}-${String(month).padStart(2, "0")}-01`,
-      label: `${year}년 ${month}월${i === 0 ? " (이번 달)" : i === 1 ? " (다음 달)" : ""}`,
-    };
-  });
-}
 
 export function ApplyForm({
   plans,
@@ -51,6 +38,7 @@ export function ApplyForm({
   const [state, action, pending] = useActionState<ActionState, FormData>(applyMembership, { status: "idle" });
   const values = state.values ?? {};
   const [planId, setPlanId] = useState(values.plan_id ?? plans[0]?.id ?? "");
+  const months = startMonths(today);
 
   return (
     <form action={action} className="flex flex-col gap-6">
@@ -134,10 +122,10 @@ export function ApplyForm({
             id="requested_start"
             name="requested_start"
             aria-describedby="start-hint"
-            defaultValue={values.requested_start ?? startMonths(today)[0].value}
+            defaultValue={values.requested_start ?? months[0].value}
             className={cn(input, "mt-2")}
           >
-            {startMonths(today).map((m) => (
+            {months.map((m) => (
               <option key={m.value} value={m.value}>
                 {m.label}
               </option>

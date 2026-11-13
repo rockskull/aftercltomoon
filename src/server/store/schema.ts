@@ -91,7 +91,7 @@ export const TABLES = {
     "created_at",
     "updated_at",
   ],
-  /** MOON STAMPS: the four stamps (artwork is static; see src/lib/stamps.ts). */
+  /** MOON STAMPS: the six stamps (artwork is static; see src/lib/stamps.ts). */
   StampDefinitions: ["stamp_id", "name", "description", "image_key", "active"],
   /** Who received which stamp. Private: only the member themself and operators see it; `note` is operators-only. */
   StampAwards: ["award_id", "member_id", "stamp_id", "awarded_at", "awarded_by", "note"],
@@ -254,4 +254,4 @@ export const ADMIN_TABLES: TableName[] = [
 export const STAMP_TABLES: TableName[] = ["StampDefinitions", "StampAwards"];
 
 /** AFTER HOURS RADIO page: tracks, who may add/delete, and the player switch — one gateway call. */
-export const RADIO_TABLES: TableName[] = ["Members", "RadioTracks", "Settings"];
+export const RADIO_TABLES: TableName[] = ["Members", "Memberships", "Payments", "RadioTracks", "Settings"];

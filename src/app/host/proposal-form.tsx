@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
+import { MembershipRequired } from "@/components/membership-required";
 import { ArrowRight, buttonPrimary, buttonSecondary, cn } from "@/components/ui";
+import { MEMBERSHIP_REQUIRED } from "@/lib/access";
 import { submitProposal } from "./actions";
 import { initialProposalState, MAX_FEE, TEXT_FIELDS, type ProposalField } from "./proposal";
 
@@ -31,6 +33,10 @@ function ProposalFormRound({ onAnother, defaults }: { onAnother: () => void; def
       resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [state]);
+
+  if (state.status === "error" && state.code === MEMBERSHIP_REQUIRED) {
+    return <MembershipRequired reason={state.reason ?? "expired"} />;
+  }
 
   if (state.status === "success") {
     return (

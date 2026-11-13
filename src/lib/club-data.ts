@@ -16,6 +16,10 @@ export const CLUB_FEED_TAG = "club-feed";
  */
 export async function requestNow(): Promise<number> {
   await connection();
+  // Demo-only test hook: DEMO_TODAY=YYYY-MM-DD shows the screens as on that day (e.g. the month-end
+  // renewal notice). Ignored whenever real data is connected.
+  const fake = process.env.DEMO_TODAY;
+  if (fake && storeMode() === "demo" && /^\d{4}-\d{2}-\d{2}$/.test(fake)) return Date.parse(`${fake}T12:00:00+09:00`);
   return Date.now();
 }
 

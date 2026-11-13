@@ -10,7 +10,7 @@
 | 사이트 | https://aftercltomoon.vercel.app — 실데이터, Google 로그인 |
 | 데이터 | **Postgres (Neon, Vercel Storage)** — 2026-11-13 Google Sheets에서 이전. 시트는 백업으로만 남김 |
 | 코드 | GitHub `rockskull/aftercltomoon` `main` · Vercel이 연결되어 **push하면 자동 배포** |
-| 완료 | 캘린더·이벤트·제안서(로그인 필요), Google 로그인, 회원권(**달 단위: 1일 시작 · 말일 종료**), 첫 등록 가격, 입금 승인, 거래내역 매칭, 알림, PWA, 관리 화면, 동의서, 회계 장부, 초대장, 포스터 생성기, MOON STAMPS, AFTER HOURS RADIO, 관리 화면에서 회원 추가·상품·설정·등록 기간·스탬프 편집 |
+| 완료 | 캘린더·이벤트·제안서(로그인 필요), Google 로그인, 회원권(**달 단위: 1일 시작 · 말일 종료**), 첫 등록 가격, 입금 승인, 거래내역 매칭, 알림, PWA, 관리 화면, 동의서, 회계 장부, 초대장, 포스터 생성기, MOON STAMPS(6종 · Instagram 공유), AFTER HOURS RADIO, 관리 화면에서 회원 추가·상품·설정·등록 기간·스탬프 편집 |
 
 ### DB로 바꾼 뒤 (2026-11-13)
 
@@ -19,6 +19,13 @@
 - 이제 **Apps Script(Code.gs, setupSheets, Tick.gs, 배포 버전)는 할 일이 없어요.** 아래 1번 섹션의 Apps Script 내용은 예전 기록이에요.
 - Vercel 환경변수의 `CLUB_API_URL`·`CLUB_API_SECRET`은 이전이 끝났으니 지워도 돼요(남아 있어도 DB가 우선).
 - ⚠️ 로컬 `.env.local`에 `DATABASE_URL`이 있으면 `npm run dev`도 **실제 DB**를 써요. 시험은 Neon 개발 브랜치나 데모(DATABASE_URL 없이)로.
+
+### v1.4 — MOON STAMPS 6종 · Instagram 공유 · 시작 월 (2026-11-13)
+
+- 스탬프 6종: ST-02가 **100 HOLDS**(지정 100홀드 지구력 문제 1개 완등)로 바뀌고, **SIX MOONS**(6+1개월 등록)·**TWELVE MOONS**(12+2개월 등록)가 생겼어요. 모두 운영진 수동 발급, 자동 발급 없음. SIX/TWELVE MOONS 칸에는 그 회원의 6+1 / 12+2 등록 기록이 참고로 보여요.
+- MY → My Moon Stamps → 받은 스탬프 → **SHARE THIS STAMP** → STORY(1080×1920) / FEED(1080×1440) → **공유하기**(지원 기기) 또는 **PNG 저장**.
+- 회원권 신청 화면의 시작 월 목록에서 **2026년 11월만** 빠졌어요(목록만, 데이터·규칙은 그대로).
+- **배포 후 한 번:** `npm run db:v14-stamps`(미리보기) → `npm run db:v14-stamps -- --apply`. 운영 DB의 ST-02 정의 행이 아직 `FIRST TOP`이라 이걸 실행해야 사이트에 100 HOLDS 이름이 보여요(관리 화면 → 설정 → MOON STAMPS에서 직접 고쳐도 같아요). 기존 ST-02 발급 기록은 바꾸지 않고 목록만 보여 줘요(2026-11-13 기준 0건).
 
 ---
 
@@ -116,9 +123,16 @@ Vercel → `aftercltomoon` → **Settings → Environment Variables** → 환경
 - [ ] 운영진으로 이벤트 상세 → **Make a poster** → FEED·STORY 각각 Save PNG (휴대폰은 공유 화면의 "이미지 저장")
 - [ ] 로그아웃 상태에서 홈 맨 아래 **View invitation** → 초대장 → **Share invitation**으로 카톡 공유
 - [ ] 회원권 신청 화면에 **시작 월** 선택이 보이고, 승인 카드에 "승인하면 ○○.01 – ○○.말일"로 나온다
-- [ ] (새 Code.gs 반영 후) 운영진으로 회원 상세 → **Moon stamps → 스탬프 발급** → 그 회원 MY의 **My Moon Stamps**에 날짜와 함께 보이고 **Save stamp**로 카드 저장
+- [ ] 운영진으로 회원 상세 → **Moon stamps → 스탬프 발급** → 그 회원 MY의 **My Moon Stamps**에 날짜와 함께 보인다 (6종, 아직 받지 않은 건 흐리고 공유 버튼 없음)
+- [ ] 휴대폰에서 받은 스탬프 → **SHARE THIS STAMP → STORY / FEED → 공유하기** → 공유 시트에서 Instagram 선택 (취소하면 "공유를 취소했어요"), PC에서는 **PNG 저장**
+- [ ] `npm run db:v14-stamps -- --apply` 후 5분 안에 ST-02가 **100 HOLDS**로 보인다
+- [ ] 회원권 신청 화면 시작 월에 **2026년 11월**이 없다 (12월부터)
 - [ ] (새 Code.gs 반영 후) `/radio`에 기본곡 14곡이 보이고, 회원으로 YouTube 링크를 신청하면 바로 15번째로 붙는다. admin 계정에만 **Delete track**이 보인다
 - [ ] admin으로 **ADMIN → 라디오**에서 순서 ▲▼, 표시 이름·메모 수정, 삭제 → 되돌리기가 된다 (operator는 보기만)
+- [ ] **기존 회원 회원권 입력**: 사이트 이전부터 있던 회원은 관리 화면 → 회원 → 회원 상세 → **회원권 직접 등록**으로 현재 이용 기간을 넣는다 (안 넣으면 만료로 보여 참여 기능이 막힘)
+- [ ] 회원권이 끝난 계정으로 `/radio`, `/host`에 들어가면 **MEMBERSHIP REQUIRED**와 REGISTER MEMBERSHIP만 보인다 / 유효한 계정은 그대로 쓸 수 있다
+- [ ] 매월 마지막 7일(예: 11/24~30)에 다음 달 회원권이 없는 회원이 홈에서 **RENEW YOUR MOON** 배너를 보고, 닫으면 그달엔 다시 안 뜬다
+- [ ] ADMIN → 회원 → **단톡방 확인** 필터로 정리·(재)초대할 사람을 본다 (카톡은 운영진이 직접)
 
 ## 막힐 때
 

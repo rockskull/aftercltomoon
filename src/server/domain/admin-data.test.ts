@@ -4,6 +4,7 @@ import type { Row, Tables } from "../store/schema";
 import {
   planEnrollmentSave,
   planMemberAdd,
+  planMembershipGrant,
   planPlanSave,
   planSettingsSave,
   planStampDefinitionSave,
@@ -58,6 +59,29 @@ describe("adding members by hand", () => {
   });
 });
 
+describe("recording a membership by hand", () => {
+  const grant = (data: Tables, over: Partial<{ memberId: string; startMonth: string; endMonth: string; reason: string }> = {}) =>
+    planMembershipGrant(data, { ...operator, memberId: "A", planId: "PLAN-1M", startMonth: "2026-11", endMonth: "2027-01", reason: "사이트 이전 회원권", ...over });
+
+  it("adds whole months without a payment, so it never counts as fee income", () => {
+    const data = { ...tables(), Memberships: [], Payments: [] };
+    const planned = grant(data);
+    if ("refuse" in planned) throw new Error(planned.refuse);
+    expect(applyCommit(data, planned.commit)).toEqual({ ok: true });
+    expect(data.Memberships![0]).toMatchObject({ member_id: "A", start_date: "2026-11-01", end_date: "2027-01-31", status: "active", source_payment_id: "" });
+    expect(data.Payments).toHaveLength(0);
+    expect(data.AuditLog!.at(-1)).toMatchObject({ action: "membership.grant" });
+  });
+
+  it("refuses overlaps, missing reasons and unknown members", () => {
+    const data = { ...tables(), Memberships: [{ membership_id: "MS-1", member_id: "A", plan_id: "PLAN-1M", start_date: "2026-12-01", end_date: "2026-12-31", status: "active" }] };
+    expect(grant(data)).toEqual({ refuse: "같은 회원의 다른 회원권과 기간이 겹쳐요." });
+    expect(grant(data, { startMonth: "2027-01", endMonth: "2027-01", reason: " " })).toHaveProperty("refuse");
+    expect(grant(data, { memberId: "NOPE" })).toHaveProperty("refuse");
+    expect(grant(data, { startMonth: "2027-01", endMonth: "2027-01" })).not.toHaveProperty("refuse");
+  });
+});
+
 describe("plans", () => {
   const input = { name: "1개월", price: "85,000", firstPrice: "100000", durationMonths: "1", bonusMonths: "0", active: true, sortOrder: "1", description: "한 달" };
 
@@ -108,7 +132,12 @@ describe("stamps", () => {
     if ("refuse" in planned) throw new Error(planned.refuse);
     applyCommit(data, planned.commit);
     expect(data.StampDefinitions![0]).toMatchObject({ description: "아지트 첫 방문", active: false });
-    expect(planStampDefinitionSave(data, { ...admin, stampId: "ST-05", name: "ON AIR", description: "", active: true, imageKey: "" })).toHaveProperty("refuse");
+    expect(planStampDefinitionSave(data, { ...admin, stampId: "ST-07", name: "ON AIR", description: "", active: true, imageKey: "" })).toHaveProperty("refuse");
+    // The v1.4 stamps have no row yet; saving one adds it.
+    const six = planStampDefinitionSave(data, { ...admin, stampId: "ST-05", name: "SIX MOONS", description: "6+1개월 회원권 등록", active: true, imageKey: "st-05" });
+    if ("refuse" in six) throw new Error(six.refuse);
+    applyCommit(data, six.commit);
+    expect(data.StampDefinitions!.find((r) => r.stamp_id === "ST-05")).toMatchObject({ name: "SIX MOONS", image_key: "st-05" });
   });
 
   it("revoking keeps the record but takes the stamp off the collection; it can be given again", () => {

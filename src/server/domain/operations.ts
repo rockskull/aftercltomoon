@@ -1,4 +1,5 @@
 import { formatKeyKo, toDateKey } from "@/lib/dates";
+import { memberAccess } from "@/lib/access";
 import { monthBounds, nextMembershipPeriod, overlapping, totalMonths } from "@/lib/membership";
 import { pickText, type Check, type Op } from "../store/commit";
 import { newId, seoulIso } from "../store/ids";
@@ -143,6 +144,15 @@ function paymentCheck(p: Payment, statuses: Payment["status"][]): Check {
 // Member: apply for / extend a membership
 // ---------------------------------------------------------------------------
 
+/** Most first-time applications that may wait for the crew at once (a guard against sign-up floods). */
+export const MAX_OPEN_FIRST_APPLICATIONS = 20;
+
+/** Pending applications from accounts that were never approved (status applicant). */
+function openFirstApplications(club: ReturnType<typeof parsePrivate>): number {
+  const applicants = new Set(club.members.filter((m) => m.status === "applicant").map((m) => m.id));
+  return club.payments.filter((p) => applicants.has(p.memberId) && (p.status === "pending" || p.status === "matched")).length;
+}
+
 export function planApplication(
   data: Tables,
   ctx: Ctx & {
@@ -165,6 +175,10 @@ export function planApplication(
   if (existing?.status === "inactive") return { refuse: "이용이 중지된 계정이에요. 운영진에게 문의해 주세요." };
   if (existing && club.payments.some((p) => p.memberId === existing.id && (p.status === "pending" || p.status === "matched"))) {
     return { refuse: "이미 입금 확인을 기다리는 신청이 있어요." };
+  }
+  // The only thing a non-member can submit. A flood of brand-new accounts can't pile up past a small cap.
+  if (!existing && openFirstApplications(club) >= MAX_OPEN_FIRST_APPLICATIONS) {
+    return { refuse: "지금은 새 신청이 많이 밀려 있어요. 잠시 후 다시 신청하거나 운영진에게 문의해 주세요." };
   }
   const needsConsent = !existing?.consentAt;
   if (needsConsent && !ctx.input.consentConfirmed) {
@@ -540,7 +554,27 @@ export function planMemberEdit(
 }
 
 /** A visitor's event idea → private Proposals tab, plus a heads-up for operators. */
-export function planProposal(data: Tables, ctx: Ctx & { payload: Record<string, string | number> }): Planned {
+/** Refusal text when a write needs a membership in effect (the actions map it to MEMBERSHIP_REQUIRED). */
+export const MEMBERSHIP_REQUIRED_REFUSAL = "현재 이용 등록이 확인되지 않았습니다. 클럽 참여 기능을 이용하려면 회원권을 먼저 등록해 주세요.";
+
+/** ACTIVE MEMBERS ONLY, checked on the freshly read data the write is planned from. */
+export function participantCheck(data: Tables, email: string, now: number): string | null {
+  const target = normalizeEmail(email);
+  const member = (data.Members ?? []).map(toMember).find((m) => m.email === target) ?? null;
+  const access = memberAccess({
+    member,
+    memberships: (data.Memberships ?? []).map(toMembership),
+    payments: [],
+    todayKey: toDateKey(now),
+  });
+  return access.canParticipate ? null : MEMBERSHIP_REQUIRED_REFUSAL;
+}
+
+export function planProposal(data: Tables, ctx: Ctx & { payload: Record<string, string | number>; email?: string }): Planned {
+  if (ctx.email) {
+    const blocked = participantCheck(data, ctx.email, ctx.now);
+    if (blocked) return { refuse: blocked };
+  }
   const commitId = newId("C", ctx.now, 8);
   const proposalId = newId("PR", ctx.now);
   const row: Row = {
@@ -831,16 +865,17 @@ export const NEEDS = {
   approval: ["Members", "Plans", "Payments", "Memberships", "Notifications"],
   payments: ["Payments", "Memberships", "Notifications"],
   membership: ["Memberships"],
+  membershipGrant: ["Members", "Plans", "Memberships"],
   member: ["Members"],
   proposals: ["Proposals"],
-  proposalSubmit: ["Members", "Notifications"],
+  proposalSubmit: ["Members", "Memberships", "Notifications"],
   ledger: ["Ledger"],
   stamps: ["Members", "StampAwards"],
   stampDefinitions: ["StampDefinitions"],
   plans: ["Plans"],
   settings: ["Settings"],
   enrollment: ["Enrollment"],
-  radio: ["Members", "RadioTracks"],
+  radio: ["Members", "Memberships", "RadioTracks"],
   events: ["Events"],
   eventFromProposal: ["Events", "Proposals"],
   prefs: ["NotificationPrefs"],

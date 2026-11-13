@@ -1,22 +1,25 @@
 "use server";
 
 import { updateTag } from "next/cache";
+import { MEMBERSHIP_REQUIRED, type BlockReason } from "@/lib/access";
 import { guessTrack, youtubeVideoId, type RadioTrack } from "@/lib/radio";
+import { requireParticipant, type Denied } from "@/server/auth/access";
 import { readSession } from "@/server/auth/session";
-import { NEEDS } from "@/server/domain/operations";
+import { MEMBERSHIP_REQUIRED_REFUSAL, NEEDS } from "@/server/domain/operations";
 import { activeTracks, planAddTrack, planDeleteTrack, toPublic } from "@/server/domain/radio";
 import { checkVideo, loadRadio } from "@/server/radio";
 import { RADIO_TAG, runCommit } from "@/server/store";
 
-export type LookupResult =
-  | { ok: true; videoId: string; title: string; artist: string; playable: boolean; duplicate: string | null }
-  | { ok: false; message: string };
+type Refused = { ok: false; message: string; code?: Denied["code"]; reason?: BlockReason };
 
-const LOGIN_NEEDED = "로그인한 멤버만 곡을 신청할 수 있어요.";
+export type LookupResult = { ok: true; videoId: string; title: string; artist: string; playable: boolean; duplicate: string | null } | Refused;
+
+const deny = (d: Denied): Refused => ({ ok: false, message: d.message, code: d.code, reason: d.reason });
 
 /** Fills in title and artist from the link (members fix them if the guess is off). */
 export async function lookupTrack(url: string): Promise<LookupResult> {
-  if (!(await readSession())) return { ok: false, message: LOGIN_NEEDED };
+  const gate = await requireParticipant();
+  if (!gate.ok) return deny(gate);
   const videoId = youtubeVideoId(String(url ?? ""));
   if (!videoId) return { ok: false, message: "YouTube 영상 링크를 붙여넣어 주세요. (youtube.com/watch?v=… 또는 youtu.be/…)" };
 
@@ -28,12 +31,13 @@ export async function lookupTrack(url: string): Promise<LookupResult> {
   return { ok: true, videoId, ...guess, playable: video.status !== "not_embeddable", duplicate };
 }
 
-export type AddResult = { ok: true; track: RadioTrack; position: number } | { ok: false; message: string };
+export type AddResult = { ok: true; track: RadioTrack; position: number } | Refused;
 
 /** ADD TO RADIO: straight to the end of the list (no approval). The server checks the login and membership itself. */
 export async function addTrack(input: { url: string; title: string; artist: string; message: string; displayName: string }): Promise<AddResult> {
-  const session = await readSession();
-  if (!session) return { ok: false, message: LOGIN_NEEDED };
+  const gate = await requireParticipant();
+  if (!gate.ok) return deny(gate);
+  const session = gate.viewer.session;
   const videoId = youtubeVideoId(String(input?.url ?? ""));
   if (!videoId) return { ok: false, message: "YouTube 영상 링크를 확인해 주세요." };
   if ((await checkVideo(videoId)).status === "not_found") {
@@ -54,7 +58,11 @@ export async function addTrack(input: { url: string; title: string; artist: stri
       },
     }),
   );
-  if (!outcome.ok) return { ok: false, message: outcome.message };
+  if (!outcome.ok) {
+    // The write's own check (same rule, on the data it was planned from) can still say no.
+    if (outcome.message === MEMBERSHIP_REQUIRED_REFUSAL) return { ok: false, message: outcome.message, code: MEMBERSHIP_REQUIRED, reason: "expired" };
+    return { ok: false, message: outcome.message };
+  }
   updateTag(RADIO_TAG);
   if (!outcome.result) return { ok: false, message: "이미 추가된 신청이에요. 목록을 새로고침해 주세요." };
   return { ok: true, track: toPublic([outcome.result.track], true)[0], position: outcome.result.position };

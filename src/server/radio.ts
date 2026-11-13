@@ -1,31 +1,44 @@
 import "server-only";
+import { memberAccess } from "@/lib/access";
+import { toDateKey } from "@/lib/dates";
 import { watchUrl, type RadioState } from "@/lib/radio";
 import { readSession } from "./auth/session";
-import { toSettings } from "./domain/model";
-import { activeTracks, canAddTrack, isRadioAdmin, memberByEmail, toPublic } from "./domain/radio";
+import { toMembership, toPayment, toSettings } from "./domain/model";
+import { activeTracks, isRadioAdmin, memberByEmail, toPublic } from "./domain/radio";
 import { readTables, storeMode } from "./store";
 import { RADIO_TABLES } from "./store/schema";
 
 /**
  * The radio as one visitor sees it. Who may add or delete is worked out here on
- * the server from the session + Members tab (never from anything the browser sends).
+ * the server from the session + member data (never from anything the browser sends),
+ * with the same member-state rule as every other member feature (src/lib/access.ts).
  */
 export async function loadRadio(): Promise<RadioState> {
   const session = await readSession();
-  const empty: RadioState = { ready: false, tracks: [], playerEnabled: false, signedIn: Boolean(session), canAdd: false, canDelete: false, myName: null };
+  const empty: RadioState = { ready: false, tracks: [], playerEnabled: false, signedIn: Boolean(session), canAdd: false, canDelete: false, myName: null, blockReason: null };
   if (storeMode() === "unconfigured") return empty;
   const tables = await readTables(RADIO_TABLES, { radio: true });
   const member = session ? memberByEmail(tables, session.email) : null;
-  const isMember = canAddTrack(member);
+  const access = session
+    ? memberAccess({
+        member,
+        memberships: (tables.Memberships ?? []).map(toMembership),
+        payments: (tables.Payments ?? []).map(toPayment),
+        todayKey: toDateKey(Date.now()),
+      })
+    : null;
+  const canAdd = Boolean(access?.canParticipate);
   return {
     // An older Apps Script deployment leaves unknown tabs out of the read entirely.
     ready: tables.RadioTracks !== undefined,
-    tracks: toPublic(activeTracks(tables), isMember),
+    // Names and stories stay visible to signed-in members even after a membership ends (records are never hidden).
+    tracks: toPublic(activeTracks(tables), Boolean(member && member.status !== "inactive")),
     playerEnabled: toSettings(tables.Settings).radioPlayer,
     signedIn: Boolean(session),
-    canAdd: isMember,
+    canAdd,
     canDelete: isRadioAdmin(member),
-    myName: isMember ? member.name || session?.name || "" : null,
+    myName: canAdd ? member?.name || session?.name || "" : null,
+    blockReason: access && !access.canParticipate ? access.blockReason : null,
   };
 }
 

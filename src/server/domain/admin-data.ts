@@ -1,8 +1,9 @@
+import { monthBounds, overlapping } from "@/lib/membership";
 import { isStampId } from "@/lib/stamps";
 import { pickText, type Check, type Op } from "../store/commit";
 import { newId, seoulIso } from "../store/ids";
 import { cellText, type Row, type Tables } from "../store/schema";
-import { normalizeEmail, toMember, type Role } from "./model";
+import { normalizeEmail, toMember, toMembership, type Role } from "./model";
 
 /**
  * Things the crew used to type straight into the sheet, now done on admin screens
@@ -99,6 +100,71 @@ export function planMemberAdd(data: Tables, ctx: Ctx & { input: MemberInput }): 
       ops: [{ type: "append", table: "Members", row }, audit(ctx, commitId, "member.add", memberId, null, row)],
     },
     result: { memberId },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Memberships recorded by hand (members from before the site, fees settled elsewhere)
+// ---------------------------------------------------------------------------
+
+/**
+ * Records a membership period without a payment (so it never counts as fee income
+ * in the ledger). Whole months only, like every membership; no overlap with the
+ * member's other memberships. Operators and admins.
+ */
+export function planMembershipGrant(
+  data: Tables,
+  ctx: Ctx & { memberId: string; planId: string; startMonth: string; endMonth: string; reason: string },
+): Planned {
+  const member = (data.Members ?? []).map(toMember).find((m) => m.id === ctx.memberId);
+  if (!member) return { refuse: "회원을 찾을 수 없어요." };
+  if (member.status === "inactive") return { refuse: "이용 중지된 회원이에요. 먼저 회원 상태를 바꿔 주세요." };
+  if (!(data.Plans ?? []).some((p) => cellText(p.plan_id) === ctx.planId)) return { refuse: "회원권 상품을 골라 주세요." };
+  const start = monthBounds(ctx.startMonth);
+  const end = monthBounds(ctx.endMonth);
+  if (!start || !end) return { refuse: "시작 월과 종료 월을 골라 주세요." };
+  if (end.end < start.start) return { refuse: "종료 월이 시작 월보다 빨라요." };
+  if (!ctx.reason.trim()) return { refuse: "등록 사유를 적어 주세요. (예: 사이트 이전 회원권, 현금 납부)" };
+  const mine = (data.Memberships ?? []).map(toMembership).filter((m) => m.memberId === member.id);
+  if (overlapping(mine, start.start, end.end).length) return { refuse: "같은 회원의 다른 회원권과 기간이 겹쳐요." };
+
+  const commitId = newId("C", ctx.now, 8);
+  const membershipId = newId("MS", ctx.now);
+  const nowIso = seoulIso(ctx.now);
+  const row: Row = {
+    membership_id: membershipId,
+    member_id: member.id,
+    plan_id: ctx.planId,
+    start_date: start.start,
+    end_date: end.end,
+    status: "active",
+    source_payment_id: "",
+    created_at: nowIso,
+    updated_at: nowIso,
+    note: `직접 등록: ${ctx.reason.trim()}`.slice(0, 200),
+  };
+  const rows = (data.Memberships ?? []).filter((r) => cellText(r.member_id) === member.id);
+  const ops: Op[] = [{ type: "append", table: "Memberships", row }];
+  if (member.status !== "active" || !member.joinedAt) {
+    ops.push({ type: "update", table: "Members", id: member.id, set: { status: "active", ...(member.joinedAt ? {} : { joined_at: start.start }) } });
+  }
+  ops.push(audit(ctx, commitId, "membership.grant", membershipId, null, row));
+  return {
+    commit: {
+      id: commitId,
+      checks: [
+        { type: "exists", table: "Members", id: member.id, fields: { status: ["applicant", "active"] } },
+        // Nobody else changed this member's memberships in the meantime.
+        {
+          type: "snapshot",
+          table: "Memberships",
+          where: { member_id: member.id },
+          rows: Object.fromEntries(rows.map((r) => [cellText(r.membership_id), pickText(r, ["start_date", "end_date", "status"])])),
+        },
+      ],
+      ops,
+    },
+    result: { membershipId },
   };
 }
 

@@ -6,6 +6,7 @@ import { SiteFooter, SiteHeader } from "@/components/site";
 import { cn, NotReady } from "@/components/ui";
 import { requestNow } from "@/lib/club-data";
 import { toDateKey } from "@/lib/dates";
+import { chatHint, memberAccess, type ChatHint, type MemberAccess } from "@/lib/access";
 import { accessUntil } from "@/lib/membership";
 import { requireOperator } from "@/server/auth/viewer";
 import { daysUntil } from "@/server/domain/operations";
@@ -22,8 +23,30 @@ const FILTERS = [
   { key: "expiring", label: "만료 예정" },
   { key: "expired", label: "만료" },
   { key: "applicant", label: "신청자" },
+  { key: "renewal", label: "갱신 예정" },
+  { key: "chat", label: "단톡방 확인" },
   { key: "staff", label: "운영진" },
 ] as const;
+
+/** One label per member, from the same rule the site uses for access (src/lib/access.ts). */
+function stateLabel(a: MemberAccess): { text: string; tone: "ok" | "warn" | "muted" | "default" } {
+  if (a.blockReason === "suspended") return { text: "이용 중지", tone: "muted" };
+  if (a.validUntil) {
+    if (a.status === "RENEWAL_DUE") return { text: "갱신 예정", tone: "warn" };
+    if (a.status === "PENDING") return { text: "이용 중 · 다음 달 입금 확인 중", tone: "default" };
+    return { text: "이용 중", tone: "ok" };
+  }
+  if (a.status === "PENDING") return { text: a.lastEnded ? "재등록 확인 대기" : "등록 확인 대기", tone: "warn" };
+  if (a.startsOn) return { text: `시작 전 · ${dotDate(a.startsOn)}`, tone: "default" };
+  if (a.lastEnded) return { text: "만료", tone: "muted" };
+  return { text: "회원권 없음", tone: "muted" };
+}
+
+const CHAT_LABEL: Record<Exclude<ChatHint, null>, string> = {
+  remove: "단톡방 정리 확인",
+  invite: "단톡방 초대 확인",
+  reinvite: "단톡방 재초대 확인",
+};
 
 export default function MembersPage({ searchParams }: PageProps<"/admin/members">) {
   return (
@@ -58,9 +81,11 @@ async function Members({ searchParams }: Pick<PageProps<"/admin/members">, "sear
         .sort()
         .at(-1);
       const pending = club.payments.some((p) => p.memberId === member.id && (p.status === "pending" || p.status === "matched"));
-      return { member, until, lastEnd, pending, left: until ? daysUntil(todayKey, until) : null };
+      const access = memberAccess({ member, memberships: club.memberships, payments: club.payments, todayKey });
+      const chat = chatHint({ access, memberships: club.memberships, memberId: member.id, todayKey });
+      return { member, until, lastEnd, pending, left: until ? daysUntil(todayKey, until) : null, access, chat };
     })
-    .filter(({ member, until, left }) => {
+    .filter(({ member, until, left, access, chat }) => {
       if (q && ![member.name, member.email, member.depositorName, member.id].some((v) => v.toLowerCase().includes(q))) return false;
       switch (filter) {
         case "active":
@@ -71,6 +96,10 @@ async function Members({ searchParams }: Pick<PageProps<"/admin/members">, "sear
           return until === null && member.status === "active";
         case "applicant":
           return member.status === "applicant";
+        case "renewal":
+          return access.status === "RENEWAL_DUE" || access.status === "PENDING";
+        case "chat":
+          return chat !== null;
         case "staff":
           return member.role !== "member";
         default:
@@ -157,8 +186,13 @@ async function Members({ searchParams }: Pick<PageProps<"/admin/members">, "sear
       </details>
 
       <p className="mt-4 text-[13px] text-ink-soft">{rows.length}명</p>
+      {filter === "chat" && (
+        <p className="mt-1 text-[12px] leading-relaxed text-ink-soft">
+          회원 단체 채팅방에서 확인할 사람들이에요. 초대·내보내기는 자동으로 되지 않아요 — 운영진이 직접 처리해 주세요. 이 표시는 할 일 안내일 뿐, 실제로 채팅방에서 나갔는지는 알 수 없어요.
+        </p>
+      )}
       <ul className="mt-2 flex flex-col gap-2">
-        {rows.map(({ member, until, lastEnd, pending, left }) => (
+        {rows.map(({ member, until, lastEnd, pending, left, access, chat }) => (
           <li key={member.id}>
             <Link
               href={`/admin/members/${encodeURIComponent(member.id)}`}
@@ -167,6 +201,8 @@ async function Members({ searchParams }: Pick<PageProps<"/admin/members">, "sear
               <span className="min-w-0">
                 <span className="flex flex-wrap items-center gap-1.5 text-[15px] font-bold text-midnight">
                   {member.name}
+                  <Pill tone={stateLabel(access).tone}>{stateLabel(access).text}</Pill>
+                  {chat && <Pill tone="warn">{CHAT_LABEL[chat]}</Pill>}
                   {member.role !== "member" && <Pill tone="ok">{member.role}</Pill>}
                   {member.status !== "active" && <Pill tone="warn">{member.status}</Pill>}
                   {pending && <Pill>입금 대기</Pill>}

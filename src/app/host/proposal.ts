@@ -35,6 +35,9 @@ export interface ProposalPayload extends Record<TextField, string> {
 export interface ProposalFormState {
   status: "idle" | "success" | "error";
   message?: string;
+  /** "MEMBERSHIP_REQUIRED" when the account has no membership in effect. */
+  code?: string;
+  reason?: import("@/lib/access").BlockReason;
   fieldErrors?: Partial<Record<ProposalField, string>>;
   /** Echoed back on error so the visitor never loses what they typed. */
   values?: Record<string, string>;

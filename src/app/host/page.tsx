@@ -3,7 +3,11 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { SiteFooter, SiteHeader } from "@/components/site";
 import { ArrowRight, buttonPrimary, cn } from "@/components/ui";
+import { MembershipRequired } from "@/components/membership-required";
+import { requestNow } from "@/lib/club-data";
+import { viewerAccess } from "@/server/auth/access";
 import { readSession } from "@/server/auth/session";
+import { getViewer } from "@/server/auth/viewer";
 import { storeMode } from "@/server/store";
 import { ProposalForm } from "./proposal-form";
 
@@ -90,6 +94,12 @@ async function MembersOnlyForm() {
         </Link>
       </div>
     );
+  }
+  // ACTIVE MEMBERS ONLY (the submit action checks the same rule again on live data).
+  if (storeMode() !== "unconfigured") {
+    const viewer = await getViewer();
+    const access = viewer ? viewerAccess(viewer, await requestNow()) : null;
+    if (access && !access.canParticipate) return <MembershipRequired reason={access.blockReason ?? "expired"} />;
   }
   return <ProposalForm defaults={{ proposer: session.name, contact: session.email }} />;
 }

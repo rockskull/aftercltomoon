@@ -100,8 +100,10 @@ export interface RadioState {
   /** Settings radio_player = on (turned on by the crew after checking music rights). */
   playerEnabled: boolean;
   signedIn: boolean;
-  /** A signed-in club member (Members tab, not suspended). */
+  /** May add tracks: a membership in effect (or active staff) — src/lib/access.ts. */
   canAdd: boolean;
+  /** Why a signed-in visitor can't add (null otherwise). */
+  blockReason: import("./access").BlockReason | null;
   /** That member's own name, to prefill the name shown with a request (null for everyone else). */
   myName: string | null;
   /** An active admin. */
