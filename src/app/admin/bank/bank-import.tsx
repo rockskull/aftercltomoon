@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { cn } from "@/components/ui";
 import { formatDateTimeKo } from "@/lib/dates";
+import { FIRST_START_MONTH } from "@/lib/start-months";
 import { analyzeBankFile, approvePayment, type BankState } from "../actions";
 import { ActionForm } from "../admin-ui";
 import { MonthSelect } from "../month-select";
@@ -89,7 +90,7 @@ export function BankImport() {
                           <input type="hidden" name="deposited_at" value={m.deposit.dateKey} />
                           <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
                             시작 월 (바꿀 때만)
-                            <MonthSelect name="start_month" todayKey={m.deposit.dateKey} emptyLabel="자동" />
+                            <MonthSelect name="start_month" todayKey={m.deposit.dateKey} from={FIRST_START_MONTH} emptyLabel="자동" />
                           </label>
                           <button type="submit" className={smallPrimary}>
                             이 입금으로 승인

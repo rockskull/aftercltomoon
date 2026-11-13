@@ -1,5 +1,6 @@
 import { monthBounds, overlapping } from "@/lib/membership";
 import { isStampId } from "@/lib/stamps";
+import { FIRST_START_DAY, START_TOO_EARLY } from "@/lib/start-months";
 import { pickText, type Check, type Op } from "../store/commit";
 import { newId, seoulIso } from "../store/ids";
 import { cellText, type Row, type Tables } from "../store/schema";
@@ -123,6 +124,7 @@ export function planMembershipGrant(
   const start = monthBounds(ctx.startMonth);
   const end = monthBounds(ctx.endMonth);
   if (!start || !end) return { refuse: "시작 월과 종료 월을 골라 주세요." };
+  if (start.start < FIRST_START_DAY) return { refuse: START_TOO_EARLY };
   if (end.end < start.start) return { refuse: "종료 월이 시작 월보다 빨라요." };
   if (!ctx.reason.trim()) return { refuse: "등록 사유를 적어 주세요. (예: 사이트 이전 회원권, 현금 납부)" };
   const mine = (data.Memberships ?? []).map(toMembership).filter((m) => m.memberId === member.id);

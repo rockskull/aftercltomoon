@@ -102,6 +102,18 @@ describe("month helpers", () => {
   });
 });
 
+describe("nextMembershipPeriod: earliest start", () => {
+  it("moves an automatic start up to the earliest month, never an override", () => {
+    expect(nextMembershipPeriod({ existing: [], plan: { durationMonths: 1, bonusMonths: 0 }, todayKey: "2026-11-11", earliestStart: "2026-12-01" }).startDate).toBe("2026-12-01");
+    expect(
+      nextMembershipPeriod({ existing: [], plan: { durationMonths: 1, bonusMonths: 0 }, todayKey: "2026-11-11", requestedStart: "2027-03-01", earliestStart: "2026-12-01" }).startDate,
+    ).toBe("2027-03-01");
+    expect(
+      nextMembershipPeriod({ existing: [], plan: { durationMonths: 1, bonusMonths: 0 }, todayKey: "2026-11-11", startOverride: "2026-10-01", earliestStart: "2026-12-01" }).startDate,
+    ).toBe("2026-10-01");
+  });
+});
+
 describe("nextMembershipPeriod (whole calendar months)", () => {
   const isWholeMonths = (p: { startDate: string; endDate: string }) => isMonthStart(p.startDate) && isMonthEnd(p.endDate);
 

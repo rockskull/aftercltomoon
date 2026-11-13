@@ -8,6 +8,7 @@ import { NotReady } from "@/components/ui";
 import { requestNow } from "@/lib/club-data";
 import { toDateKey } from "@/lib/dates";
 import { membershipPhase } from "@/lib/membership";
+import { earliestStart, FIRST_START_MONTH } from "@/lib/start-months";
 import { requireOperator } from "@/server/auth/viewer";
 import { formatWon } from "@/server/domain/model";
 import { storeMode } from "@/server/store";
@@ -52,6 +53,8 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
   const payments = club.payments.filter((p) => p.memberId === member.id).sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
   const planName = (pid: string) => club.plans.find((p) => p.id === pid)?.name ?? pid;
   const access = memberAccess({ member, memberships: club.memberships, payments: club.payments, todayKey });
+  // New memberships start from the club's first month (2026-12) at the earliest.
+  const grantDefault = earliestStart(todayKey).slice(0, 7);
 
   return (
     <AdminFrame tab="members" title={member.name || member.id}>
@@ -187,11 +190,11 @@ async function MemberDetail({ params }: Pick<PageProps<"/admin/members/[id]">, "
             </label>
             <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
               시작 월 (1일부터)
-              <MonthSelect name="start_month" todayKey={todayKey} defaultValue={todayKey.slice(0, 7)} required />
+              <MonthSelect name="start_month" todayKey={todayKey} from={FIRST_START_MONTH} defaultValue={grantDefault} required />
             </label>
             <label className="flex flex-col gap-1 text-[12px] font-medium text-ink-soft">
               종료 월 (말일까지)
-              <MonthSelect name="end_month" todayKey={todayKey} defaultValue={todayKey.slice(0, 7)} required />
+              <MonthSelect name="end_month" todayKey={todayKey} from={FIRST_START_MONTH} defaultValue={grantDefault} required />
             </label>
             <div className="sm:col-span-2">
               <button type="submit" className={smallPrimary}>

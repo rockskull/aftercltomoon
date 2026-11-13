@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { START_TOO_EARLY } from "@/lib/start-months";
 import { applyCommit } from "../store/commit";
 import type { Row, Tables } from "../store/schema";
 import {
@@ -61,14 +62,14 @@ describe("adding members by hand", () => {
 
 describe("recording a membership by hand", () => {
   const grant = (data: Tables, over: Partial<{ memberId: string; startMonth: string; endMonth: string; reason: string }> = {}) =>
-    planMembershipGrant(data, { ...operator, memberId: "A", planId: "PLAN-1M", startMonth: "2026-11", endMonth: "2027-01", reason: "사이트 이전 회원권", ...over });
+    planMembershipGrant(data, { ...operator, memberId: "A", planId: "PLAN-1M", startMonth: "2026-12", endMonth: "2027-01", reason: "사이트 이전 회원권", ...over });
 
   it("adds whole months without a payment, so it never counts as fee income", () => {
     const data = { ...tables(), Memberships: [], Payments: [] };
     const planned = grant(data);
     if ("refuse" in planned) throw new Error(planned.refuse);
     expect(applyCommit(data, planned.commit)).toEqual({ ok: true });
-    expect(data.Memberships![0]).toMatchObject({ member_id: "A", start_date: "2026-11-01", end_date: "2027-01-31", status: "active", source_payment_id: "" });
+    expect(data.Memberships![0]).toMatchObject({ member_id: "A", start_date: "2026-12-01", end_date: "2027-01-31", status: "active", source_payment_id: "" });
     expect(data.Payments).toHaveLength(0);
     expect(data.AuditLog!.at(-1)).toMatchObject({ action: "membership.grant" });
   });
@@ -79,6 +80,12 @@ describe("recording a membership by hand", () => {
     expect(grant(data, { startMonth: "2027-01", endMonth: "2027-01", reason: " " })).toHaveProperty("refuse");
     expect(grant(data, { memberId: "NOPE" })).toHaveProperty("refuse");
     expect(grant(data, { startMonth: "2027-01", endMonth: "2027-01" })).not.toHaveProperty("refuse");
+  });
+
+  it("never starts before 2026년 12월", () => {
+    const data = { ...tables(), Memberships: [], Payments: [] };
+    expect(grant(data, { startMonth: "2026-11", endMonth: "2026-12" })).toEqual({ refuse: START_TOO_EARLY });
+    expect(grant(data, { startMonth: "2025-06", endMonth: "2027-01" })).toEqual({ refuse: START_TOO_EARLY });
   });
 });
 

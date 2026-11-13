@@ -5,8 +5,8 @@
 //
 // What it does:
 //   • ST-02 definition row → "100 HOLDS" / "100홀드 지구력 문제 완등" (same id, same artwork key,
-//     same on/off). The row is the only thing that would otherwise keep showing "FIRST TOP",
-//     because a definitions row overrides the code's defaults.
+//     same on/off), only while the row still says FIRST TOP — a row the crew already reworded
+//     is left as it is. (A definitions row overrides the code's defaults.)
 //   • ST-05 SIX MOONS / ST-06 TWELVE MOONS definition rows are added when missing.
 //   • Existing ST-02 awards are NOT changed or converted. They are listed for the crew to
 //     review (an award given as FIRST TOP is not automatically a 100 HOLDS achievement).
@@ -58,9 +58,10 @@ try {
   const audits = [];
   const actions = [];
 
-  // ST-02: rename in place (keep image_key and active as they are).
+  // ST-02: rename in place (keep image_key and active as they are) — only while it still says FIRST TOP.
+  // Once the crew has reworded it (설정 → MOON STAMPS), their wording stays.
   const row02 = defs.find((d) => d.stamp_id.trim().toUpperCase() === "ST-02");
-  if (row02 && (row02.name !== TARGET["ST-02"].name || row02.description !== TARGET["ST-02"].description)) {
+  if (row02 && row02.name.trim().toUpperCase() === "FIRST TOP") {
     const before = { name: row02.name, description: row02.description };
     const after = { name: TARGET["ST-02"].name, description: TARGET["ST-02"].description };
     actions.push(`update ST-02: ${before.name} / ${before.description} → ${after.name} / ${after.description}`);

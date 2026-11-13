@@ -25,6 +25,7 @@ export function MonthSelect({
   emptyLabel,
   required = false,
   describedBy,
+  from,
 }: {
   name: string;
   todayKey: string;
@@ -34,9 +35,11 @@ export function MonthSelect({
   emptyLabel?: string;
   required?: boolean;
   describedBy?: string;
+  /** "YYYY-MM": no month before this one is offered (new memberships start from the club's first month). */
+  from?: string;
 }) {
-  const months = monthsAround(todayKey, 24, 24);
-  if (defaultValue && !months.includes(defaultValue)) months.push(defaultValue);
+  const months = monthsAround(todayKey, 24, 24).filter((ym) => !from || ym >= from);
+  if (defaultValue && !months.includes(defaultValue) && (!from || defaultValue >= from)) months.push(defaultValue);
   months.sort();
   return (
     <select name={name} defaultValue={defaultValue} required={required} aria-describedby={describedBy} className={smallInput}>

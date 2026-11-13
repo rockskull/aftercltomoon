@@ -143,6 +143,9 @@ export interface NextPeriod {
  *  - Otherwise (new or expired member): the month the member asked for, if it
  *    is this month or later, else this month.
  * An explicit `startOverride` from the crew always wins (moved to its month's 1st).
+ * `earliestStart` ("YYYY-MM-01", the club's first membership month) keeps an
+ * automatically chosen start from falling before it; an override is checked by
+ * the caller instead.
  */
 export function nextMembershipPeriod(args: {
   existing: MembershipPeriod[];
@@ -150,6 +153,7 @@ export function nextMembershipPeriod(args: {
   todayKey: string;
   requestedStart?: string | null;
   startOverride?: string | null;
+  earliestStart?: string | null;
 }): NextPeriod {
   const months = totalMonths(args.plan);
   const lastEnd = accessUntil(args.existing, args.todayKey);
@@ -163,6 +167,7 @@ export function nextMembershipPeriod(args: {
     const requested = args.requestedStart ? monthStart(args.requestedStart) : null;
     startDate = requested && requested > thisMonth ? requested : thisMonth;
   }
+  if (!args.startOverride && args.earliestStart && startDate < monthStart(args.earliestStart)) startDate = monthStart(args.earliestStart);
   return { startDate, endDate: membershipEndDate(startDate, months), extendsExisting: chained !== null && startDate === chained };
 }
 

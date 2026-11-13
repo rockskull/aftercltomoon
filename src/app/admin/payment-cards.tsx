@@ -2,6 +2,7 @@ import Link from "next/link";
 import { dotDate } from "@/components/membership-card";
 import { formatDateTimeKo, parseMoment } from "@/lib/dates";
 import { nextMembershipPeriod, totalMonths } from "@/lib/membership";
+import { FIRST_START_DAY, FIRST_START_MONTH } from "@/lib/start-months";
 import { formatWon, type ClubPrivate, type Payment } from "@/server/domain/model";
 import { approvePayment, cancelApproval, refundPayment, rejectPayment } from "./actions";
 import { ActionForm } from "./admin-ui";
@@ -25,6 +26,7 @@ export function PendingPaymentCard({ payment, club, todayKey }: { payment: Payme
         plan,
         todayKey,
         requestedStart: payment.requestedStart || null,
+        earliestStart: FIRST_START_DAY,
       })
     : null;
 
@@ -80,6 +82,7 @@ export function PendingPaymentCard({ payment, club, todayKey }: { payment: Payme
             <MonthSelect
               name="start_month"
               todayKey={todayKey}
+              from={FIRST_START_MONTH}
               emptyLabel={preview ? `자동 (${monthLabel(preview.startDate)})` : "자동"}
               describedBy={`start-${payment.id}`}
             />

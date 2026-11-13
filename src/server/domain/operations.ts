@@ -1,6 +1,7 @@
 import { formatKeyKo, toDateKey } from "@/lib/dates";
 import { memberAccess } from "@/lib/access";
 import { monthBounds, nextMembershipPeriod, overlapping, totalMonths } from "@/lib/membership";
+import { FIRST_START_DAY, START_TOO_EARLY } from "@/lib/start-months";
 import { pickText, type Check, type Op } from "../store/commit";
 import { newId, seoulIso } from "../store/ids";
 import { eventIdForProposal, type EventInput } from "./event-input";
@@ -312,6 +313,8 @@ export function planApproval(
   const tx = ctx.bankTransactionId?.trim() || "";
   if (tx && club.payments.some((p) => p.bankTransactionId === tx)) return { refuse: "이 거래는 이미 다른 입금에 반영됐어요." };
 
+  if (ctx.startOverride && ctx.startOverride < FIRST_START_DAY) return { refuse: START_TOO_EARLY };
+
   const todayKey = toDateKey(ctx.now);
   const existing = memberMemberships(data, member.id);
   const period = nextMembershipPeriod({
@@ -320,6 +323,7 @@ export function planApproval(
     todayKey,
     requestedStart: payment.requestedStart || null,
     startOverride: ctx.startOverride || null,
+    earliestStart: FIRST_START_DAY,
   });
   if (ctx.startOverride && overlapping(existing, period.startDate, period.endDate).length) {
     return { refuse: "지정한 기간이 기존 회원권과 겹쳐요. 시작일을 다시 확인해 주세요." };

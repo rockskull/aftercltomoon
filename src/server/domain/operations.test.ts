@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { START_TOO_EARLY } from "@/lib/start-months";
 import { applyCommit, type Commit } from "../store/commit";
 import { MemoryStore } from "../store/memory";
 import type { Row, Tables } from "../store/schema";
@@ -81,15 +82,16 @@ function commitOf(planned: ReturnType<typeof planApproval>): Commit {
 }
 
 describe("payment approval", () => {
-  it("activates a new member for the whole current month and records everything", () => {
+  it("activates a new member for whole months from the club's first month (2026-12) and records everything", () => {
     const t = baseTables();
     expect(applyCommit(t, commitOf(planApproval(t, { now: NOW, actorId: "OP", paymentId: "P-NEW" })))).toEqual({ ok: true });
 
     const club = parsePrivate(t);
     const ms = club.memberships.find((m) => m.sourcePaymentId === "P-NEW")!;
-    expect([ms.startDate, ms.endDate, ms.status]).toEqual(["2026-11-01", "2026-11-30", "active"]);
+    // Approved in November 2026, but no membership starts before December 2026.
+    expect([ms.startDate, ms.endDate, ms.status]).toEqual(["2026-12-01", "2026-12-31", "active"]);
     expect(club.payments.find((p) => p.id === "P-NEW")).toMatchObject({ status: "approved", approvedBy: "OP", depositedAt: "2026-11-11" });
-    expect(club.members.find((m) => m.id === "NEW")).toMatchObject({ status: "active", joinedAt: "2026-11-01" });
+    expect(club.members.find((m) => m.id === "NEW")).toMatchObject({ status: "active", joinedAt: "2026-12-01" });
     expect(club.notifications.map((n) => n.type)).toEqual(["payment_approved"]);
     expect(t.AuditLog).toHaveLength(1);
     expect(t.AuditLog![0]).toMatchObject({ actor_id: "OP", action: "payment.approve", target_id: "P-NEW" });
@@ -167,12 +169,12 @@ describe("payment approval", () => {
     expect(club.memberships.filter((m) => m.memberId === "NEW").map((m) => m.status)).toEqual(["canceled"]);
 
     // Re-approve with the right start date.
-    const again = planApproval(t, { now: NOW, actorId: "OP", paymentId: "P-NEW", startOverride: "2026-12-01" });
+    const again = planApproval(t, { now: NOW, actorId: "OP", paymentId: "P-NEW", startOverride: "2027-01-01" });
     expect(applyCommit(t, commitOf(again))).toEqual({ ok: true });
     club = parsePrivate(t);
     expect(club.memberships.filter((m) => m.memberId === "NEW").map((m) => [m.status, m.startDate, m.endDate])).toEqual([
-      ["canceled", "2026-11-01", "2026-11-30"],
-      ["active", "2026-12-01", "2026-12-31"],
+      ["canceled", "2026-12-01", "2026-12-31"],
+      ["active", "2027-01-01", "2027-01-31"],
     ]);
     expect(t.AuditLog!.map((r) => r.action)).toEqual(["payment.approve", "payment.cancel_approval", "payment.approve"]);
   });
@@ -204,8 +206,23 @@ describe("payment approval", () => {
       expect(applyCommit(t, commitOf(planApproval(t, { now: NOW, actorId: "OP", paymentId: "P-NEW", depositedAt })))).toEqual({ ok: true });
       const club = parsePrivate(t);
       expect(club.payments.find((p) => p.id === "P-NEW")!.depositedAt).toBe(depositedAt);
-      expect(club.memberships.find((m) => m.sourcePaymentId === "P-NEW")).toMatchObject({ startDate: "2026-11-01", endDate: "2026-11-30" });
+      expect(club.memberships.find((m) => m.sourcePaymentId === "P-NEW")).toMatchObject({ startDate: "2026-12-01", endDate: "2026-12-31" });
     }
+  });
+
+  it("never starts a new membership before 2026년 12월", () => {
+    // A crew-chosen start before December is refused (stale or hand-made form).
+    expect(planApproval(baseTables(), { now: NOW, actorId: "OP", paymentId: "P-NEW", startOverride: "2026-11-01" })).toEqual({ refuse: START_TOO_EARLY });
+    // An application that asked for November (made before the rule) starts in December instead.
+    const t = baseTables();
+    t.Payments!.find((p) => p.payment_id === "P-NEW")!.requested_start = "2026-11-01";
+    applyCommit(t, commitOf(planApproval(t, { now: NOW, actorId: "OP", paymentId: "P-NEW" })));
+    expect(parsePrivate(t).memberships.find((m) => m.sourcePaymentId === "P-NEW")).toMatchObject({ startDate: "2026-12-01" });
+    // Later requests are kept as asked.
+    const u = baseTables();
+    u.Payments!.find((p) => p.payment_id === "P-NEW")!.requested_start = "2027-02-01";
+    applyCommit(u, commitOf(planApproval(u, { now: NOW, actorId: "OP", paymentId: "P-NEW" })));
+    expect(parsePrivate(u).memberships.find((m) => m.sourcePaymentId === "P-NEW")).toMatchObject({ startDate: "2027-02-01" });
   });
 });
 
@@ -326,6 +343,18 @@ describe("first-time price", () => {
     t.Memberships = [{ membership_id: "ML2", member_id: "L2", plan_id: "1M", start_date: "2026-01-01", end_date: "2026-01-31", status: "active" }];
     expect(result(t, "l1@x", "1M")).toEqual(expect.objectContaining({ amount: 80000, firstPriceApplied: false }));
     expect(result(t, "l2@x", "1M")).toEqual(expect.objectContaining({ amount: 80000, firstPriceApplied: false }));
+  });
+
+  it("first price is per person, not per plan: a former 1개월 member pays the regular 6개월 price", () => {
+    const t = baseTables();
+    t.Plans = t.Plans!.map((p) => (p.plan_id === "6M" ? { ...p, first_price: 550000 } : p));
+    t.Payments = [];
+    t.Members = [{ member_id: "X", name: "X", email: "x@x", status: "active", role: "member", joined_at: "", member_consent_at: "x" }];
+    // Only an expired 1개월 membership, long ago.
+    t.Memberships = [{ membership_id: "MX", member_id: "X", plan_id: "1M", start_date: "2026-01-01", end_date: "2026-01-31", status: "active" }];
+    expect(result(t, "x@x", "6M")).toEqual(expect.objectContaining({ amount: 500000, firstPriceApplied: false }));
+    // Someone with no history at all gets the 6개월 first price.
+    expect(result(t, "brand-new@x", "6M")).toEqual(expect.objectContaining({ amount: 550000, firstPriceApplied: true }));
   });
 
   it("works on a sheet set up before first_price existed: regular price, and only existing Payments columns are written", () => {
