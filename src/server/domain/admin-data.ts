@@ -1,3 +1,4 @@
+import { normalizeNotices, noticeProblem, serializeNotices, type NoticeItem } from "@/lib/club-notice";
 import { toDateKey } from "@/lib/dates";
 import { monthBounds, overlapping } from "@/lib/membership";
 import { quoteRegistration, serializeRegistration } from "@/lib/registration";
@@ -368,6 +369,7 @@ export const SETTING_KEYS = {
   consent_daily_url: "일일 이용 동의서 (Google 설문)",
   consent_member_url: "회원 등록 동의서 (Google 설문)",
   radio_player: "AFTER HOURS RADIO 아지트 플레이어 (on/off)",
+  club_notice: "아지트 공지 (홈·MY에 공개, JSON 목록: title/body)",
 } as const;
 export type SettingKey = keyof typeof SETTING_KEYS;
 
@@ -379,6 +381,20 @@ export function planSettingsSave(data: Tables, ctx: Ctx & { values: Partial<Reco
     if (values[key] !== undefined && !isHttpsUrl(values[key]!)) return { refuse: "동의서 링크는 https:// 로 시작하는 주소여야 해요." };
   }
   if (values.radio_player !== undefined && !["on", "off"].includes(values.radio_player)) return { refuse: "라디오 플레이어는 on 또는 off예요." };
+  if (values.club_notice !== undefined) {
+    // Stored in a normal form, and never anything that must not be public (door code, account, amounts).
+    let items: NoticeItem[];
+    try {
+      const parsed = JSON.parse(values.club_notice) as unknown;
+      if (!Array.isArray(parsed)) throw new Error("not a list");
+      items = normalizeNotices(parsed as Array<Partial<NoticeItem>>);
+    } catch {
+      return { refuse: "공지 내용을 읽지 못했어요. 새로고침한 뒤 다시 시도해 주세요." };
+    }
+    const problem = noticeProblem(items);
+    if (problem) return { refuse: problem };
+    values.club_notice = serializeNotices(items);
+  }
 
   const rows = data.Settings ?? [];
   const commitId = newId("C", ctx.now, 8);

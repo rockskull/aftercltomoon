@@ -1,3 +1,4 @@
+import { parseNotices, type NoticeItem } from "@/lib/club-notice";
 import { CONSENT_DEFAULTS, consentUrl, type ConsentLinks } from "@/lib/consent";
 import { parseMoment, toDateKey } from "@/lib/dates";
 import { kindOf, type MoneyEntry } from "@/lib/ledger";
@@ -128,6 +129,8 @@ export interface ClubSettings {
   consent: ConsentLinks;
   /** AFTER HOURS RADIO player (Settings radio_player): off until the crew has checked music rights. */
   radioPlayer: boolean;
+  /** CLUB NOTICE (Settings club_notice); the defaults until an admin edits it. */
+  clubNotice: NoticeItem[];
 }
 
 export const DEFAULT_APPLY_NOTICE =
@@ -308,6 +311,7 @@ export function toSettings(rows: Row[] | undefined): ClubSettings {
       member: consentUrl(map.get("consent_member_url"), CONSENT_DEFAULTS.member),
     },
     radioPlayer: ["on", "true", "yes", "1", "켜기"].includes((map.get("radio_player") ?? "").trim().toLowerCase()),
+    clubNotice: parseNotices(map.get("club_notice")),
   };
 }
 

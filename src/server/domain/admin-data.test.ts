@@ -130,6 +130,24 @@ describe("site settings", () => {
     expect(planSettingsSave(data, { ...operator, values: { apply_notice: "x" } })).toHaveProperty("refuse");
     expect(planSettingsSave(data, { ...admin, values: { apply_notice: "안내" } })).toEqual({ refuse: "바뀐 내용이 없어요." });
   });
+
+  it("admins edit the club notice; it's stored tidy and never with account numbers or amounts", () => {
+    const data = tables();
+    expect(toSettings(data.Settings).clubNotice.map((n) => n.title)).toEqual(["회비 납부", "출입 비밀번호", "회원 단체 채팅방"]); // defaults
+    const notice = (items: unknown) => ({ ...admin, values: { club_notice: JSON.stringify(items) } });
+    expect(planSettingsSave(data, { ...operator, values: { club_notice: "[]" } })).toHaveProperty("refuse");
+    expect(planSettingsSave(data, notice([{ title: "회비", body: "3333-01-1234567로 입금" }]))).toEqual({ refuse: expect.stringContaining("계좌번호") });
+    expect(planSettingsSave(data, notice([{ title: "회비", body: "월 80,000원" }]))).toEqual({ refuse: expect.stringContaining("금액") });
+    expect(planSettingsSave(data, { ...admin, values: { club_notice: "{oops" } })).toHaveProperty("refuse");
+    const planned = planSettingsSave(data, notice([{ title: " 청소 ", body: "금요일 마지막 사람이 정리\n" }, { title: "", body: "" }, { title: "출입", body: "비밀번호는 단톡방에서" }]));
+    if ("refuse" in planned) throw new Error(planned.refuse);
+    expect(applyCommit(data, planned.commit)).toEqual({ ok: true });
+    expect(toSettings(data.Settings).clubNotice).toEqual([
+      { title: "청소", body: "금요일 마지막 사람이 정리" },
+      { title: "출입", body: "비밀번호는 단톡방에서" },
+    ]);
+    expect(data.AuditLog!.at(-1)).toMatchObject({ action: "settings.edit", target_id: "club_notice" });
+  });
 });
 
 describe("stamps", () => {

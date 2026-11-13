@@ -37,7 +37,9 @@ export default function HomePage() {
         </section>
         <section className="paper">
           <div className="mx-auto max-w-6xl px-4 pb-12 md:px-6 md:pb-16">
-            <ClubNotice className="max-w-3xl" />
+            <Suspense fallback={<div className="h-72 max-w-3xl animate-pulse rounded-lg border-2 border-midnight/20 bg-ivory/60" aria-hidden />}>
+              <ClubNotice className="max-w-3xl" />
+            </Suspense>
           </div>
         </section>
         <ProposeInvite />
