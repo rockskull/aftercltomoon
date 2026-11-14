@@ -15,6 +15,7 @@ function event(overrides: Record<string, unknown> = {}): ClubEvent {
     title: "볼더링 세션",
     start_at: "2026-11-20T19:30:00+09:00",
     end_at: "2026-11-20T22:00:00+09:00",
+    registration_url: "https://forms.gle/session",
     visibility: "public",
     status: "published",
     ...overrides,
@@ -79,6 +80,19 @@ describe("event status", () => {
     const e = event({ end_at: "" });
     expect(getEventStatus(e, seoul("2026-11-20T23:59:00"))).toBe("CLOSED");
     expect(getEventStatus(e, seoul("2026-11-21T00:00:00"))).toBe("FINISHED");
+  });
+
+  it("is never OPEN without a sign-up link (sign-up is the external link only)", () => {
+    const e = event({ registration_url: "" });
+    expect(e.registrationUrl).toBeNull();
+    expect(getEventStatus(e, seoul("2026-11-12T12:00:00"))).toBe("COMING_SOON");
+    // The rest of the timeline is unchanged.
+    expect(getEventStatus(e, seoul("2026-11-20T19:30:00"))).toBe("CLOSED");
+    expect(getEventStatus(e, seoul("2026-11-20T22:00:00"))).toBe("FINISHED");
+    expect(getEventStatus(event({ registration_url: "", status: "canceled" }), seoul("2026-11-12T12:00:00"))).toBe("CANCELED");
+    // Inside the registration window it still waits for the link.
+    const windowed = event({ registration_url: "", registration_open: "2026-11-10T12:00", registration_close: "2026-11-15" });
+    expect(getEventStatus(windowed, seoul("2026-11-12T12:00:00"))).toBe("COMING_SOON");
   });
 });
 

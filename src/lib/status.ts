@@ -29,6 +29,9 @@ export function getEventStatus(event: ClubEvent, now: number): EventDisplayStatu
   if (event.status === "closed") return "CLOSED"; // closed by the crew, e.g. full
   if (event.registrationOpen !== null && now < event.registrationOpen) return "COMING_SOON";
   if (now >= registrationCloseMs(event)) return "CLOSED";
+  // Sign-up happens only through the event's external link: without one, nobody can apply yet,
+  // so it is never shown as OPEN (and the scheduler announces no opening/closing).
+  if (event.registrationUrl === null) return "COMING_SOON";
   return "OPEN";
 }
 

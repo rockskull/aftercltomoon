@@ -73,12 +73,23 @@ describe("notification schedule", () => {
   it("announces registration opening and closing within 24h", () => {
     const t = tables();
     t.Memberships = [];
-    run(t, at("2026-11-10T12:00:00"), [event()]); // first run: just remembers the event
-    const e = event({ registration_close: "2026-11-12T12:00:00+09:00" });
+    const link = { registration_url: "https://forms.gle/session" };
+    run(t, at("2026-11-10T12:00:00"), [event(link)]); // first run: just remembers the event
+    const e = event({ ...link, registration_close: "2026-11-12T12:00:00+09:00" });
     run(t, at("2026-11-11T13:00:00"), [e]);
     const types = t.Notifications!.filter((n) => n.member_id === "A").map((n) => n.type);
     expect(types).toContain("event_open");
     expect(types).toContain("event_closing");
+  });
+
+  it("doesn't announce opening or closing for an event without a sign-up link", () => {
+    const t = tables();
+    t.Memberships = [];
+    run(t, at("2026-11-10T12:00:00"), [event()]);
+    run(t, at("2026-11-11T13:00:00"), [event({ registration_close: "2026-11-12T12:00:00+09:00" })]);
+    const types = t.Notifications!.filter((n) => n.member_id === "A").map((n) => n.type);
+    expect(types).not.toContain("event_open");
+    expect(types).not.toContain("event_closing");
   });
 
   it("respects member preferences", () => {

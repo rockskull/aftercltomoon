@@ -49,6 +49,21 @@ export function isOperator(member: Member | null): member is Member {
 }
 
 /**
+ * Display only — the header's ADMIN link. Follows the live Members role (the shared short-lived cache),
+ * like /me does, so a role changed after sign-in shows the same everywhere without signing in again.
+ * Falls back to the sign-in hint if the read fails. Access itself is decided by requireOperator /
+ * operatorForAction, never by this.
+ */
+export async function showsAdminLink(session: SessionClaims): Promise<boolean> {
+  try {
+    const members = parsePrivate(await readTables(["Members"])).members;
+    return isOperator(members.find((m) => m.email === session.email.toLowerCase()) ?? null);
+  } catch {
+    return session.roleHint === "operator" || session.roleHint === "admin";
+  }
+}
+
+/**
  * For admin pages: an active operator/admin. Everyone else gets a 404, so the area's existence isn't revealed.
  * One read of ADMIN_TABLES, shared by every admin tab through the short-lived admin cache, so switching
  * tabs doesn't wait on Apps Script each time. The role shown here can lag a direct sheet edit by up to a

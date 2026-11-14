@@ -85,9 +85,9 @@ export function PendingPaymentCard({
             </button>
             {!canConfirmRegistration && <span className="w-full text-[12px] text-brown">등록 확정은 admin만 할 수 있어요.</span>}
           </ActionForm>
-          <ActionForm action={rejectPayment} className="flex items-end gap-2" confirmText="이 청구를 취소(반려)할까요? 기록은 남아요.">
+          <ActionForm action={rejectPayment} className="flex items-end gap-2" confirmText="이 청구를 취소(반려)할까요? 기록은 남아요. 적은 사유는 회원에게 알림으로 가고 MY 화면에도 보여요.">
             <input type="hidden" name="payment_id" value={payment.id} />
-            <input name="reason" placeholder="취소 사유" maxLength={200} className={`${smallInput} w-36`} />
+            <input name="reason" placeholder="취소 사유 (회원에게 보여요)" title="회원에게 알림과 MY 화면으로 보여요. 내부 메모는 회원 상세의 운영 메모에 적어 주세요." maxLength={200} className={`${smallInput} w-48`} />
             <button type="submit" className={smallButton}>
               청구 취소
             </button>
@@ -170,9 +170,9 @@ export function PendingPaymentCard({
             회원권은 1일에 시작해 말일에 끝나요. 비워 두면 {preview ? dotDate(preview.startDate) : "자동 계산된 날짜"}부터 시작해요.
           </span>
         </ActionForm>
-        <ActionForm action={rejectPayment} className="flex items-end gap-2" confirmText="이 신청을 반려할까요?">
+        <ActionForm action={rejectPayment} className="flex items-end gap-2" confirmText="이 신청을 반려할까요? 적은 사유는 회원에게 알림으로 가고 MY 화면에도 보여요.">
           <input type="hidden" name="payment_id" value={payment.id} />
-          <input name="reason" placeholder="반려 사유" maxLength={200} className={`${smallInput} w-36`} />
+          <input name="reason" placeholder="반려 사유 (회원에게 보여요)" title="회원에게 알림과 MY 화면으로 보여요. 내부 메모는 회원 상세의 운영 메모에 적어 주세요." maxLength={200} className={`${smallInput} w-48`} />
           <button type="submit" className={smallButton}>
             반려
           </button>

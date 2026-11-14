@@ -17,6 +17,7 @@ import {
 import { getEventStatus, isMuted } from "@/lib/status";
 import type { ClubEvent, EventDisplayStatus } from "@/lib/types";
 import { readSession } from "@/server/auth/session";
+import { showsAdminLink } from "@/server/auth/viewer";
 
 function safeDecode(value: string): string {
   try {
@@ -62,12 +63,13 @@ export default function EventPage({ params }: PageProps<"/events/[id]">) {
 async function EventDetail({ params }: { params: PageProps<"/events/[id]">["params"] }) {
   const event = await findEvent(params);
   if (!event) notFound();
-  const status = getEventStatus(event, await requestNow());
+  const now = await requestNow();
+  const status = getEventStatus(event, now);
   const muted = isMuted(status);
   const duration = eventDurationLabel(event);
-  // Display hint only: the poster page itself re-checks the operator role on the server.
+  // Display hint only (live role, like the header): the poster page itself re-checks the operator role on the server.
   const session = await readSession();
-  const operator = session?.roleHint === "operator" || session?.roleHint === "admin";
+  const operator = session ? await showsAdminLink(session) : false;
 
   return (
     <article className="mx-auto max-w-3xl px-4 pb-32 pt-6 md:px-6 md:pb-16 md:pt-10">
@@ -160,7 +162,7 @@ async function EventDetail({ params }: { params: PageProps<"/events/[id]">["para
         를 작성해 주세요.
       </p>
 
-      <RegistrationAction event={event} status={status} />
+      <RegistrationAction event={event} status={status} now={now} />
     </article>
   );
 }
@@ -174,17 +176,15 @@ function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function registrationMessage(event: ClubEvent, status: EventDisplayStatus): { button: string; note: string } {
+function registrationMessage(event: ClubEvent, status: EventDisplayStatus, now: number): { button: string; note: string } {
   switch (status) {
     case "OPEN":
-      return event.registrationUrl
-        ? { button: "Join", note: "신청 폼이 새 창으로 열려요." }
-        : { button: "신청 링크 준비 중", note: "곧 신청 링크가 열릴 예정이에요." };
+      return { button: "Join", note: "신청 폼이 새 창으로 열려요." };
     case "COMING_SOON":
-      return {
-        button: event.registrationOpen ? `${formatOpenAt(event.registrationOpen)} 오픈` : "신청 오픈 전",
-        note: "신청이 열리면 이 버튼으로 신청할 수 있어요.",
-      };
+      // Before the registration window, or (no sign-up link yet) inside it — never shown as OPEN without a link.
+      return event.registrationOpen !== null && now < event.registrationOpen
+        ? { button: `${formatOpenAt(event.registrationOpen)} 오픈`, note: "신청이 열리면 이 버튼으로 신청할 수 있어요." }
+        : { button: "신청 링크 준비 중", note: "곧 신청 링크가 열릴 예정이에요." };
     case "CLOSED":
       return { button: "신청 마감", note: "신청이 마감되었어요." };
     case "FINISHED":
@@ -195,8 +195,8 @@ function registrationMessage(event: ClubEvent, status: EventDisplayStatus): { bu
 }
 
 /** Sticky on mobile so the registration button is always within reach. */
-function RegistrationAction({ event, status }: { event: ClubEvent; status: EventDisplayStatus }) {
-  const { button, note } = registrationMessage(event, status);
+function RegistrationAction({ event, status, now }: { event: ClubEvent; status: EventDisplayStatus; now: number }) {
+  const { button, note } = registrationMessage(event, status, now);
   const canJoin = status === "OPEN" && event.registrationUrl !== null;
 
   return (

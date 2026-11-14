@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { readSession } from "@/server/auth/session";
+import { showsAdminLink } from "@/server/auth/viewer";
 import { cn, Logo } from "./ui";
 
 export type NavKey = "calendar" | "events" | "problems" | "radio" | "host" | "me" | "notifications" | "admin";
@@ -84,7 +85,8 @@ async function AccountCorner({ current }: { current?: NavKey }) {
       </Link>
     );
   }
-  const operator = session.roleHint === "operator" || session.roleHint === "admin";
+  // The live role (as on /me), not the role at sign-in: promotions and demotions show up right away.
+  const operator = await showsAdminLink(session);
   return (
     <>
       {operator && (

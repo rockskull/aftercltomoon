@@ -186,12 +186,25 @@ async function MyMembership() {
               </li>
             ))}
             {myPayments.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-baseline justify-between gap-2 rounded-md border border-dashed border-midnight/20 px-3 py-2.5">
-                <span>{p.registration ? `회원권 등록 · ${registrationLabel(p.registration)}` : `${planName(p.planId)} 회원권 신청`}</span>
-                <span className="text-[13px] text-ink-soft">
-                  {PAYMENT_LABEL[p.status]}
-                  {p.depositedAt && <span className="ml-1.5 font-mono">{dotDate(p.depositedAt)}</span>}
-                </span>
+              <li key={p.id} className="rounded-md border border-dashed border-midnight/20 px-3 py-2.5">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span>{p.registration ? `회원권 등록 · ${registrationLabel(p.registration)}` : `${planName(p.planId)} 회원권 신청`}</span>
+                  <span className="text-[13px] text-ink-soft">{PAYMENT_LABEL[p.status]}</span>
+                </div>
+                {/* Dates tell repeated applications apart. No amounts here (fees are announced in the crew chat). */}
+                <p className="mt-1 font-mono text-[12px] text-ink-soft">
+                  {[
+                    p.requestedAt && `신청 ${dotDate(p.requestedAt.slice(0, 10))}`,
+                    p.depositedAt && `입금 ${dotDate(p.depositedAt)}`,
+                    p.status === "approved" && p.approvedAt && `승인 ${dotDate(p.approvedAt.slice(0, 10))}`,
+                    p.status === "rejected" && p.approvedAt && `반려 ${dotDate(p.approvedAt.slice(0, 10))}`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+                {/* Only the reason the crew wrote for the member (it was already sent to them as the rejection notice).
+                    Notes on other states — approval cancellations, refunds — are internal and stay hidden. */}
+                {p.status === "rejected" && p.note.trim() && <p className="mt-1 text-[13px] leading-relaxed text-brown">반려 사유: {p.note}</p>}
               </li>
             ))}
           </ul>
