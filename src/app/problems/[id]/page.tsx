@@ -102,7 +102,7 @@ async function ProblemDetail({ params }: Pick<PageProps<"/problems/[id]">, "para
           </section>
 
           <section aria-labelledby="beta-title">
-            <LogHeading no="03" title="Beta / Tips" id="beta-title" />
+            <LogHeading no="03" title="Tips" id="beta-title" />
             <div className="mt-3">{p.beta ? <BetaReveal beta={p.beta} /> : <p className="text-[14px] text-ink-soft">아직 등록된 팁이 없어요.</p>}</div>
           </section>
 
@@ -249,7 +249,7 @@ function CrewPanel({ id, no, status }: { id: string; no: number; status: "active
     <div className="flex flex-wrap items-center gap-2 rounded-lg border-2 border-dashed border-midnight/40 bg-ivory/80 p-3" aria-label="운영진 관리">
       <span className="mr-1 font-label text-[11px] font-bold uppercase tracking-[0.2em] text-brown">Crew</span>
       <Link href={`/problems/${no}/edit`} className="inline-flex h-10 items-center rounded-md border-2 border-midnight bg-butter px-3.5 text-[13px] font-bold text-midnight">
-        Edit problem / beta
+        Edit problem / tips
       </Link>
       {next.map((n) => (
         <ActionForm key={n.to} action={setProblemStatus} confirmText={n.confirm}>

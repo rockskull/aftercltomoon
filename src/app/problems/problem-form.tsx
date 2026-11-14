@@ -22,7 +22,7 @@ export interface ProblemFormValues {
 
 /**
  * The crew's problem form (register / edit). The number and the date are set by the
- * server. Grade is one of the club's colours (빨강 → 검정, YDS in brackets).
+ * server. Grade is one of the club's colours (빨강 → 흰색, YDS in brackets).
  */
 export function ProblemForm({ values }: { values: ProblemFormValues }) {
   const editing = Boolean(values.id);
@@ -70,7 +70,7 @@ export function ProblemForm({ values }: { values: ProblemFormValues }) {
         <textarea name="setter_note" rows={3} maxLength={LIMITS.note} defaultValue={values.setterNote} className={input} placeholder="예: 오른발을 잘 활용하면 생각보다 쉽게 풀리는 문제입니다." />
       </label>
       <label className={label}>
-        Beta / Tips <span className={hint}>선택 · 상세 화면에서 REVEAL BETA를 눌러야 보여요 · {LIMITS.beta}자까지</span>
+        Tips <span className={hint}>선택 · 상세 화면에서 SHOW TIPS를 눌러야 보여요 · {LIMITS.beta}자까지</span>
         <textarea name="beta" rows={4} maxLength={LIMITS.beta} defaultValue={values.beta} className={input} placeholder="예: 두 번째 홀드에서 몸을 오른쪽으로 돌려보세요." />
       </label>
       {state.status === "error" && state.message && (

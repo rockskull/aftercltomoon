@@ -123,13 +123,13 @@ export function ReviewForm({ problemId, mine, version }: { problemId: string; mi
   );
 }
 
-/** BETA / TIPS stay hidden until asked for (no spoilers). */
+/** TIPS stay hidden until asked for (no spoilers). */
 export function BetaReveal({ beta }: { beta: string }) {
   const [open, setOpen] = useState(false);
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)} className={cn(buttonSecondary, "w-full sm:w-auto")} aria-expanded={false} data-reveal-beta>
-        Reveal beta
+        Show tips
       </button>
     );
   }

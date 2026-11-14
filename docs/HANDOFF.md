@@ -137,7 +137,7 @@ Vercel → `aftercltomoon` → **Settings → Environment Variables** → 환경
 - [ ] 휴대폰에서 받은 스탬프 → **SHARE THIS STAMP → STORY / FEED → 공유하기** → 공유 시트에서 Instagram 선택 (취소하면 "공유를 취소했어요"), PC에서는 **PNG 저장**
 - [x] ST-02가 **100 HOLDS**로 보인다 (2026-11-13 관리 화면에서 직접 변경)
 - [ ] 회원권 신청 화면 시작 월이 **2026년 12월**부터 4개월이다 / 관리 화면 승인·직접 등록의 시작 월도 2026년 12월부터다
-- [ ] 운영진으로 `/problems` → **+ New problem** → 등록하면 MOON 001로 보이고, Edit에서 Beta를 넣으면 상세의 REVEAL BETA로 보인다 / 회원으로 평가 → 수정 → 삭제가 되고 완등 인원·평균 재미가 맞게 바뀐다 / 일반 회원은 `/problems/new`가 404
+- [ ] 운영진으로 `/problems` → **+ New problem** → 등록하면 MOON 001로 보이고, Edit에서 Tips를 넣으면 상세의 SHOW TIPS로 보인다 / 회원으로 평가 → 수정 → 삭제가 되고 완등 인원·평균 재미가 맞게 바뀐다 / 일반 회원은 `/problems/new`가 404
 - [ ] admin으로 회원 상세 → MEMBERSHIP REGISTRATION에서 12월(15일 시작)+1월 → 123,871원 → 청구 만들기 → 그 회원 MY에 "운영진이 회원권 등록을 준비했어요"(금액 없음) → CONFIRM REGISTRATION → 12.15–01.31 회원권 생성
 - [ ] (새 Code.gs 반영 후) `/radio`에 기본곡 14곡이 보이고, 회원으로 YouTube 링크를 신청하면 바로 15번째로 붙는다. admin 계정에만 **Delete track**이 보인다
 - [ ] admin으로 **ADMIN → 라디오**에서 순서 ▲▼, 표시 이름·메모 수정, 삭제 → 되돌리기가 된다 (operator는 보기만)

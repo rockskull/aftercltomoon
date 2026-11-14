@@ -73,15 +73,16 @@ describe("problems (crew)", () => {
     const data = tables();
     expect(planProblemCreate(data, { now: NOW, actorId: "OP", input: input({ title: "" }) })).toHaveProperty("refuse");
     expect(planProblemCreate(data, { now: NOW, actorId: "OP", input: input({ grade: "" }) })).toHaveProperty("refuse");
-    expect(planProblemCreate(data, { now: NOW, actorId: "OP", input: input({ grade: "V3" }) })).toEqual({ refuse: expect.stringContaining("빨강 · 주황 · 노랑 · 초록 · 파랑 · 보라 · 검정") });
+    expect(planProblemCreate(data, { now: NOW, actorId: "OP", input: input({ grade: "V3" }) })).toEqual({ refuse: expect.stringContaining("빨강 · 주황 · 노랑 · 초록 · 파랑 · 보라 · 흰색") });
     expect(planProblemCreate(data, { now: NOW, actorId: "OP", input: input({ grade: "분홍" }) })).toHaveProperty("refuse");
+    expect(planProblemCreate(data, { now: NOW, actorId: "OP", input: input({ grade: "검정" }) })).toHaveProperty("refuse"); // replaced by 흰색
     expect(planProblemCreate(data, { now: NOW, actorId: "OP", input: input({ setterName: " " }) })).toHaveProperty("refuse");
     expect(planProblemCreate(data, { now: NOW, actorId: "OP", input: input({ beta: "x".repeat(1001) }) })).toHaveProperty("refuse");
-    for (const grade of ["빨강", "주황", "노랑", "초록", "파랑", "보라", "검정"]) {
+    for (const grade of ["빨강", "주황", "노랑", "초록", "파랑", "보라", "흰색"]) {
       expect(planProblemCreate(data, { now: NOW, actorId: "OP", input: input({ grade }) })).not.toHaveProperty("refuse");
     }
-    applyCommit(data, ok(planProblemCreate(data, { now: NOW, actorId: "OP", input: input({ grade: "검정", title: "  줄\u0007바꿈 " }) })).commit);
-    expect(problemsOf(data)[0]).toMatchObject({ grade: "검정", title: "줄 바꿈" });
+    applyCommit(data, ok(planProblemCreate(data, { now: NOW, actorId: "OP", input: input({ grade: "흰색", title: "  줄\u0007바꿈 " }) })).commit);
+    expect(problemsOf(data)[0]).toMatchObject({ grade: "흰색", title: "줄 바꿈" });
   });
 
   it("operators edit info and beta; members can't", () => {
@@ -92,20 +93,20 @@ describe("problems (crew)", () => {
     expect(problemsOf(data)[0]).toMatchObject({ beta: "두 번째 홀드에서 몸을 오른쪽으로", setterNote: "오른발", title: "퇴근 후의 중력" });
   });
 
-  it("sorts and labels grades in colour order (빨강 → 검정) with YDS", () => {
-    expect(["검정", "노랑", "빨강", "보라", "주황", "초록", "파랑"].sort(compareGrades)).toEqual(["빨강", "주황", "노랑", "초록", "파랑", "보라", "검정"]);
+  it("sorts and labels grades in colour order (빨강 → 흰색) with YDS", () => {
+    expect(["흰색", "노랑", "빨강", "보라", "주황", "초록", "파랑"].sort(compareGrades)).toEqual(["빨강", "주황", "노랑", "초록", "파랑", "보라", "흰색"]);
     expect(["V3", "파랑", "빨강"].sort(compareGrades)).toEqual(["빨강", "파랑", "V3"]); // anything else goes last
-    expect(gradeLabel("빨강")).toBe("빨강 (5.0)");
+    expect(gradeLabel("빨강")).toBe("빨강 (B)");
     expect(gradeLabel("초록")).toBe("초록 (5.10b ~ 5.10c)");
-    expect(gradeLabel("검정")).toBe("검정 (5.12+)");
+    expect(gradeLabel("흰색")).toBe("흰색 (5.12+)");
     expect(GRADES.map((g) => `${g.name}:${g.yds}:${g.level}`)).toEqual([
-      "빨강:5.0:입문",
+      "빨강:B:입문",
       "주황:5.9:초급",
       "노랑:5.10a:초중급",
       "초록:5.10b ~ 5.10c:중급",
-      "파랑:5.10d ~ 5.11a:중상급",
-      "보라:5.11a ~ 5.11c:상급",
-      "검정:5.12+:고급~엘리트",
+      "파랑:5.10d:중상급",
+      "보라:5.11a:상급",
+      "흰색:5.12+:고급~엘리트",
     ]);
   });
 

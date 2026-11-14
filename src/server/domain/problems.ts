@@ -184,12 +184,12 @@ function problemFields(input: ProblemInput): { row: Row } | { refuse: string } {
     beta: clean(input.beta, true),
   };
   if (!row.title || row.title.length > LIMITS.title) return { refuse: `문제명을 ${LIMITS.title}자 이내로 적어 주세요.` };
-  // The club's colour grades only (빨강 → 검정).
+  // The club's colour grades only (빨강 → 흰색).
   if (!gradeInfo(row.grade)) return { refuse: `난이도를 골라 주세요. (${GRADES.map((g) => g.name).join(" · ")})` };
   if (row.wall.length > LIMITS.wall) return { refuse: `벽 구역은 ${LIMITS.wall}자까지 쓸 수 있어요.` };
   if (!row.setter_name || row.setter_name.length > LIMITS.setter) return { refuse: `Setter 이름을 ${LIMITS.setter}자 이내로 적어 주세요.` };
   if (row.setter_note.length > LIMITS.note) return { refuse: `Setter's Note는 ${LIMITS.note}자까지 쓸 수 있어요.` };
-  if (row.beta.length > LIMITS.beta) return { refuse: `Beta / Tips는 ${LIMITS.beta}자까지 쓸 수 있어요.` };
+  if (row.beta.length > LIMITS.beta) return { refuse: `Tips는 ${LIMITS.beta}자까지 쓸 수 있어요.` };
   return { row };
 }
 
