@@ -20,7 +20,7 @@ type ShareState =
 type Note = { tone: "ok" | "info" | "warn"; text: string } | null;
 
 /**
- * MY MOON STAMPS: the six stamps, received ones in colour (with the date), the
+ * MY MOON STAMPS: the seven stamps, received ones in colour (with the date), the
  * rest faded and inert. Picking a received stamp opens its detail; SHARE THIS
  * STAMP → STORY or FEED draws an Instagram-sized PNG in the browser (after the
  * server confirms the stamp is really this member's), then hands it to the OS

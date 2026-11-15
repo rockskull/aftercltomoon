@@ -263,6 +263,7 @@ export function demoTables(now = Date.now()): Tables {
       { stamp_id: "ST-04", name: "MOON HOST", description: "직접 이벤트 개최", image_key: "st-04", active: true },
       { stamp_id: "ST-05", name: "SIX MOONS", description: "6+1개월 회원권 등록", image_key: "st-05", active: true },
       { stamp_id: "ST-06", name: "TWELVE MOONS", description: "12+2개월 회원권 등록", image_key: "st-06", active: true },
+      { stamp_id: "ST-07", name: "INVESTOR'S NOSE", description: "MOON 001 투자자의 코 완등", image_key: "st-07", active: true },
     ],
     // Hyunwoo has four (incl. TWELVE MOONS for his 12+2 pass), Jimin and Taeo one each, Sua none yet.
     StampAwards: [

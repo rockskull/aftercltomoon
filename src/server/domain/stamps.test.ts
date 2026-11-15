@@ -26,16 +26,16 @@ const award = (data: Tables, over: Partial<{ memberId: string; stampId: string; 
   planStampAward(data, { now: NOW, actorId: "M-OPER-77", memberId: "B", stampId: "ST-02", awardedAt: "2026-11-12", note: "", ...over });
 
 describe("stamp catalog", () => {
-  it("has exactly the six stamps, and the table can't add more", () => {
-    const six = ["ST-01", "ST-02", "ST-03", "ST-04", "ST-05", "ST-06"];
-    expect(STAMP_CATALOG.map((s) => s.id)).toEqual(six);
+  it("has exactly the seven stamps, and the table can't add more", () => {
+    const seven = ["ST-01", "ST-02", "ST-03", "ST-04", "ST-05", "ST-06", "ST-07"];
+    expect(STAMP_CATALOG.map((s) => s.id)).toEqual(seven);
     const defs = stampDefinitions({
       StampDefinitions: [
-        { stamp_id: "ST-07", name: "ON AIR", description: "", image_key: "st-07", active: true },
+        { stamp_id: "ST-08", name: "ON AIR", description: "", image_key: "st-08", active: true },
         { stamp_id: "st-02", name: "", description: "지구력!", image_key: "../../etc", active: "FALSE" },
       ],
     });
-    expect(defs.map((d) => d.id)).toEqual(six);
+    expect(defs.map((d) => d.id)).toEqual(seven);
     const holds = defs[1];
     expect(holds.name).toBe("100 HOLDS"); // empty cell → default
     expect(holds.description).toBe("지구력!");
@@ -51,6 +51,11 @@ describe("stamp catalog", () => {
     expect(byId["ST-01"].name).toBe("FIRST MOON");
     expect(byId["ST-03"].name).toBe("NIGHT OWL");
     expect(byId["ST-04"].name).toBe("MOON HOST");
+  });
+
+  it("has a send stamp for MOON 001 투자자의 코", () => {
+    expect(STAMP_CATALOG.find((s) => s.id === "ST-07")).toMatchObject({ name: "INVESTOR'S NOSE", description: "MOON 001 투자자의 코 완등", subtitle: "MOON 001", imageKey: "st-07" });
+    expect(readFileSync(join(process.cwd(), "public", "stamps", "st-07.svg"), "utf8")).toContain("ST-07 INVESTOR'S NOSE");
   });
 
   it("only ever points at the bundled artwork", () => {
@@ -86,13 +91,13 @@ describe("member collection", () => {
       { stamp_id: "ST-01", active: false },
       { stamp_id: "ST-04", active: false },
     ];
-    expect(memberStamps(data, "A").map((s) => s.id)).toEqual(["ST-01", "ST-02", "ST-03", "ST-05", "ST-06"]);
-    expect(memberStamps(data, "B").map((s) => s.id)).toEqual(["ST-02", "ST-03", "ST-05", "ST-06"]);
+    expect(memberStamps(data, "A").map((s) => s.id)).toEqual(["ST-01", "ST-02", "ST-03", "ST-05", "ST-06", "ST-07"]);
+    expect(memberStamps(data, "B").map((s) => s.id)).toEqual(["ST-02", "ST-03", "ST-05", "ST-06", "ST-07"]);
   });
 
   it("works before any stamp rows exist (nothing received yet)", () => {
     const stamps = memberStamps({}, "A");
-    expect(stamps).toHaveLength(6);
+    expect(stamps).toHaveLength(7);
     expect(stamps.every((s) => s.awardedAt === null)).toBe(true);
   });
 });
@@ -124,7 +129,8 @@ describe("issuing a stamp", () => {
 
   it("checks the stamp, the member and the date", () => {
     const data = tables();
-    expect(award(data, { stampId: "ST-07" })).toHaveProperty("refuse");
+    expect(award(data, { stampId: "ST-08" })).toHaveProperty("refuse");
+    expect(award(data, { stampId: "ST-07" })).not.toHaveProperty("refuse");
     expect(award(data, { stampId: "ST-05" })).not.toHaveProperty("refuse");
     expect(award(data, { stampId: "ST-06" })).not.toHaveProperty("refuse");
     expect(award(data, { memberId: "NOPE" })).toHaveProperty("refuse");

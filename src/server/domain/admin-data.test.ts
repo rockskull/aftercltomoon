@@ -168,7 +168,7 @@ describe("stamps", () => {
     if ("refuse" in planned) throw new Error(planned.refuse);
     applyCommit(data, planned.commit);
     expect(data.StampDefinitions![0]).toMatchObject({ description: "아지트 첫 방문", active: false });
-    expect(planStampDefinitionSave(data, { ...admin, stampId: "ST-07", name: "ON AIR", description: "", active: true, imageKey: "" })).toHaveProperty("refuse");
+    expect(planStampDefinitionSave(data, { ...admin, stampId: "ST-08", name: "ON AIR", description: "", active: true, imageKey: "" })).toHaveProperty("refuse");
     // The v1.4 stamps have no row yet; saving one adds it.
     const six = planStampDefinitionSave(data, { ...admin, stampId: "ST-05", name: "SIX MOONS", description: "6+1개월 회원권 등록", active: true, imageKey: "st-05" });
     if ("refuse" in six) throw new Error(six.refuse);

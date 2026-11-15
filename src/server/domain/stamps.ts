@@ -6,7 +6,7 @@ import { newId, seoulIso } from "../store/ids";
 import { cellText, type Row, type Tables } from "../store/schema";
 
 /**
- * MOON STAMPS: six fixed stamps, issued by hand by operators (no automatic
+ * MOON STAMPS: seven fixed stamps, issued by hand by operators (no automatic
  * checks, no attendance or hold counting, no auto-issue on membership). One
  * stamp of each kind per member.
  */
@@ -37,9 +37,9 @@ function isFalse(value: unknown): boolean {
 }
 
 /**
- * Exactly the six stamps, in order. The StampDefinitions table can reword the
+ * Exactly the seven stamps, in order. The StampDefinitions table can reword the
  * name/description or switch a stamp off; anything else in it is ignored
- * (unknown ids, ST-07, …). A missing row simply means the defaults.
+ * (unknown ids, ST-08, …). A missing row simply means the defaults.
  */
 export function stampDefinitions(tables: Tables): StampDefinition[] {
   const rows = tables.StampDefinitions ?? [];

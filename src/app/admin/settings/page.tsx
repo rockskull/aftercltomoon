@@ -144,7 +144,7 @@ async function Settings() {
         </Box>
 
         <Box title="MOON STAMPS">
-          <p className="mb-3 text-[13px] text-ink-soft">스탬프는 6종으로 고정이에요. 그림 속 글자는 바뀌지 않고, 이름과 설명(발급 조건)은 목록과 공유 이미지에 쓰여요. 끄면 아직 받지 않은 회원에게는 보이지 않아요.</p>
+          <p className="mb-3 text-[13px] text-ink-soft">스탬프는 7종으로 고정이에요. 그림 속 글자는 바뀌지 않고, 이름과 설명(발급 조건)은 목록과 공유 이미지에 쓰여요. 끄면 아직 받지 않은 회원에게는 보이지 않아요.</p>
           <ul className="flex flex-col gap-2">
             {stampDefinitions(tables).map((s) => (
               <li key={s.id} className="flex flex-wrap items-start gap-3 rounded-md border border-midnight/20 bg-white/40 p-3">

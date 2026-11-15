@@ -93,7 +93,7 @@ export const TABLES = {
     "created_at",
     "updated_at",
   ],
-  /** MOON STAMPS: the six stamps (artwork is static; see src/lib/stamps.ts). */
+  /** MOON STAMPS: the seven stamps (artwork is static; see src/lib/stamps.ts). */
   StampDefinitions: ["stamp_id", "name", "description", "image_key", "active"],
   /** Who received which stamp. Private: only the member themself and operators see it; `note` is operators-only. */
   StampAwards: ["award_id", "member_id", "stamp_id", "awarded_at", "awarded_by", "note"],

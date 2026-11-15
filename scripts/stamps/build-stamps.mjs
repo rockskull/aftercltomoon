@@ -1,4 +1,4 @@
-// Builds the six MOON STAMPS artworks → public/stamps/st-0N.svg (run once; commit the SVGs).
+// Builds the seven MOON STAMPS artworks → public/stamps/st-0N.svg (run once; commit the SVGs).
 // Each stamp has its own seed, so changing one design never moves another's pixels.
 //
 //   npm run stamps:build
@@ -432,7 +432,7 @@ function stampSvg(spec, fonts) {
 }
 
 // ---------------------------------------------------------------------------
-// The six stamps
+// The seven stamps
 // ---------------------------------------------------------------------------
 
 const speck = (rough, [x, y, r]) => rough(circle(x, y, r, 1.5), { amp: 0.3, grit: 0.2, step: 1.5 });
@@ -692,6 +692,53 @@ const STAMPS = [
       text(fill, rough, C.cream, [one, two]);
       text(fill, rough, C.butter, [plus, bonus]);
       text(fill, rough, C.cream, blockText(fonts.jost, "MONTHS", { width: 168, cx: 500, cy: 604, tracking: 10 }));
+    },
+  },
+  {
+    id: "ST-07",
+    file: "st-07",
+    name: "INVESTOR'S NOSE",
+    seed: 707,
+    // MOON 001 "투자자의 코" — campus up and touch the nose. A rising chart line
+    // (an investor's dream) climbs rung by rung to the tip of a big nose in profile.
+    draw({ fill, rough, fonts }) {
+      // the face, looking left; most of it runs off the field to the right
+      const face = [
+        [652, 120], [640, 200], [636, 250], [642, 286], [630, 310], [616, 322],
+        // the nose: long and straight, from the bridge out to a rounded tip
+        [592, 350], [558, 388], [522, 422], [494, 446], [480, 460], [484, 474], [500, 480],
+        [534, 482], [560, 486], [578, 496],
+        // lips and chin
+        [580, 512], [570, 526], [574, 538], [584, 544], [572, 556], [578, 566], [590, 574],
+        [588, 596], [598, 624], [634, 646], [660, 690], [672, 880],
+        [920, 880], [920, 120],
+      ];
+      fill(C.butter, [rough(face, { amp: 1.5 })]);
+      // nostril and eye, with a monocle on a chain
+      fill(C.navy, [rough(ellipse(530, 471, 11, 4.5, -12, 1.5), { amp: 0.3, grit: 0.2, step: 1.5 })], { opacity: 0.5 });
+      fill(C.navy, [rough(circle(650, 330, 9, 1.5), { amp: 0.3, grit: 0.2, step: 1.5 })]);
+      fill(C.navy, [rough(circle(650, 330, 32, 2), { amp: 0.5, grit: 0.2, step: 2 }), rough(circle(650, 330, 24, 2), { amp: 0.4, grit: 0.2, step: 2 })], { rule: "evenodd" });
+      fill(C.navy, dashedArc(722, 330, 72, 96, 172, { dash: 9, gap: 8, w: 4 }).map((c) => rough(c, { amp: 0.2, grit: 0.15, step: 1.2 })), { opacity: 0.7 });
+      // the chart: a faint baseline, then the line stepping up rung by rung to the tip
+      fill(C.cream, dashedArc(500, -1500, 2180, 87.4, 96.8, { dash: 12, gap: 12, w: 3.5 }).map((c) => rough(c, { amp: 0.2, grit: 0.15, step: 1.2 })), { opacity: 0.35 });
+      const line = [[238, 654], [292, 594], [322, 614], [372, 538], [404, 558], [462, 474]];
+      fill(C.cream, line.slice(1).map((p, i) => rough(capsule(...line[i], ...p, 10), { amp: 0.4, grit: 0.2, step: 1.5 })));
+      // arrowhead touching the tip of the nose
+      const [ax, ay] = line[line.length - 1];
+      const dir = Math.atan2(ay - line[line.length - 2][1], ax - line[line.length - 2][0]);
+      const head = [[ax + 24 * Math.cos(dir), ay + 24 * Math.sin(dir)], [ax + 20 * Math.cos(dir + 2.3), ay + 20 * Math.sin(dir + 2.3)], [ax + 20 * Math.cos(dir - 2.3), ay + 20 * Math.sin(dir - 2.3)]];
+      fill(C.cream, [rough(head, { amp: 0.4, grit: 0.2, step: 1.5 })]);
+      // campus rungs at each step up
+      fill(C.butter, [line[0], line[1], line[3]].map(([x, y]) => rough(capsule(x - 24, y + 14, x + 24, y + 14, 11), { amp: 0.4, grit: 0.2, step: 1.5 })));
+      // the touch
+      fill(C.cream, [rough(sparkle(450, 414, 24), { amp: 0.4, grit: 0.2, step: 1.5 })]);
+      fill(C.cream, [[424, 444, 4], [486, 404, 3.5]].map((d) => speck(rough, d)));
+      // a small moon and stars over the climb
+      fill(C.butter, [rough(crescent(352, 330, 44, 372, 316, 38), { amp: 0.8 })]);
+      fill(C.cream, [rough(sparkle(436, 272, 16), { amp: 0.3, grit: 0.2, step: 1.2 }), rough(sparkle(282, 444, 12), { amp: 0.3, grit: 0.2, step: 1.2 })]);
+      fill(C.cream, [[300, 360, 4], [404, 360, 3.5], [528, 248, 3.5], [250, 540, 3]].map((d) => speck(rough, d)));
+      // which problem
+      text(fill, rough, C.cream, blockText(fonts.jost, "MOON 001", { width: 196, cx: 470, cy: 734, tracking: 8 }));
     },
   },
 ];

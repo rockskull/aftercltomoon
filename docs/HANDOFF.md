@@ -10,7 +10,7 @@
 | 사이트 | https://aftercltomoon.vercel.app — 실데이터, Google 로그인 |
 | 데이터 | **Postgres (Neon, Vercel Storage)** — 2026-11-13 Google Sheets에서 이전. 시트는 백업으로만 남김 |
 | 코드 | GitHub `rockskull/aftercltomoon` `main` · Vercel이 연결되어 **push하면 자동 배포** |
-| 완료 | 캘린더·이벤트·제안서(로그인 필요), Google 로그인, 회원권(**달 단위: 1일 시작 · 말일 종료**), 첫 등록 가격, 입금 승인, 거래내역 매칭, 알림, PWA, 관리 화면, 동의서, 회계 장부, 초대장, 포스터 생성기, MOON STAMPS(6종 · Instagram 공유), AFTER HOURS RADIO, MOON PROBLEMS, 회원권 등록 계산(admin), 관리 화면에서 회원 추가·상품·설정·등록 기간·스탬프 편집 |
+| 완료 | 캘린더·이벤트·제안서(로그인 필요), Google 로그인, 회원권(**달 단위: 1일 시작 · 말일 종료**), 첫 등록 가격, 입금 승인, 거래내역 매칭, 알림, PWA, 관리 화면, 동의서, 회계 장부, 초대장, 포스터 생성기, MOON STAMPS(7종 · Instagram 공유), AFTER HOURS RADIO, MOON PROBLEMS, 회원권 등록 계산(admin), 관리 화면에서 회원 추가·상품·설정·등록 기간·스탬프 편집 |
 
 ### DB로 바꾼 뒤 (2026-11-13)
 
@@ -19,6 +19,11 @@
 - 이제 **Apps Script(Code.gs, setupSheets, Tick.gs, 배포 버전)는 할 일이 없어요.** 아래 1번 섹션의 Apps Script 내용은 예전 기록이에요.
 - Vercel 환경변수의 `CLUB_API_URL`·`CLUB_API_SECRET`은 이전이 끝났으니 지워도 돼요(남아 있어도 DB가 우선).
 - ⚠️ 로컬 `.env.local`에 `DATABASE_URL`이 있으면 `npm run dev`도 **실제 DB**를 써요. 시험은 Neon 개발 브랜치나 데모(DATABASE_URL 없이)로.
+
+### MOON STAMPS ST-07 INVESTOR'S NOSE (2026-11-15)
+
+- MOON PROBLEMS **MOON 001 투자자의 코**(캠퍼싱으로 코 터치) 완등 스탬프. 다른 스탬프처럼 운영진이 회원 상세 → Moon stamps에서 직접 확인하고 발급해요(후기의 완등 기록으로 자동 발급하지 않음).
+- 운영 DB 작업은 없어요. 정의 행이 없어도 코드 기본값(INVESTOR'S NOSE / MOON 001 투자자의 코 완등)으로 보이고, 이름·설명은 설정 → MOON STAMPS에서 바꿀 수 있어요.
 
 ### v2.0 — MOON PROBLEMS (`/problems`)
 
@@ -133,7 +138,7 @@ Vercel → `aftercltomoon` → **Settings → Environment Variables** → 환경
 - [ ] 운영진으로 이벤트 상세 → **Make a poster** → FEED·STORY 각각 Save PNG (휴대폰은 공유 화면의 "이미지 저장")
 - [ ] 로그아웃 상태에서 홈 맨 아래 **View invitation** → 초대장 → **Share invitation**으로 카톡 공유
 - [ ] 회원권 신청 화면에 **시작 월** 선택이 보이고, 승인 카드에 "승인하면 ○○.01 – ○○.말일"로 나온다
-- [ ] 운영진으로 회원 상세 → **Moon stamps → 스탬프 발급** → 그 회원 MY의 **My Moon Stamps**에 날짜와 함께 보인다 (6종, 아직 받지 않은 건 흐리고 공유 버튼 없음)
+- [ ] 운영진으로 회원 상세 → **Moon stamps → 스탬프 발급** → 그 회원 MY의 **My Moon Stamps**에 날짜와 함께 보인다 (7종, 아직 받지 않은 건 흐리고 공유 버튼 없음)
 - [ ] 휴대폰에서 받은 스탬프 → **SHARE THIS STAMP → STORY / FEED → 공유하기** → 공유 시트에서 Instagram 선택 (취소하면 "공유를 취소했어요"), PC에서는 **PNG 저장**
 - [x] ST-02가 **100 HOLDS**로 보인다 (2026-11-13 관리 화면에서 직접 변경)
 - [ ] 회원권 신청 화면 시작 월이 **2026년 12월**부터 4개월이다 / 관리 화면 승인·직접 등록의 시작 월도 2026년 12월부터다

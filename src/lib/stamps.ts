@@ -1,5 +1,5 @@
 /**
- * MOON STAMPS — six, fixed. The artwork is a finished static asset per stamp
+ * MOON STAMPS — seven, fixed. The artwork is a finished static asset per stamp
  * (public/stamps/*.svg, made once by scripts/stamps/build-stamps.mjs); the
  * database only records who received which stamp and when. Every stamp is
  * issued by hand by the crew (no automatic judging).
@@ -8,9 +8,11 @@
  * not 100 tops, not 100 problems, not holds added up over time). ST-05 SIX MOONS
  * and ST-06 TWELVE MOONS mark registering a 6+1 / 12+2 membership (not simply
  * being a member for that long). ST-05 is new — not the dropped "ON AIR".
+ * ST-07 INVESTOR'S NOSE is topping MOON PROBLEMS MOON 001 "투자자의 코" (campus up,
+ * touch the nose) — checked by the crew like the rest, not read from reviews.
  */
 
-export const STAMP_IDS = ["ST-01", "ST-02", "ST-03", "ST-04", "ST-05", "ST-06"] as const;
+export const STAMP_IDS = ["ST-01", "ST-02", "ST-03", "ST-04", "ST-05", "ST-06", "ST-07"] as const;
 export type StampId = (typeof STAMP_IDS)[number];
 
 export interface StampInfo {
@@ -34,6 +36,7 @@ export const STAMP_CATALOG: readonly StampInfo[] = [
   { id: "ST-04", name: "MOON HOST", description: "직접 이벤트 개최", imageKey: "st-04" },
   { id: "ST-05", name: "SIX MOONS", description: "6+1개월 회원권 등록", imageKey: "st-05", subtitle: "6 + 1 MONTHS", motto: "SIX MONTHS IN. ONE MORE ON THE MOON." },
   { id: "ST-06", name: "TWELVE MOONS", description: "12+2개월 회원권 등록", imageKey: "st-06", subtitle: "12 + 2 MONTHS", motto: "TWELVE MONTHS IN. TWO MORE ON THE MOON." },
+  { id: "ST-07", name: "INVESTOR'S NOSE", description: "MOON 001 투자자의 코 완등", imageKey: "st-07", subtitle: "MOON 001", motto: "CAMPUS UP. TOUCH THE NOSE." },
 ];
 
 /** The membership a long-registration stamp stands for (duration + bonus months), for the crew's reference. */

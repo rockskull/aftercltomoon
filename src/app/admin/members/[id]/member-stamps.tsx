@@ -123,7 +123,7 @@ export async function MemberStamps({
                       <input
                         name="note"
                         maxLength={200}
-                        placeholder={d.id === "ST-02" ? "예: 지정 100홀드 문제 완등 확인" : terms ? `예: ${terms.durationMonths}+${terms.bonusMonths}개월 등록 확인` : "예: 첫 방문 확인"}
+                        placeholder={d.id === "ST-02" ? "예: 지정 100홀드 문제 완등 확인" : d.id === "ST-07" ? "예: MOON 001 완등 확인" : terms ? `예: ${terms.durationMonths}+${terms.bonusMonths}개월 등록 확인` : "예: 첫 방문 확인"}
                         className={smallInput}
                       />
                     </label>
