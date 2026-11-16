@@ -1,51 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { memberAccess } from "@/lib/access";
 import { cleanBubble, cleanNickname, nameTag } from "@/lib/little-club";
 import { applyCommit } from "../store/commit";
 import type { Row, Tables } from "../store/schema";
-import { CLUB_TABLE_MISSING, clubProfileOf, littleClubVerdict, planClubProfileSave } from "./little-club";
+import { CLUB_TABLE_MISSING, clubProfileOf, GUEST_KEY_PREFIX, littleClubVerdict, planClubProfileSave } from "./little-club";
 
 const TODAY = "2026-12-10";
 const NOW = Date.parse(`${TODAY}T12:00:00+09:00`);
 
-type M = { id: string; role: string; status: string };
-const ms = (memberId: string, startDate: string, endDate: string, status: "active" | "canceled" | "refunded" = "active") => ({ id: `MS-${memberId}-${startDate}`, memberId, startDate, endDate, status });
-
-function verdict(member: M | null, memberships: ReturnType<typeof ms>[] = [], payments: Array<{ memberId: string; status: string }> = []) {
-  const access = member ? memberAccess({ member, memberships, payments, todayKey: TODAY }) : null;
-  return littleClubVerdict(member, access);
-}
-
 describe("who may enter THE LITTLE CLUB", () => {
-  const member = (role = "member", status = "active"): M => ({ id: "A", role, status });
-  const running = [ms("A", "2026-12-01", "2026-12-31")];
-
-  it("lets in an active member with a membership in effect today", () => {
-    expect(verdict(member(), running)).toEqual({ ok: true });
-    // 6+1 / 12+2 count by their real dates
-    expect(verdict(member(), [ms("A", "2026-12-01", "2027-06-30")])).toEqual({ ok: true });
+  it("lets in anyone signed in, member or not, membership or not", () => {
+    expect(littleClubVerdict(null)).toEqual({ ok: true }); // signed in, not on the member list
+    for (const status of ["active", "applicant"]) expect(littleClubVerdict({ status })).toEqual({ ok: true });
   });
 
-  it("turns away everyone else", () => {
-    expect(verdict(null)).toEqual({ ok: false, reason: "not_member" });
-    expect(verdict(member(), [])).toEqual({ ok: false, reason: "expired" });
-    expect(verdict(member(), [ms("A", "2026-11-01", "2026-11-30")])).toEqual({ ok: false, reason: "expired" });
-    expect(verdict(member(), [ms("A", "2027-01-01", "2027-01-31")])).toEqual({ ok: false, reason: "not_started" });
-    expect(verdict(member(), [], [{ memberId: "A", status: "pending" }])).toEqual({ ok: false, reason: "pending" });
-    expect(verdict(member("member", "inactive"), running)).toEqual({ ok: false, reason: "suspended" });
-    expect(verdict(member("member", "applicant"), running)).toEqual({ ok: false, reason: "applicant" });
-    // a canceled or refunded membership doesn't count
-    expect(verdict(member(), [ms("A", "2026-12-01", "2026-12-31", "canceled")])).toEqual({ ok: false, reason: "expired" });
-  });
-
-  it("gives staff no pass of their own", () => {
-    expect(verdict(member("operator"), [])).toEqual({ ok: false, reason: "expired" });
-    expect(verdict(member("admin"), [])).toEqual({ ok: false, reason: "expired" });
-    expect(verdict(member("admin"), running)).toEqual({ ok: true });
-  });
-
-  it("doesn't count someone else's membership", () => {
-    expect(verdict(member(), [ms("B", "2026-12-01", "2026-12-31")])).toEqual({ ok: false, reason: "expired" });
+  it("keeps out only accounts the crew suspended", () => {
+    expect(littleClubVerdict({ status: "inactive" })).toEqual({ ok: false, reason: "suspended" });
   });
 });
 
@@ -127,6 +96,18 @@ describe("saving the profile", () => {
     const noTable = tables();
     delete noTable.ClubProfiles;
     expect(save(noTable)).toEqual({ refuse: CLUB_TABLE_MISSING });
+  });
+
+  it("saves a profile for a signed-in visitor who isn't on the member list (opaque key)", () => {
+    const data = tables();
+    const key = GUEST_KEY_PREFIX + "0123456789abcdef01234567";
+    const guest = save(data, { memberId: key, nickname: "손님토끼", mbti: "ISFP" });
+    if (!("commit" in guest)) throw new Error("refused");
+    expect(applyCommit(data, guest.commit)).toEqual({ ok: true });
+    expect(clubProfileOf(data, key)).toEqual({ nickname: "손님토끼", mbti: "ISFP" });
+    // members untouched, and a made-up member id is still refused
+    expect(clubProfileOf(data, "A")).toBeNull();
+    expect(save(data, { memberId: "M-MADE-UP" })).toHaveProperty("refuse");
   });
 
   it("does nothing when nothing changed", () => {

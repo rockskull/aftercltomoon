@@ -11,13 +11,13 @@ import { LittleClub } from "./little-club";
 
 export const metadata: Metadata = {
   title: "The Little Club",
-  description: "AFTER HOURS — 회원권이 있는 멤버만 들어오는 작은 픽셀 아지트.",
+  description: "AFTER HOURS — 로그인하면 들어오는 작은 픽셀 아지트.",
   robots: { index: false, follow: false },
 };
 
 /**
- * THE LITTLE CLUB (members with a membership in effect today only). The gate runs
- * here on the server before anything of the game or the member's data is sent;
+ * THE LITTLE CLUB (anyone signed in, except suspended accounts). The gate runs
+ * here on the server before anything of the game or the visitor's data is sent;
  * the profile save re-checks it against the live data.
  */
 export default function LittleClubPage() {
@@ -27,7 +27,7 @@ export default function LittleClubPage() {
       <main className="flex-1 bg-midnight text-cream">
         <header className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-4 px-4 pb-6 pt-8 md:px-6 md:pt-10">
           <div>
-            <p className="font-label text-[11px] font-medium uppercase tracking-[0.32em] text-butter">After hours · members only</p>
+            <p className="font-label text-[11px] font-medium uppercase tracking-[0.32em] text-butter">After hours · our little club</p>
             <h1 className="mt-2 font-display text-[44px] font-extrabold uppercase leading-[0.9] md:text-[60px]">
               The Little Club<span className="text-butter">.</span>
             </h1>
@@ -56,17 +56,16 @@ async function Club() {
     );
   }
   const now = await requestNow();
-  const gate = await littleClubGate({ now });
+  const gate = await littleClubGate();
   if (!gate.ok) {
     if (gate.reason === "login") redirect("/login?returnTo=%2Flittle-club");
     return (
       <div className="mx-auto max-w-xl px-4 pb-16 md:px-6">
-        <p className="mb-4 text-[15px] leading-relaxed text-cream/85">리틀 클럽은 지금 이용 기간 중인 회원권이 있는 멤버만 들어올 수 있어요.</p>
-        <MembershipRequired reason={gate.reason === "applicant" ? "pending" : gate.reason} tone="dark" />
+        <MembershipRequired reason="suspended" tone="dark" />
       </div>
     );
   }
-  const data = await loadLittleClub(gate.viewer, gate.member, now);
+  const data = await loadLittleClub(gate.viewer, gate.member, gate.profileKey, now);
   return <LittleClub data={data} />;
 }
 

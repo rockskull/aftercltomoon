@@ -20,8 +20,9 @@ const plexMono = IBM_Plex_Mono({
   display: "swap",
 });
 
+// `||`, not `??`: an env file with a blank NEXT_PUBLIC_SITE_URL= must fall back, not break the build.
 const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ??
+  process.env.NEXT_PUBLIC_SITE_URL ||
   (process.env.VERCEL_PROJECT_PRODUCTION_URL
     ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
     : "http://localhost:3000");

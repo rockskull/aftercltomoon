@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { bannerKind, type BannerKind } from "@/lib/access";
 import { getClubData } from "@/lib/club-data";
 import { parseMoment } from "@/lib/dates";
@@ -10,7 +11,7 @@ import { viewerAccess } from "./auth/access";
 import { readSession } from "./auth/session";
 import { getViewer, type Viewer } from "./auth/viewer";
 import type { Member } from "./domain/model";
-import { clubProfileOf, littleClubVerdict, type ClubBlock, type ClubProfile } from "./domain/little-club";
+import { clubProfileOf, GUEST_KEY_PREFIX, littleClubVerdict, type ClubBlock, type ClubProfile } from "./domain/little-club";
 import { memberStamps } from "./domain/stamps";
 import { loadProblemList } from "./problems";
 import { loadRadio } from "./radio";
@@ -20,19 +21,26 @@ import { LITTLE_CLUB_TABLES, STAMP_TABLES } from "./store/schema";
 /**
  * THE LITTLE CLUB on the server: the gate every screen and action goes through,
  * and the data the page hands to the game. Everything here is about the signed-in
- * member only; nobody else's nickname, MBTI or stamps ever leave the server.
+ * person only; nobody else's nickname, MBTI or stamps ever leave the server.
  */
 
-export type ClubGate = { ok: true; viewer: Viewer; member: Member } | { ok: false; reason: ClubBlock };
+/** null member = signed in with Google but not on the member list. */
+export type ClubGate = { ok: true; viewer: Viewer; member: Member | null; profileKey: string } | { ok: false; reason: ClubBlock };
+
+/** The profile row's key: the member id, or an opaque key from the sign-in email for someone not on the list. */
+function profileKeyFor(email: string, member: Member | null): string {
+  if (member) return member.id;
+  return GUEST_KEY_PREFIX + createHash("sha256").update(`little-club:${email.trim().toLowerCase()}`).digest("hex").slice(0, 24);
+}
 
 /** `fresh: true` for writes (re-reads the live data, like requireParticipant). */
-export async function littleClubGate(opts: { fresh?: boolean; now?: number } = {}): Promise<ClubGate> {
+export async function littleClubGate(opts: { fresh?: boolean } = {}): Promise<ClubGate> {
   if (!(await readSession())) return { ok: false, reason: "login" };
   const viewer = await getViewer({ fresh: opts.fresh });
   if (!viewer) return { ok: false, reason: "login" };
-  const verdict = littleClubVerdict(viewer.member, viewer.member ? viewerAccess(viewer, opts.now) : null);
+  const verdict = littleClubVerdict(viewer.member);
   if (!verdict.ok) return verdict;
-  return { ok: true, viewer, member: viewer.member! };
+  return { ok: true, viewer, member: viewer.member, profileKey: profileKeyFor(viewer.session.email, viewer.member) };
 }
 
 export interface ClubProblem {
@@ -65,7 +73,8 @@ export interface ClubNotices {
 /** Membership notifications only (expiry reminders, deposit approved / rejected), as on /notifications. */
 const MEMBERSHIP_NOTICE_TYPES = new Set(["membership_d7", "membership_d1", "payment_approved", "payment_rejected"]);
 
-export function clubNotices(viewer: Viewer, member: Member, now: number): ClubNotices {
+export function clubNotices(viewer: Viewer, member: Member | null, now: number): ClubNotices {
+  if (!member) return { notices: [], banner: null };
   const notices = viewer.club.notifications
     .filter((n) => n.memberId === member.id && ["sent", "inapp"].includes(n.status) && !n.readAt && MEMBERSHIP_NOTICE_TYPES.has(n.type))
     .filter((n) => (parseMoment(n.scheduledAt)?.ms ?? 0) <= now)
@@ -93,16 +102,16 @@ export interface LittleClubData extends ClubNotices {
   calendar: { events: ClubEvent[]; enrollments: Enrollment[]; now: number } | null;
 }
 
-export async function loadLittleClub(viewer: Viewer, member: Member, now: number): Promise<LittleClubData> {
+export async function loadLittleClub(viewer: Viewer, member: Member | null, profileKey: string, now: number): Promise<LittleClubData> {
   const [profile, stamps, problems, radio, calendar] = await Promise.all([
     readTables(LITTLE_CLUB_TABLES, { fresh: true })
-      .then((t) => (t.ClubProfiles === undefined ? { ready: false, profile: null } : { ready: true, profile: clubProfileOf(t, member.id) }))
+      .then((t) => (t.ClubProfiles === undefined ? { ready: false, profile: null } : { ready: true, profile: clubProfileOf(t, profileKey) }))
       .catch((error) => {
         console.error("[little-club] profile read failed", error);
         return { ready: false, profile: null };
       }),
-    readTables(STAMP_TABLES)
-      .then((t) => memberStamps(t, member.id).filter((s) => s.awardedAt !== null))
+    (member ? readTables(STAMP_TABLES) : Promise.resolve(null))
+      .then((t) => (t && member ? memberStamps(t, member.id).filter((s) => s.awardedAt !== null) : []))
       .catch((error) => {
         console.error("[little-club] stamps read failed", error);
         return null;
@@ -129,7 +138,7 @@ export async function loadLittleClub(viewer: Viewer, member: Member, now: number
   ]);
   return {
     profile: profile.profile,
-    defaultNickname: cleanNickname(member.name) ?? "",
+    defaultNickname: cleanNickname(member?.name || viewer.session.name || "") ?? "",
     profileStoreReady: profile.ready,
     stamps,
     problems,

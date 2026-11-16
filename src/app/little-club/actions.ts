@@ -17,8 +17,8 @@ export type SaveProfileResult = { ok: true; profile: ClubProfile } | { ok: false
  */
 export async function saveClubProfile(input: { nickname: string; mbti: string }): Promise<SaveProfileResult> {
   const gate = await littleClubGate({ fresh: true });
-  if (!gate.ok) return { ok: false, reason: gate.reason, message: gate.reason === "login" ? "로그인이 필요해요." : "유효한 회원권이 있어야 리틀 클럽을 이용할 수 있어요." };
-  const memberId = gate.member.id;
+  if (!gate.ok) return { ok: false, reason: gate.reason, message: gate.reason === "login" ? "로그인이 필요해요." : "이용이 중지된 계정이에요. 운영진에게 문의해 주세요." };
+  const memberId = gate.profileKey;
   const nickname = typeof input?.nickname === "string" ? input.nickname : "";
   const mbti = typeof input?.mbti === "string" ? input.mbti : "";
   let outcome;

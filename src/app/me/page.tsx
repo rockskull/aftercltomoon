@@ -11,7 +11,6 @@ import { requestNow } from "@/lib/club-data";
 import { toDateKey } from "@/lib/dates";
 import { membershipPhase, totalMonths } from "@/lib/membership";
 import { registrationLabel } from "@/lib/registration";
-import { viewerAccess } from "@/server/auth/access";
 import { isOperator, requireViewer } from "@/server/auth/viewer";
 import { littleClubVerdict } from "@/server/domain/little-club";
 import type { Payment } from "@/server/domain/model";
@@ -77,8 +76,8 @@ async function MyMembership() {
   const membershipName = (m: { planId: string; sourcePaymentId: string }) => (registered.has(m.sourcePaymentId) ? "월 단위" : planName(m.planId));
   const activePlans = club.plans.filter((p) => p.active);
   const inactive = member?.status === "inactive";
-  // THE LITTLE CLUB link: only for members it would let in (the page checks again on the server).
-  const littleClub = littleClubVerdict(member, member ? viewerAccess(viewer, now) : null).ok;
+  // THE LITTLE CLUB link: anyone signed in except suspended accounts (the page checks again on the server).
+  const littleClub = littleClubVerdict(member).ok;
 
   return (
     <div className="flex flex-col gap-8">

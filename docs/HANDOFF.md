@@ -22,9 +22,9 @@
 
 ### THE LITTLE CLUB (`/little-club`, 2026-11-16)
 
-- 회원권이 있는 멤버 전용 픽셀 아지트. 홈 **아지트 들어가기**·MY 메뉴에서 들어가요. 자세한 규칙은 README "THE LITTLE CLUB", 요구사항 원본은 `docs/little-club/handoff/`.
+- 로그인하면 들어오는 픽셀 아지트. 홈 **아지트 들어가기**·MY 메뉴에서 들어가요. 자세한 규칙은 README "THE LITTLE CLUB", 요구사항 원본은 `docs/little-club/handoff/`.
 - ⚠️ **DB:** 새 테이블 `club_profiles`가 필요해요. 운영 DB에 `npm run db:migrate -- --schema-only`(없는 것만 만들고 기존 데이터 그대로)를 실행해 주세요. 먼저 배포돼도 다른 화면은 영향이 없고, 리틀 클럽에서 별명·MBTI 저장만 "준비 중"으로 나와요(이번 방문에만 쓰기). 되돌리기: 코드를 되돌리면 테이블은 안 쓰여요(필요하면 `club_profiles`만 지우면 됨, 별명·MBTI만 사라짐).
-- 운영진·관리자도 본인 회원권이 없으면 못 들어가요(핸드오프 결정). 바꾸려면 운영진 합의 후 `littleClubVerdict`.
+- 입장 권한: 2026-11-16 사용자 결정으로 **로그인한 사람은 누구나**(이용 중지 계정만 제외). 핸드오프의 "유효 회원권 보유자만"을 넓힌 것. 다시 좁히려면 `littleClubVerdict`.
 - 원본 사진(강아지 2마리, 간판, 나이트 조명)이 없어 설명만 보고 그렸어요. 사진이 오면 `src/app/little-club/scene.ts`에서 다듬기.
 
 ### MOON STAMPS ST-07 INVESTOR'S NOSE (2026-11-15)

@@ -1,33 +1,34 @@
-import type { BlockReason, MemberAccess } from "@/lib/access";
 import { cleanNickname, isMbti, type Mbti } from "@/lib/little-club";
 import type { Planned } from "../store";
 import { newId, seoulIso } from "../store/ids";
 import { cellText, type Tables } from "../store/schema";
 
 /**
- * THE LITTLE CLUB: who may enter, and the one profile row per member.
+ * THE LITTLE CLUB: who may enter, and the one profile row per person.
  *
- * Entry is stricter than the other member features: an `active` account with a
- * membership in effect TODAY. Staff get no pass of their own (an operator or
- * admin without a running membership stays outside, as agreed for the club),
- * and applicants, suspended accounts, ended, not-yet-started or pending
- * memberships are all turned away.
+ * Anyone signed in may enter (decided 2026-11-16, wider than the handoff's
+ * "membership holders only"): members with or without a running membership,
+ * applicants, staff, and people who signed in but aren't on the member list.
+ * Only accounts the crew suspended (`inactive`) stay out. Signing in itself is
+ * checked by the caller (src/server/little-club.ts).
  */
 
-export type ClubBlock = "login" | "applicant" | BlockReason;
+export type ClubBlock = "login" | "suspended";
 
 export type ClubVerdict = { ok: true } | { ok: false; reason: ClubBlock };
 
-export function littleClubVerdict(member: { status: string } | null, access: MemberAccess | null): ClubVerdict {
-  if (!member || !access) return { ok: false, reason: "not_member" };
-  if (member.status === "inactive") return { ok: false, reason: "suspended" };
-  if (member.status !== "active") return { ok: false, reason: "applicant" };
-  // validUntil is set only while a confirmed membership covers today (never for staff alone).
-  if (access.validUntil) return { ok: true };
-  if (access.pending) return { ok: false, reason: "pending" };
-  if (access.startsOn) return { ok: false, reason: "not_started" };
-  return { ok: false, reason: "expired" };
+export function littleClubVerdict(member: { status: string } | null): ClubVerdict {
+  if (member?.status === "inactive") return { ok: false, reason: "suspended" };
+  return { ok: true };
 }
+
+/**
+ * Profile rows are keyed by the member id; a signed-in visitor who isn't on the
+ * member list gets an opaque key derived on the server from their sign-in email
+ * ("GUEST-…"; the email itself is never stored).
+ */
+export const GUEST_KEY_PREFIX = "GUEST-";
+export const isGuestKey = (key: string) => key.startsWith(GUEST_KEY_PREFIX);
 
 export interface ClubProfile {
   nickname: string;
@@ -56,7 +57,8 @@ export function planClubProfileSave(
   if (!nickname) return { refuse: "별명은 1~12자로, 글자·숫자·띄어쓰기와 . _ - ~ ! ? · ♡ ☆ ★ 만 쓸 수 있어요." };
   const mbti = ctx.mbti.trim().toUpperCase();
   if (!isMbti(mbti)) return { refuse: "MBTI를 16가지 중에서 골라 주세요." };
-  if (!(data.Members ?? []).some((r) => cellText(r.member_id) === ctx.memberId)) return { refuse: "회원을 찾을 수 없어요." };
+  const guest = isGuestKey(ctx.memberId);
+  if (!guest && !(data.Members ?? []).some((r) => cellText(r.member_id) === ctx.memberId)) return { refuse: "회원을 찾을 수 없어요." };
 
   const rows = data.ClubProfiles.filter((r) => cellText(r.member_id) === ctx.memberId);
   const at = seoulIso(ctx.now);
@@ -93,7 +95,7 @@ export function planClubProfileSave(
     commit: {
       id: commitId,
       checks: [
-        { type: "exists", table: "Members", id: ctx.memberId },
+        ...(guest ? [] : [{ type: "exists" as const, table: "Members" as const, id: ctx.memberId }]),
         // Two tabs saving the first profile at once: only one row ever lands.
         { type: "absent", table: "ClubProfiles", where: { member_id: ctx.memberId } },
       ],
