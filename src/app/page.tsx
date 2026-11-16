@@ -126,10 +126,13 @@ async function HomeMembership() {
         </div>
       </Link>
       {littleClub && (
-        <Link href="/little-club#play" className={`${buttonPrimaryOnDark} mx-auto mt-4 flex w-full max-w-xl`}>
-          ☾ 아지트 들어가기
-          <ArrowRight />
-        </Link>
+        // A centred block like the card above (the shared button is inline-flex, so it can't centre itself).
+        <div className="mx-auto mt-4 max-w-xl">
+          <Link href="/little-club#play" className={`${buttonPrimaryOnDark} w-full`}>
+            ☾ 아지트 들어가기
+            <ArrowRight />
+          </Link>
+        </div>
       )}
     </div>
   );
