@@ -2,18 +2,18 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ClubCalendar } from "@/components/calendar/club-calendar";
 import { BANNER_COPY } from "@/components/member-banner-client";
 import { buttonPrimary, cn } from "@/components/ui";
 import { toDateKey } from "@/lib/dates";
-import { BUBBLE_MAX, cleanBubble, cleanNickname, MBTI_MOTIONS, MBTI_TYPES, nameTag, NICKNAME_MAX, type Mbti } from "@/lib/little-club";
+import { BUBBLE_MAX, cleanBubble, cleanNickname, MBTI_MOTIONS, MBTI_TYPES, nameTag, NICKNAME_MAX, type ClubPeer, type Mbti } from "@/lib/little-club";
 import { gradeInfo, gradeLabel } from "@/lib/problems";
 import type { ClubProfile } from "@/server/domain/little-club";
 import type { ClubNotice, ClubNotices, LittleClubData } from "@/server/little-club";
 import { markAllRead } from "../me/actions";
 import { RadioStation } from "../radio/radio-station";
-import { refreshClubNotices, saveClubProfile } from "./actions";
+import { peekPresence, refreshClubNotices, saveClubProfile, syncPresence } from "./actions";
 import { BGM_TITLES, ClubBgm, type BgmTrack } from "./bgm";
 import {
   clampToFloor,
@@ -29,6 +29,8 @@ import {
   drawRabbit,
   drawRabbitTile,
   drawTable,
+  bubbleSize,
+  tagSize,
   H,
   SPOTS,
   spotAt,
@@ -48,7 +50,15 @@ import {
 
 type ModalId = "profile" | "problems" | "stamps" | "calendar" | "notices" | null;
 
-const START: Record<SceneId, [number, number]> = { indoor: [220, 288], outdoor: [62, 272] };
+const START: Record<SceneId, [number, number]> = { indoor: [220, 290], outdoor: [62, 272] };
+
+/** Where someone appears in a scene: near the door, nudged by their nickname so two people never stack exactly. */
+function spawnAt(scene: SceneId, seed: string): [number, number] {
+  let h = 0;
+  for (const ch of seed) h = (h * 31 + ch.codePointAt(0)!) >>> 0;
+  const [x, y] = START[scene];
+  return clampToFloor(scene, x + (scene === "indoor" ? (h % 81) - 40 : h % 70), y + ((h >> 8) % 21) - 10);
+}
 
 /** Decorative rabbits (not members): type, x, y, pose. */
 const EXTRAS: Record<SceneId, Array<[Mbti, number, number, Pose]>> = {
@@ -79,47 +89,10 @@ const SPOT_TEXT: Record<SpotId, { label: string; hint: string; going: string }> 
   inside: { label: "실내로", hint: "클럽 안으로 돌아가기", going: "다시 안으로…" },
 };
 
-const PRESETS: Record<SceneId, string[]> = {
-  indoor: ["오늘은 슬랩 연습", "쉬는 중 ☕", "같이 볼더링?"],
-  outdoor: ["오늘도 잘 놀았다", "불멍 중", "다음엔 같이 올라요"],
-};
+const PRESETS = ["오늘은 슬랩 연습", "쉬는 중 ☕", "같이 볼더링?", "불멍 중", "다음엔 같이 올라요"];
 
-const BUBBLE_KEY = "acm-little-club-bubbles";
-
-// Bubbles live in this tab's session storage only: no history, nobody else sees them.
-const bubbleListeners = new Set<() => void>();
-let bubbleCache: string | null = null;
-function bubbleSnapshot(): string {
-  if (bubbleCache === null) {
-    try {
-      bubbleCache = sessionStorage.getItem(BUBBLE_KEY) ?? "{}";
-    } catch {
-      bubbleCache = "{}";
-    }
-  }
-  return bubbleCache;
-}
-function subscribeBubbles(listener: () => void) {
-  bubbleListeners.add(listener);
-  return () => {
-    bubbleListeners.delete(listener);
-  };
-}
-function writeBubbles(next: Record<SceneId, string>) {
-  bubbleCache = JSON.stringify(next);
-  try {
-    sessionStorage.setItem(BUBBLE_KEY, bubbleCache);
-  } catch {}
-  bubbleListeners.forEach((l) => l());
-}
-function parseBubbles(raw: string): Record<SceneId, string> {
-  try {
-    const value = JSON.parse(raw) as Partial<Record<SceneId, unknown>>;
-    return { indoor: cleanBubble(String(value.indoor ?? "")), outdoor: cleanBubble(String(value.outdoor ?? "")) };
-  } catch {
-    return { indoor: "", outdoor: "" };
-  }
-}
+/** Someone else in the club, with where their rabbit is drawn right now (it walks to x, y). */
+type Peer = ClubPeer & { rx: number; ry: number };
 
 function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -186,7 +159,7 @@ async function chime(): Promise<boolean> {
   }
 }
 
-type Toast = { title: string; body: string; url: string | null };
+type Toast = { title: string; body: string; url: string | null; open?: ModalId };
 
 /** Rings now, or — when the browser wants a tap before any sound — on the member's next tap or key. */
 function playChime() {
@@ -209,8 +182,8 @@ export function LittleClub({ data }: { data: LittleClubData }) {
   const [scene, setScene] = useState<SceneId>("indoor");
   const [night, setNight] = useState(false);
   const [status, setStatus] = useState<{ main: string; sub?: string }>({ main: "어서 와요. 하고 싶은 걸 골라 보세요.", sub: "장면을 누르거나 아래 버튼으로 움직일 수 있어요." });
-  const bubbleRaw = useSyncExternalStore(subscribeBubbles, bubbleSnapshot, () => "{}");
-  const bubbles = useMemo(() => parseBubbles(bubbleRaw), [bubbleRaw]);
+  // One bubble that follows me everywhere (kept on the server with my presence; fades after 30 min).
+  const [bubble, setBubbleState] = useState(data.myBubble);
   const [draft, setDraft] = useState("");
   const [radio, setRadio] = useState<{ mounted: boolean; open: boolean }>({ mounted: false, open: false });
   const [radioPlaying, setRadioPlaying] = useState(false);
@@ -222,14 +195,14 @@ export function LittleClub({ data }: { data: LittleClubData }) {
   const game = useRef<GameState>({
     scene: "indoor",
     night: false,
-    x: START.indoor[0],
-    y: START.indoor[1],
+    x: spawnAt("indoor", profile?.nickname ?? "")[0],
+    y: spawnAt("indoor", profile?.nickname ?? "")[1],
     target: null,
     pose: "stand",
     poseUntil: 0,
     climbStart: 0,
     keys: new Set(),
-    bubble: "",
+    bubble: data.myBubble,
     tag: profile ? nameTag(profile.nickname, profile.mbti) : "",
     mbti: profile?.mbti ?? "INFP",
     dirty: true,
@@ -290,10 +263,87 @@ export function LittleClub({ data }: { data: LittleClubData }) {
   }, [ring]);
   const bellCount = notices.notices.length + (notices.banner ? 1 : 0);
 
+  // ---- presence: the others in the club right now ----
+  const peersRef = useRef<Map<string, Peer>>(new Map(data.peers.map((p) => [p.id, { ...p, rx: p.x, ry: p.y }])));
+  const [peerCount, setPeerCount] = useState(data.peers.length);
+  const presenceOn = data.presenceReady && profile !== null;
+  const presenceOnRef = useRef(presenceOn);
   useEffect(() => {
-    game.current.bubble = bubbles[scene];
+    presenceOnRef.current = presenceOn;
+  });
+  const applyPeers = useCallback((list: ClubPeer[]) => {
+    const prev = peersRef.current;
+    const next = new Map<string, Peer>();
+    for (const p of list) {
+      const old = prev.get(p.id);
+      const keep = old !== undefined && old.scene === p.scene;
+      next.set(p.id, { ...p, rx: keep ? old.rx : p.x, ry: keep ? old.ry : p.y });
+    }
+    peersRef.current = next;
     game.current.dirty = true;
-  }, [bubbles, scene]);
+    setPeerCount(list.length);
+  }, []);
+  /** Tell the club where I am (and my bubble), and hear who else is here. */
+  const sendPresence = useCallback(
+    async (extra?: { bubble?: string }) => {
+      if (!presenceOnRef.current) return;
+      const g = game.current;
+      try {
+        const res = await syncPresence({ scene: g.scene, x: Math.round(g.x), y: Math.round(g.y), ...extra });
+        if (res.ok) applyPeers(res.peers);
+      } catch {}
+    },
+    [applyPeers],
+  );
+  const sendRef = useRef(sendPresence);
+  useEffect(() => {
+    sendRef.current = sendPresence;
+  });
+  useEffect(() => {
+    if (!presenceOn) return;
+    void sendPresence(); // I'm here
+    // A light refresh while the club is on screen (no realtime server): who's around, every 8 s;
+    // my own spot is sent when I stop or change scene, plus a keep-alive every 45 s.
+    const peek = async () => {
+      if (document.hidden) return;
+      try {
+        const res = await peekPresence();
+        if (res.ok) applyPeers(res.peers);
+      } catch {}
+    };
+    const poll = window.setInterval(peek, 8000);
+    const keep = window.setInterval(() => {
+      if (!document.hidden) void sendPresence();
+    }, 45000);
+    const onVisible = () => {
+      if (!document.hidden) void sendPresence();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(poll);
+      window.clearInterval(keep);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [presenceOn, sendPresence, applyPeers]);
+  // Once: say that others can now see my rabbit (and where to turn it off).
+  useEffect(() => {
+    if (!presenceOn || !profile?.visible) return;
+    const timer = window.setTimeout(() => {
+      try {
+        if (localStorage.getItem("acm-little-club-presence-intro")) return;
+        localStorage.setItem("acm-little-club-presence-intro", "1");
+      } catch {
+        return;
+      }
+      setToast({ title: "이제 함께 접속한 멤버가 내 토끼를 볼 수 있어요", body: "별명 · MBTI 이름표와 말풍선이 보여요. 툴바의 ‘공개’ 버튼으로 언제든 나만 보기로 바꿀 수 있어요.", url: null, open: "profile" });
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [presenceOn, profile?.visible]);
+
+  useEffect(() => {
+    game.current.bubble = bubble;
+    game.current.dirty = true;
+  }, [bubble]);
 
   useEffect(() => {
     const g = game.current;
@@ -338,15 +388,14 @@ export function LittleClub({ data }: { data: LittleClubData }) {
     (next: SceneId) => {
       const g = game.current;
       g.scene = next;
-      [g.x, g.y] = next === "indoor" ? [220, 292] : START.outdoor;
+      [g.x, g.y] = spawnAt(next, g.tag);
       g.target = null;
       g.pose = "stand";
-      g.bubble = bubbles[next];
       g.dirty = true;
       setScene(next);
-      setDraft("");
+      void sendRef.current();
     },
-    [bubbles],
+    [],
   );
 
   const openRadio = useCallback(() => {
@@ -449,9 +498,27 @@ export function LittleClub({ data }: { data: LittleClubData }) {
   // ---- bubbles ----
   function setBubble(text: string) {
     const clean = cleanBubble(text);
-    writeBubbles({ ...bubbles, [scene]: clean });
+    setBubbleState(clean);
     setDraft("");
-    say(clean ? "말풍선을 띄웠어요." : "말풍선을 지웠어요.", clean ? "이 기기의 내 화면에만 보여요. 지난 말풍선은 남지 않아요." : undefined);
+    void sendPresence({ bubble: clean });
+    say(
+      clean ? "말풍선을 띄웠어요." : "말풍선을 지웠어요.",
+      clean ? (presenceOn && profile?.visible ? "밖으로 나가도 따라다니고, 함께 있는 멤버에게도 보여요. 30분 뒤 사라져요." : "밖으로 나가도 따라다녀요. 30분 뒤 사라져요.") : undefined,
+    );
+  }
+
+  async function toggleVisible() {
+    if (!profile) return;
+    const next = !profile.visible;
+    try {
+      const res = await saveClubProfile({ nickname: profile.nickname, mbti: profile.mbti, visible: next });
+      if (res.ok) {
+        setProfile(res.profile);
+        say(next ? "다른 멤버에게 내 토끼가 보여요." : "이제 나만 보여요.", next ? "이름표와 말풍선이 함께 접속한 멤버에게 보여요." : "다른 멤버 화면에서 내 토끼가 사라져요.");
+      } else say("바꾸지 못했어요.", res.message);
+    } catch {
+      say("바꾸지 못했어요.", "잠시 후 다시 시도해 주세요.");
+    }
   }
 
   // ---- the game loop ----
@@ -478,6 +545,8 @@ export function LittleClub({ data }: { data: LittleClubData }) {
     let raf = 0;
     let last = performance.now();
     let visible = true;
+    let wasMoving = false;
+    let settle = 0;
     const io = new IntersectionObserver((entries) => {
       visible = entries.some((e) => e.isIntersecting);
       game.current.dirty = true;
@@ -528,17 +597,41 @@ export function LittleClub({ data }: { data: LittleClubData }) {
         g.pose = "stand";
         g.dirty = true;
       }
+      if (wasMoving && !moving) {
+        window.clearTimeout(settle);
+        settle = window.setTimeout(() => void sendRef.current(), 700);
+      }
+      wasMoving = moving;
+
+      // the others walk to where they last said they were
+      const walking = new Set<string>();
+      for (const peer of peersRef.current.values()) {
+        if (peer.scene !== g.scene) continue;
+        const d = Math.hypot(peer.x - peer.rx, peer.y - peer.ry);
+        if (d < 1) continue;
+        if (reduced || d > 260) {
+          peer.rx = peer.x;
+          peer.ry = peer.y;
+        } else {
+          const step = Math.min(d, 110 * dt);
+          peer.rx += ((peer.x - peer.rx) / d) * step;
+          peer.ry += ((peer.y - peer.ry) / d) * step;
+          walking.add(peer.id);
+        }
+        g.dirty = true;
+      }
 
       // reduced motion: draw only when something changed (no idle animation)
       if (reduced && !moving && !g.dirty && g.pose !== "climb") return;
       g.dirty = false;
       const t = reduced ? 0 : now / 16.67;
       g2.setTransform(scale, 0, 0, scale, 0, 0);
-      render(g2, g, t, now, moving, reduced);
+      render(g2, g, t, now, moving, reduced, peersRef.current, walking);
     };
     raf = requestAnimationFrame(frame);
     return () => {
       cancelAnimationFrame(raf);
+      window.clearTimeout(settle);
       io.disconnect();
       ro.disconnect();
     };
@@ -615,6 +708,11 @@ export function LittleClub({ data }: { data: LittleClubData }) {
         <ToolButton onClick={() => setModal("profile")} label="내 토끼 설정">
           ☾ {profile ? nameTag(profile.nickname, profile.mbti) : "MY RABBIT"}
         </ToolButton>
+        {profile && data.profileStoreReady && data.presenceReady && (
+          <ToolButton onClick={toggleVisible} label={profile.visible ? "다른 멤버에게 보이는 중 (누르면 나만 보기)" : "나만 보기 중 (누르면 공개)"} active={profile.visible}>
+            {profile.visible ? "👀 공개" : "🙈 나만 보기"}
+          </ToolButton>
+        )}
         {bellCount > 0 && (
           <ToolButton onClick={() => setModal("notices")} label={`회원권 알림 ${bellCount}개`} active>
             🔔 알림 · {bellCount}
@@ -670,6 +768,7 @@ export function LittleClub({ data }: { data: LittleClubData }) {
             />
             <span className="pointer-events-none absolute left-2 top-2 rounded-sm bg-midnight/75 px-2 py-1 font-label text-[9px] font-semibold uppercase tracking-[0.2em] text-cream/85">
               {scene === "indoor" ? (night ? "Inside · Night lights" : "Inside the club") : "The campfire"}
+              {peerCount > 0 && <span className="ml-1.5 text-butter">· 함께 {peerCount}</span>}
             </span>
             {toast && (
               <div role="status" className="absolute inset-x-2 top-9 mx-auto flex max-w-md items-start gap-2 rounded-md border-2 border-butter bg-midnight/95 p-2.5 text-cream shadow-[4px_4px_0_#05090f] sm:top-10">
@@ -679,7 +778,7 @@ export function LittleClub({ data }: { data: LittleClubData }) {
                   {toast.body && <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-cream/75">{toast.body}</p>}
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
-                  <button type="button" onClick={() => { setToast(null); setModal("notices"); }} className="rounded-sm bg-butter px-2 py-1 text-[11px] font-bold text-midnight">
+                  <button type="button" onClick={() => { setModal(toast.open ?? "notices"); setToast(null); }} className="rounded-sm bg-butter px-2 py-1 text-[11px] font-bold text-midnight">
                     보기
                   </button>
                   <button type="button" onClick={() => setToast(null)} aria-label="알림 닫기" className="px-1 text-[11px] text-cream/60">
@@ -742,7 +841,7 @@ export function LittleClub({ data }: { data: LittleClubData }) {
             }}
           >
             <label htmlFor="bubble" className="font-label text-[10px] font-semibold uppercase tracking-[0.2em] text-butter">
-              {scene === "indoor" ? "실내" : "실외"} 말풍선 · 지금 하는 일
+              말풍선 · 지금 하는 일
             </label>
             <div className="mt-2 flex gap-1.5">
               <input
@@ -751,7 +850,7 @@ export function LittleClub({ data }: { data: LittleClubData }) {
                 onChange={(e) => setDraft(e.target.value)}
                 maxLength={BUBBLE_MAX}
                 autoComplete="off"
-                placeholder={bubbles[scene] || "한 줄로 짧게"}
+                placeholder={bubble || "한 줄로 짧게"}
                 className="min-w-0 flex-1 rounded-sm border border-cream/40 bg-midnight px-2 py-2 text-[13px] text-cream placeholder:text-cream/40"
               />
               <button type="submit" className="rounded-sm bg-butter px-3 text-[12px] font-bold text-midnight">
@@ -759,22 +858,24 @@ export function LittleClub({ data }: { data: LittleClubData }) {
               </button>
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {PRESETS[scene].map((p) => (
+              {PRESETS.map((p) => (
                 <button key={p} type="button" onClick={() => setBubble(p)} className="rounded-sm border border-cream/25 px-2 py-1 text-[11px] text-cream/75 hover:text-cream">
                   {p}
                 </button>
               ))}
-              {bubbles[scene] && (
+              {bubble && (
                 <button type="button" onClick={() => setBubble("")} className="rounded-sm border border-cream/25 px-2 py-1 text-[11px] text-cream/60 hover:text-cream">
                   지우기
                 </button>
               )}
             </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-cream/50">실내·실외에 하나씩, 지금 것만 남아요. 이 기기의 내 화면에만 보이고 대화 기록은 없어요.</p>
+            <p className="mt-2 text-[11px] leading-relaxed text-cream/50">
+              하나만, 지금 것만 남아요. 밖으로 나가도 따라다니고 30분 뒤 사라져요.{presenceOn && profile?.visible ? " 함께 있는 멤버에게도 보여요." : ""} 대화 기록은 없어요.
+            </p>
           </form>
 
           <p className="mt-4 border-t border-cream/15 pt-3 text-[11px] leading-relaxed text-cream/50">
-            다른 토끼들과 강아지 두 마리는 장면을 꾸미는 캐릭터예요. 실제 회원이나 접속 상태가 아니에요. 게임 속 행동은 회원 기록·스탬프에 반영되지 않아요.
+            이름표가 있는 토끼는 지금 함께 접속한 멤버예요(공개한 사람만). 이름표 없는 토끼와 강아지 두 마리는 장면을 꾸미는 캐릭터예요. 게임 속 행동은 회원 기록·스탬프에 반영되지 않아요.
           </p>
         </aside>
       </div>
@@ -863,7 +964,7 @@ export function LittleClub({ data }: { data: LittleClubData }) {
 // Drawing one frame
 // ---------------------------------------------------------------------------
 
-function render(g: CanvasRenderingContext2D, s: GameState, t: number, now: number, moving: boolean, reduced: boolean) {
+function render(g: CanvasRenderingContext2D, s: GameState, t: number, now: number, moving: boolean, reduced: boolean, peers: Map<string, Peer>, walking: Set<string>) {
   const indoor = s.scene === "indoor";
   if (indoor) drawIndoor(g, s.cal);
   else drawOutdoor(g, t);
@@ -894,6 +995,17 @@ function render(g: CanvasRenderingContext2D, s: GameState, t: number, now: numbe
     px -= 14;
     scale = depthScale("indoor", 230);
   }
+  // the others here (their own tag and bubble, drawn with mine after the lighting)
+  const labels: Array<{ x: number; y: number; scale: number; tag: string; bubble: string }> = [];
+  let n = 0;
+  for (const peer of peers.values()) {
+    if (peer.scene !== s.scene) continue;
+    const ps = depthScale(s.scene, peer.ry);
+    const offset = (n++ + 1) * 53;
+    items.push({ y: peer.ry, draw: () => drawRabbit(g, peer.rx, peer.ry, peer.mbti, t + offset, ps, { walking: walking.has(peer.id) }) });
+    labels.push({ x: peer.rx, y: peer.ry, scale: ps, tag: nameTag(peer.nickname, peer.mbti), bubble: peer.bubble });
+  }
+
   const playerY = s.pose === "climb" ? 400 : s.pose === "sit" && indoor && s.y < 150 ? 140 : s.y;
   items.push({ y: playerY, draw: () => drawRabbit(g, px, py, s.mbti, t, scale, { player: true, walking: moving, pose: s.pose }) });
 
@@ -904,9 +1016,30 @@ function render(g: CanvasRenderingContext2D, s: GameState, t: number, now: numbe
     else drawDay(g);
   }
 
-  // tag and bubble stay readable at night
-  if (s.tag) drawNameTag(g, px, py - 44 * scale, s.tag);
-  if (s.bubble) drawBubble(g, px, py - 56 * scale, s.bubble);
+  // Tags and bubbles stay readable at night. Mine keeps its place; a nearby label moves up
+  // out of the way instead of covering another (so a bubble is never read as someone else's).
+  const boxes: Array<{ x: number; y: number; w: number; h: number }> = [];
+  const fit = (x: number, top: number, w: number, h: number) => {
+    for (let k = 0; k < 8; k++) {
+      const hit = boxes.find((b) => Math.abs(b.x - x) < (b.w + w) / 2 && top < b.y + b.h && top + h > b.y);
+      if (!hit) break;
+      top = hit.y - h - 1;
+    }
+    boxes.push({ x, y: top, w, h });
+    return top;
+  };
+  const drawLabel = (x: number, footY: number, sc: number, tag: string, bubble: string) => {
+    if (!tag) return;
+    const ts = tagSize(g, tag);
+    const tagTop = fit(x, footY - 44 * sc - 10, ts.w, ts.h);
+    drawNameTag(g, x, tagTop + 10, tag);
+    if (!bubble) return;
+    const bs = bubbleSize(g, bubble);
+    const bubbleTop = fit(x, tagTop - bs.h - 1, bs.w, bs.h);
+    drawBubble(g, x, bubbleTop + 26, bubble);
+  };
+  drawLabel(px, py, scale, s.tag, s.bubble);
+  for (const l of labels) drawLabel(l.x, l.y, l.scale, l.tag, l.bubble);
 }
 
 // ---------------------------------------------------------------------------
@@ -1036,6 +1169,7 @@ function ProfileModal({
 }) {
   const [nickname, setNickname] = useState(initial?.nickname ?? defaultNickname);
   const [mbti, setMbti] = useState<Mbti | null>(initial?.mbti ?? null);
+  const [visible, setVisible] = useState(initial?.visible ?? true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const clean = cleanNickname(nickname);
@@ -1044,11 +1178,11 @@ function ProfileModal({
     e.preventDefault();
     if (!clean) return setError(`별명은 1~${NICKNAME_MAX}자로, 글자·숫자·띄어쓰기 위주로 적어 주세요.`);
     if (!mbti) return setError("MBTI 달토끼를 하나 골라 주세요.");
-    if (!storeReady) return onSaved({ nickname: clean, mbti }, false);
+    if (!storeReady) return onSaved({ nickname: clean, mbti, visible }, false);
     setBusy(true);
     setError(null);
     try {
-      const res = await saveClubProfile({ nickname: clean, mbti });
+      const res = await saveClubProfile({ nickname: clean, mbti, visible });
       if (res.ok) onSaved(res.profile, true);
       else setError(res.message);
     } catch {
@@ -1062,7 +1196,7 @@ function ProfileModal({
     <Modal kicker="My moon rabbit" title={initial ? "Edit your rabbit." : "Choose your moon rabbit."} closable={closable} onClose={onClose}>
       <form onSubmit={submit} className="mt-3 flex flex-col gap-3">
         <p className="text-[13px] leading-relaxed text-ink-soft">
-          게임 속 내 토끼 위에 <b className="text-midnight">별명 · MBTI</b>가 보여요. 모두 같은 달토끼이고, MBTI마다 하는 행동이 달라요. 놀이용 설정일 뿐 성격 판정이 아니에요. 다른 회원에게는 보이지 않아요.
+          게임 속 내 토끼 위에 <b className="text-midnight">별명 · MBTI</b>가 보여요. 모두 같은 달토끼이고, MBTI마다 하는 행동이 달라요. 놀이용 설정일 뿐 성격 판정이 아니에요.
         </p>
         <label className="flex flex-col gap-1 text-[12px] font-semibold text-ink-soft">
           별명 ({NICKNAME_MAX}자까지)
@@ -1094,6 +1228,13 @@ function ProfileModal({
             ))}
           </div>
         </fieldset>
+        <label className="flex items-start gap-2 rounded-sm border-2 border-plywood-400 bg-plywood-200 px-3 py-2 text-[13px]">
+          <input type="checkbox" checked={visible} onChange={(e) => setVisible(e.target.checked)} className="mt-1 size-4 accent-[var(--color-brown)]" />
+          <span>
+            <b>다른 멤버에게 내 토끼 보이기</b>
+            <span className="block text-[12px] text-ink-soft">켜 두면 함께 접속한 멤버에게 내 토끼, 별명 · MBTI, 있는 장면, 말풍선이 보여요. 끄면 나만 보여요. 나중에 툴바에서 바꿀 수 있어요.</span>
+          </span>
+        </label>
         {!storeReady && <p className="rounded-sm bg-plywood-200 px-3 py-2 text-[12px] text-brown">프로필 저장소가 아직 준비 중이에요. 지금 고른 토끼는 이번 방문에만 쓰여요.</p>}
         {error && (
           <p role="alert" className="text-[13px] font-semibold text-[#b8402e]">

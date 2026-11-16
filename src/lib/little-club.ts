@@ -59,5 +59,24 @@ export function cleanBubble(input: string): string {
   return [...input.normalize("NFC").replace(/[\p{Cc}\p{Cf}]/gu, "").replace(/\s+/g, " ").trim()].slice(0, BUBBLE_MAX).join("");
 }
 
+/** Someone counts as "here" while their presence was refreshed within this window. */
+export const PRESENCE_TTL_MS = 2 * 60_000;
+/** A speech bubble fades after this long. */
+export const BUBBLE_TTL_MS = 30 * 60_000;
+
+export type ClubScene = "indoor" | "outdoor";
+export const isClubScene = (value: string): value is ClubScene => value === "indoor" || value === "outdoor";
+
+/** Another person in the club, as the browser receives it (an opaque id, never a member id or email). */
+export interface ClubPeer {
+  id: string;
+  nickname: string;
+  mbti: Mbti;
+  scene: ClubScene;
+  x: number;
+  y: number;
+  bubble: string;
+}
+
 /** The tag over the player's rabbit: "별명 · MBTI". */
 export const nameTag = (nickname: string, mbti: string) => `${nickname} · ${mbti}`;

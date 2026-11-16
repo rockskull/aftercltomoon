@@ -889,6 +889,16 @@ export function drawDogB(g: G, x: number, y: number, t: number, scale: number, r
 // Tags and bubbles (drawn last, never dimmed by the night overlay)
 // ---------------------------------------------------------------------------
 
+/** Box sizes of a name tag / bubble (for keeping labels of nearby rabbits apart). */
+export function tagSize(g: G, text: string) {
+  g.font = `bold 9px ${KFONT}`;
+  return { w: Math.ceil(g.measureText(text).width) + 10, h: 14 };
+}
+export function bubbleSize(g: G, text: string) {
+  g.font = `bold 11px ${KFONT}`;
+  return { w: Math.min(250, Math.max(60, Math.ceil(g.measureText(text).width) + 16)), h: 25 };
+}
+
 export function drawNameTag(g: G, x: number, y: number, text: string) {
   g.font = `bold 9px ${KFONT}`;
   const w = Math.ceil(g.measureText(text).width) + 10;

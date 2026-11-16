@@ -153,7 +153,13 @@ export const TABLES = {
    * by that member. Read on its own (see LITTLE_CLUB_TABLES), so a database without the table
    * yet only closes the club's profile save, never the rest of the site.
    */
-  ClubProfiles: ["member_id", "nickname", "mbti", "created_at", "updated_at"],
+  ClubProfiles: ["member_id", "nickname", "mbti", "created_at", "updated_at", "visible"],
+  /**
+   * THE LITTLE CLUB presence: where each person is right now (scene and spot) and their one
+   * current speech bubble. One row per person, overwritten (no history); a row not refreshed
+   * for a couple of minutes simply means "not here". Read on its own like ClubProfiles.
+   */
+  ClubPresence: ["member_id", "scene", "x", "y", "bubble", "bubble_at", "seen_at"],
   AuditLog: ["log_id", "commit_id", "actor_id", "action", "target_id", "before_value", "after_value", "created_at"],
   Settings: ["key", "value", "description"],
   // v0.1 tables (read by the public feed / written by the proposal form)
@@ -309,6 +315,9 @@ export const STAMP_TABLES: TableName[] = ["StampDefinitions", "StampAwards"];
 
 /** THE LITTLE CLUB profiles, read on their own like the stamps (a missing table must not break other reads). */
 export const LITTLE_CLUB_TABLES: TableName[] = ["ClubProfiles"];
+
+/** Profiles + presence (who is in the club right now). */
+export const PRESENCE_TABLES: TableName[] = ["ClubProfiles", "ClubPresence"];
 
 /** AFTER HOURS RADIO page: tracks, who may add/delete, and the player switch — one gateway call. */
 export const RADIO_TABLES: TableName[] = ["Members", "Memberships", "Payments", "RadioTracks", "Settings"];

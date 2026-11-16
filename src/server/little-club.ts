@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { bannerKind, type BannerKind } from "@/lib/access";
 import { getClubData } from "@/lib/club-data";
 import { parseMoment } from "@/lib/dates";
-import { cleanNickname } from "@/lib/little-club";
+import { cleanNickname, type ClubPeer } from "@/lib/little-club";
 import type { RadioState } from "@/lib/radio";
 import type { MyStamp } from "@/lib/stamps";
 import type { ClubEvent, Enrollment } from "@/lib/types";
@@ -11,12 +11,12 @@ import { viewerAccess } from "./auth/access";
 import { readSession } from "./auth/session";
 import { getViewer, type Viewer } from "./auth/viewer";
 import type { Member } from "./domain/model";
-import { clubProfileOf, GUEST_KEY_PREFIX, littleClubVerdict, type ClubBlock, type ClubProfile } from "./domain/little-club";
+import { clubProfileOf, GUEST_KEY_PREFIX, littleClubVerdict, myBubbleOf, peersOf, type ClubBlock, type ClubProfile } from "./domain/little-club";
 import { memberStamps } from "./domain/stamps";
 import { loadProblemList } from "./problems";
 import { loadRadio } from "./radio";
 import { readTables } from "./store";
-import { LITTLE_CLUB_TABLES, STAMP_TABLES } from "./store/schema";
+import { LITTLE_CLUB_TABLES, STAMP_TABLES, type Tables } from "./store/schema";
 
 /**
  * THE LITTLE CLUB on the server: the gate every screen and action goes through,
@@ -41,6 +41,45 @@ export async function littleClubGate(opts: { fresh?: boolean } = {}): Promise<Cl
   const verdict = littleClubVerdict(viewer.member);
   if (!verdict.ok) return verdict;
   return { ok: true, viewer, member: viewer.member, profileKey: profileKeyFor(viewer.session.email, viewer.member) };
+}
+
+/** What the browser gets to tell people apart: an opaque id per person (not the member id or email). */
+const peerId = (key: string) => createHash("sha256").update(`little-club-peer:${key}`).digest("hex").slice(0, 12);
+
+function toPeers(tables: Tables, selfKey: string, now: number): ClubPeer[] {
+  return peersOf(tables, selfKey, now).map(({ key, ...p }) => ({ id: peerId(key), ...p }));
+}
+
+/** Profiles and presence, each read on its own (a database without the presence table yet must not break profiles). */
+async function readClubTables(): Promise<{ tables: Tables; profilesReady: boolean; presenceReady: boolean }> {
+  const tables: Tables = {};
+  let profilesReady = false;
+  let presenceReady = false;
+  try {
+    const t = await readTables(LITTLE_CLUB_TABLES, { fresh: true });
+    if (t.ClubProfiles !== undefined) {
+      tables.ClubProfiles = t.ClubProfiles;
+      profilesReady = true;
+    }
+  } catch (error) {
+    console.error("[little-club] profile read failed", error);
+  }
+  try {
+    const t = await readTables(["ClubPresence"], { fresh: true });
+    if (t.ClubPresence !== undefined) {
+      tables.ClubPresence = t.ClubPresence;
+      presenceReady = profilesReady;
+    }
+  } catch (error) {
+    console.error("[little-club] presence read failed", error);
+  }
+  return { tables, profilesReady, presenceReady };
+}
+
+/** Who else is here right now (for the browser's light refresh). */
+export async function loadPeers(profileKey: string, now: number): Promise<{ ready: boolean; peers: ClubPeer[] }> {
+  const { tables, presenceReady } = await readClubTables();
+  return { ready: presenceReady, peers: presenceReady ? toPeers(tables, profileKey, now) : [] };
 }
 
 export interface ClubProblem {
@@ -96,6 +135,12 @@ export interface LittleClubData extends ClubNotices {
   /** Active MOON PROBLEMS (null when they couldn't be read). */
   problems: ClubProblem[] | null;
   radio: RadioState | null;
+  /** false until the database has the presence table (then the club is "just me"). */
+  presenceReady: boolean;
+  /** The others here right now (visible ones only). */
+  peers: ClubPeer[];
+  /** My one current bubble (kept on the server, so it follows me outside and across devices). */
+  myBubble: string;
   /** Request time (server), so the wall calendar shows the same day. */
   now: number;
   /** The club calendar (the same public schedule as the home page). */
@@ -104,12 +149,13 @@ export interface LittleClubData extends ClubNotices {
 
 export async function loadLittleClub(viewer: Viewer, member: Member | null, profileKey: string, now: number): Promise<LittleClubData> {
   const [profile, stamps, problems, radio, calendar] = await Promise.all([
-    readTables(LITTLE_CLUB_TABLES, { fresh: true })
-      .then((t) => (t.ClubProfiles === undefined ? { ready: false, profile: null } : { ready: true, profile: clubProfileOf(t, profileKey) }))
-      .catch((error) => {
-        console.error("[little-club] profile read failed", error);
-        return { ready: false, profile: null };
-      }),
+    readClubTables().then(({ tables, profilesReady, presenceReady }) => ({
+      ready: profilesReady,
+      profile: profilesReady ? clubProfileOf(tables, profileKey) : null,
+      presenceReady,
+      peers: presenceReady ? toPeers(tables, profileKey, now) : [],
+      myBubble: presenceReady ? myBubbleOf(tables, profileKey, now) : "",
+    })),
     (member ? readTables(STAMP_TABLES) : Promise.resolve(null))
       .then((t) => (t && member ? memberStamps(t, member.id).filter((s) => s.awardedAt !== null) : []))
       .catch((error) => {
@@ -140,6 +186,9 @@ export async function loadLittleClub(viewer: Viewer, member: Member | null, prof
     profile: profile.profile,
     defaultNickname: cleanNickname(member?.name || viewer.session.name || "") ?? "",
     profileStoreReady: profile.ready,
+    presenceReady: profile.presenceReady,
+    peers: profile.peers,
+    myBubble: profile.myBubble,
     stamps,
     problems,
     radio,
