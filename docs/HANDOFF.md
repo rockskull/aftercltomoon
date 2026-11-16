@@ -10,7 +10,7 @@
 | 사이트 | https://aftercltomoon.vercel.app — 실데이터, Google 로그인 |
 | 데이터 | **Postgres (Neon, Vercel Storage)** — 2026-11-13 Google Sheets에서 이전. 시트는 백업으로만 남김 |
 | 코드 | GitHub `rockskull/aftercltomoon` `main` · Vercel이 연결되어 **push하면 자동 배포** |
-| 완료 | 캘린더·이벤트·제안서(로그인 필요), Google 로그인, 회원권(**달 단위: 1일 시작 · 말일 종료**), 첫 등록 가격, 입금 승인, 거래내역 매칭, 알림, PWA, 관리 화면, 동의서, 회계 장부, 초대장, 포스터 생성기, MOON STAMPS(7종 · Instagram 공유), AFTER HOURS RADIO, MOON PROBLEMS, 회원권 등록 계산(admin), 관리 화면에서 회원 추가·상품·설정·등록 기간·스탬프 편집 |
+| 완료 | 캘린더·이벤트·제안서(로그인 필요), Google 로그인, 회원권(**달 단위: 1일 시작 · 말일 종료**), 첫 등록 가격, 입금 승인, 거래내역 매칭, 알림, PWA, 관리 화면, 동의서, 회계 장부, 초대장, 포스터 생성기, MOON STAMPS(7종 · Instagram 공유), AFTER HOURS RADIO, MOON PROBLEMS, THE LITTLE CLUB, 회원권 등록 계산(admin), 관리 화면에서 회원 추가·상품·설정·등록 기간·스탬프 편집 |
 
 ### DB로 바꾼 뒤 (2026-11-13)
 
@@ -19,6 +19,13 @@
 - 이제 **Apps Script(Code.gs, setupSheets, Tick.gs, 배포 버전)는 할 일이 없어요.** 아래 1번 섹션의 Apps Script 내용은 예전 기록이에요.
 - Vercel 환경변수의 `CLUB_API_URL`·`CLUB_API_SECRET`은 이전이 끝났으니 지워도 돼요(남아 있어도 DB가 우선).
 - ⚠️ 로컬 `.env.local`에 `DATABASE_URL`이 있으면 `npm run dev`도 **실제 DB**를 써요. 시험은 Neon 개발 브랜치나 데모(DATABASE_URL 없이)로.
+
+### THE LITTLE CLUB (`/little-club`, 2026-11-16)
+
+- 회원권이 있는 멤버 전용 픽셀 아지트. 홈 **아지트 들어가기**·MY 메뉴에서 들어가요. 자세한 규칙은 README "THE LITTLE CLUB", 요구사항 원본은 `docs/little-club/handoff/`.
+- ⚠️ **DB:** 새 테이블 `club_profiles`가 필요해요. 운영 DB에 `npm run db:migrate -- --schema-only`(없는 것만 만들고 기존 데이터 그대로)를 실행해 주세요. 먼저 배포돼도 다른 화면은 영향이 없고, 리틀 클럽에서 별명·MBTI 저장만 "준비 중"으로 나와요(이번 방문에만 쓰기). 되돌리기: 코드를 되돌리면 테이블은 안 쓰여요(필요하면 `club_profiles`만 지우면 됨, 별명·MBTI만 사라짐).
+- 운영진·관리자도 본인 회원권이 없으면 못 들어가요(핸드오프 결정). 바꾸려면 운영진 합의 후 `littleClubVerdict`.
+- 원본 사진(강아지 2마리, 간판, 나이트 조명)이 없어 설명만 보고 그렸어요. 사진이 오면 `src/app/little-club/scene.ts`에서 다듬기.
 
 ### MOON STAMPS ST-07 INVESTOR'S NOSE (2026-11-15)
 

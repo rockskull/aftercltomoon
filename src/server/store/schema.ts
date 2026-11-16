@@ -148,6 +148,12 @@ export const TABLES = {
     "updated_at",
     "status",
   ],
+  /**
+   * THE LITTLE CLUB: one row per member (nickname + MBTI of their moon rabbit), only ever read
+   * by that member. Read on its own (see LITTLE_CLUB_TABLES), so a database without the table
+   * yet only closes the club's profile save, never the rest of the site.
+   */
+  ClubProfiles: ["member_id", "nickname", "mbti", "created_at", "updated_at"],
   AuditLog: ["log_id", "commit_id", "actor_id", "action", "target_id", "before_value", "after_value", "created_at"],
   Settings: ["key", "value", "description"],
   // v0.1 tables (read by the public feed / written by the proposal form)
@@ -300,6 +306,9 @@ export const ADMIN_TABLES: TableName[] = [
  * been set up for stamps yet can never break them.
  */
 export const STAMP_TABLES: TableName[] = ["StampDefinitions", "StampAwards"];
+
+/** THE LITTLE CLUB profiles, read on their own like the stamps (a missing table must not break other reads). */
+export const LITTLE_CLUB_TABLES: TableName[] = ["ClubProfiles"];
 
 /** AFTER HOURS RADIO page: tracks, who may add/delete, and the player switch — one gateway call. */
 export const RADIO_TABLES: TableName[] = ["Members", "Memberships", "Payments", "RadioTracks", "Settings"];

@@ -11,7 +11,9 @@ import { getClubData, requestNow } from "@/lib/club-data";
 import { toDateKey } from "@/lib/dates";
 import { getEventStatus, splitUpcoming } from "@/lib/status";
 import { readSession } from "@/server/auth/session";
+import { viewerAccess } from "@/server/auth/access";
 import { getViewer } from "@/server/auth/viewer";
+import { littleClubVerdict } from "@/server/domain/little-club";
 import { gradeLabel } from "@/lib/problems";
 import { loadRecentProblems } from "@/server/problems";
 import { storeMode } from "@/server/store";
@@ -115,6 +117,8 @@ async function HomeMembership() {
     plans: viewer.club.plans,
     todayKey: toDateKey(now),
   });
+  // THE LITTLE CLUB: the entry shows only for members it would let in; the page checks again on the server.
+  const littleClub = littleClubVerdict(viewer.member, viewer.member ? viewerAccess(viewer, now) : null).ok;
   return (
     <div className="bg-midnight px-4 pb-10">
       <Link href="/me" className="mx-auto block max-w-xl rounded-xl outline-offset-4" aria-label="내 회원권 자세히 보기">
@@ -122,6 +126,12 @@ async function HomeMembership() {
           <MembershipCard member={viewer.member} summary={summary} compact />
         </div>
       </Link>
+      {littleClub && (
+        <Link href="/little-club#play" className={`${buttonPrimaryOnDark} mx-auto mt-4 flex w-full max-w-xl`}>
+          ☾ 아지트 들어가기
+          <ArrowRight />
+        </Link>
+      )}
     </div>
   );
 }

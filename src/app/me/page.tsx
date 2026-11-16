@@ -11,7 +11,9 @@ import { requestNow } from "@/lib/club-data";
 import { toDateKey } from "@/lib/dates";
 import { membershipPhase, totalMonths } from "@/lib/membership";
 import { registrationLabel } from "@/lib/registration";
+import { viewerAccess } from "@/server/auth/access";
 import { isOperator, requireViewer } from "@/server/auth/viewer";
+import { littleClubVerdict } from "@/server/domain/little-club";
 import type { Payment } from "@/server/domain/model";
 import { memberStamps } from "@/server/domain/stamps";
 import { readTables, storeMode } from "@/server/store";
@@ -75,6 +77,8 @@ async function MyMembership() {
   const membershipName = (m: { planId: string; sourcePaymentId: string }) => (registered.has(m.sourcePaymentId) ? "월 단위" : planName(m.planId));
   const activePlans = club.plans.filter((p) => p.active);
   const inactive = member?.status === "inactive";
+  // THE LITTLE CLUB link: only for members it would let in (the page checks again on the server).
+  const littleClub = littleClubVerdict(member, member ? viewerAccess(viewer, now) : null).ok;
 
   return (
     <div className="flex flex-col gap-8">
@@ -220,6 +224,7 @@ async function MyMembership() {
       <InstallHint />
 
       <nav aria-label="회원 메뉴" className="flex flex-col divide-y divide-plywood-400 rounded-lg border-2 border-midnight bg-ivory">
+        {littleClub && <MenuLink href="/little-club">THE LITTLE CLUB · 픽셀 아지트</MenuLink>}
         <MenuLink href="/notifications">알림 목록 · 알림 설정</MenuLink>
         {isOperator(member) && <MenuLink href="/admin">운영진 관리 화면</MenuLink>}
       </nav>

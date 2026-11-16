@@ -54,14 +54,20 @@ self.addEventListener("push", (event) => {
     data = { title: "AFTER CL TO MOON", body: event.data ? event.data.text() : "" };
   }
   event.waitUntil(
-    self.registration.showNotification(data.title || "AFTER CL TO MOON", {
-      body: data.body || "",
-      icon: "/icons/icon-192.png",
-      badge: "/icons/badge-96.png",
-      tag: data.tag,
-      data: { url: data.url || "/" },
-      lang: "ko",
-    }),
+    Promise.all([
+      self.registration.showNotification(data.title || "AFTER CL TO MOON", {
+        body: data.body || "",
+        icon: "/icons/icon-192.png",
+        badge: "/icons/badge-96.png",
+        tag: data.tag,
+        data: { url: data.url || "/" },
+        lang: "ko",
+      }),
+      // Open pages hear it too (THE LITTLE CLUB rings its in-game bell).
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
+        for (const w of windows) w.postMessage({ type: "acm-push", title: data.title || "", body: data.body || "", url: data.url || "/" });
+      }),
+    ]),
   );
 });
 

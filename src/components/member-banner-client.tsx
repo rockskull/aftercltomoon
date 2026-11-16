@@ -5,7 +5,8 @@ import { useSyncExternalStore } from "react";
 import type { BannerKind } from "@/lib/access";
 import { ArrowRight } from "./ui";
 
-const COPY: Record<BannerKind, { eyebrow: string; body: string; cta: string; href: string }> = {
+/** The banner wording (also shown by THE LITTLE CLUB's bell). */
+export const BANNER_COPY: Record<BannerKind, { eyebrow: string; body: string; cta: string; href: string }> = {
   renew: {
     eyebrow: "Renew your moon",
     body: "다음 달 이용 등록이 아직 확인되지 않았습니다. 이번 달 말일까지 다음 달 회비를 납부해 주세요.",
@@ -63,7 +64,7 @@ export function MemberBannerView({ kind, monthKey, startsOn }: { kind: BannerKin
   const key = `acm:banner:${kind}:${monthKey}`;
   const dismissed = useSyncExternalStore(subscribe, () => isDismissed(key), () => false);
   if (dismissed) return null;
-  const copy = COPY[kind];
+  const copy = BANNER_COPY[kind];
   const body = kind === "starts" && startsOn ? `회원권이 ${Number(startsOn.slice(5, 7))}월 ${Number(startsOn.slice(8, 10))}일부터 시작돼요. 그날부터 클럽 참여 기능을 이용할 수 있어요.` : copy.body;
   const urgent = kind === "expired";
 

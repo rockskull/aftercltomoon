@@ -325,6 +325,23 @@ SET BY US. CLIMBED BY US. — 문제는 벽에서 만들고, 기록은 웹에 �
   - 기본곡은 `setupSheets`가 **RadioTracks 탭을 처음 만들 때 한 번만** 넣습니다. 다시 실행하거나 사이트를 다시 배포해도 추가·복원되지 않으므로, 삭제한 기본곡은 삭제된 채로 남습니다.
 - 시트 **RadioTracks**: track_id, title, artist, youtube_url, youtube_video_id, requested_by(회원 ID 또는 AFTER CL TO MOON), display_name, message, source(seed/member), sort_order, created_at, status(active/deleted), deleted_at, deleted_by. 순서를 바꾸고 싶으면 `sort_order`를 고치면 됩니다.
 
+### THE LITTLE CLUB (`/little-club`)
+
+회원권이 있는 멤버만 들어오는 작은 픽셀 아지트. 요구사항 원본은 `docs/little-club/handoff/`(`CLAUDE_HANDOFF.md`가 정본, `demo/index.html`은 참고용 데모로 배포하지 않음).
+
+- **입장:** `active` 계정이면서 **오늘 이용 기간 중인 회원권**이 있어야 해요(6+1·12+2는 실제 날짜로). 신청자·이용 중지·만료·시작 전·입금 확인 대기는 막혀요. **운영진·관리자도 따로 통과하지 않아요**(회원권이 없으면 못 들어감). 서버에서 판정합니다(`src/server/domain/little-club.ts` `littleClubVerdict`, 페이지와 저장 액션 둘 다).
+- **입구:** 홈의 **아지트 들어가기** 버튼과 MY 메뉴. 들어갈 수 있는 회원에게만 보이고, 숨김과 별개로 페이지가 다시 막아요.
+- **공간:** 왼쪽 워크아웃 / 오른쪽 볼더링 벽·매트 / 벽 앞 낮은 테이블 / 안쪽 라운지(간판 `매달려야 산다`). 실외는 상상 속 모닥불 캠프. 낮·나이트 조명 전환.
+- **내 토끼:** 첫 입장 때 별명(12자) + MBTI 16가지 달토끼를 고르고, 언제든 바꿀 수 있어요. 게임에 `별명 · MBTI` 이름표. 다른 회원에게는 보이지 않아요. DB **ClubProfiles**(member_id, nickname, mbti, created_at, updated_at), 회원 1행.
+- **말풍선:** 실내·실외 하나씩, 지금 것만. 이 기기 탭(sessionStorage)에만 남고 서버·다른 회원에게 가지 않아요(채팅·기록 없음).
+- **볼더링 벽:** 실제 MOON PROBLEMS 목록 → 기존 문제 화면. 벽의 홀드는 장식. "잠깐 올라가 보기"는 연출이고 기록·스탬프와 무관.
+- **레코드 · 라디오:** 기존 AFTER HOURS RADIO 컴포넌트를 화면 아래 도크에 그대로 붙여요(`/radio`는 iframe 금지라 임베드하지 않음). 접어도, 장면을 바꿔도 끊기지 않아요.
+- **스탬프:** 운영진이 실제로 발급한 스탬프만 보여요. 게임 행동으로는 아무것도 발급되지 않아요.
+- **캘린더:** 워크아웃 벽의 벽걸이 캘린더를 누르면 홈과 같은 클럽 캘린더(`ClubCalendar`)가 열려요.
+- **회원권 알림:** 안 읽은 회원권 알림(만료 7일·1일 전, 입금 확인·반려)과 갱신 안내(배너와 같은 문구)가 게임 안 🔔과 토스트로 떠요. 종소리는 짧은 두 음(브라우저가 소리를 막으면 첫 탭 때). 새 알림은 탭으로 돌아올 때와 푸시가 올 때(서비스 워커가 열린 화면에 전달) 확인하고, 주기적으로 묻지 않아요. "모두 확인했어요"는 기존 읽음 처리(`markAllRead`).
+- **BGM:** The Little Club OST(오리지널 8-bit) — 실내 낮 The Little Room, 나이트 After Midnight, 실외 Campfire Static + 모닥불 환경음. 꺼진 채로 시작, 라디오 재생 중·탭 숨김 때는 조용해져요. `public/little-club/audio/*.mp3`(원본 WAV 18MB → MP3 112kbps 1.4MB).
+- **조연:** 다른 토끼와 강아지 두 마리는 장식이고 실제 회원·접속 상태가 아니에요.
+
 ### 거래내역 엑셀 매칭 (ADMIN → 거래내역)
 
 카카오뱅크 앱에서 모임통장 거래내역을 엑셀로 내려받아 올리면, 입금만 골라 신청 내역과 비교합니다.

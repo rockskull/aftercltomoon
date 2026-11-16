@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#101b2b" />
+<title>AFTER HOURS — The Little Club · AFTER MOON</title>
+<style>
+:root{--navy:#101b2b;--navy2:#192b41;--navy3:#24364a;--butter:#f1d274;--cream:#f2eee3;--muted:#a3b1bf;--orange:#de8455;--lime:#a4ceae;--border:#3b4b5d}
+*[hidden]{display:none!important}*{box-sizing:border-box}body{margin:0;background:var(--navy);color:var(--cream);font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;min-height:100vh}body:before{content:"";pointer-events:none;position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent 0 3px,rgba(255,255,255,.008) 3px 4px);z-index:40}
+button,input,select{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:2px solid var(--butter);outline-offset:3px}button:disabled{opacity:.35;cursor:not-allowed}
+.shell{max-width:1210px;margin:0 auto;padding:24px clamp(16px,4vw,42px) 44px}.mast{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:8px 0 22px;border-bottom:1px solid var(--border);flex-wrap:wrap}.brand{display:flex;gap:13px;align-items:center}.moon{width:38px;height:38px;border-radius:50%;background:var(--butter);position:relative;flex:none;transform:rotate(-17deg)}.moon:after{content:"";position:absolute;border-radius:50%;background:var(--navy);height:32px;width:32px;top:-4px;left:13px}.brand-title{font-size:14px;font-weight:850;letter-spacing:.16em}.brand-sub{font-size:9px;letter-spacing:.2em;color:var(--muted);margin-top:4px}.mast-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.small-tag{font-size:10px;letter-spacing:.13em;color:var(--muted)}.chip-btn{background:#22344b;border:1px solid #5f7082;color:var(--cream);padding:9px 13px;border-radius:3px;font-weight:700;font-size:12px;letter-spacing:.02em}.chip-btn:hover{background:#2f4660}
+.intro{display:flex;justify-content:space-between;align-items:end;gap:20px;padding:23px 0 18px}.intro .index{color:var(--butter);font:700 10px ui-monospace,Menlo,monospace;letter-spacing:.18em}.intro h1{margin:7px 0 6px;font-size:clamp(25px,3.2vw,39px);font-weight:850;letter-spacing:-.06em;line-height:1.2}.intro p{margin:0;color:var(--muted);font-size:13px;line-height:1.6}.scene-stat{display:flex;align-items:center;gap:8px;font-size:11px;white-space:nowrap;color:var(--cream);border:1px solid var(--border);padding:9px 12px;background:rgba(255,255,255,.03)}.dot{width:7px;height:7px;background:#c0cf97;display:inline-block;border-radius:50%;box-shadow:0 0 8px #a6cc91}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 268px;gap:18px;align-items:start}.world{background:#091324;border:1px solid #677587;box-shadow:0 12px 0 #0c1623,0 23px 44px rgba(0,0,0,.26);position:relative;overflow:hidden}.world:after{content:"";inset:0;pointer-events:none;position:absolute;background:linear-gradient(90deg,rgba(7,15,29,.25),transparent 12%,transparent 90%,rgba(7,15,29,.18));z-index:2}canvas{width:100%;display:block;aspect-ratio:512/320;image-rendering:pixelated;touch-action:manipulation;cursor:crosshair} .world-overline{position:absolute;left:15px;top:13px;color:#e9e1ca;font:700 9px ui-monospace,Menlo,monospace;letter-spacing:.19em;background:#111e2cbd;padding:7px 10px;border:1px solid #7682946b;pointer-events:none}.world-coord{position:absolute;right:13px;bottom:13px;color:#f1e9d9;font:700 9px ui-monospace,Menlo,monospace;background:#111e2cba;padding:7px 9px;pointer-events:none}.control-bar{display:flex;gap:8px;justify-content:space-between;align-items:center;margin:15px 0 0;flex-wrap:wrap}.status{font-size:12px;line-height:1.55;color:var(--cream);min-height:20px}.status small{font-size:10px;color:var(--muted);display:block;margin-top:3px}.keyhelp{font-size:10px;color:var(--muted);letter-spacing:.03em}.action-panel{border:1px solid var(--border);background:#17263a;padding:16px}.panel-meta{display:flex;align-items:center;justify-content:space-between;font:700 10px ui-monospace,Menlo,monospace;letter-spacing:.13em;color:var(--butter);margin-bottom:11px}.panel-title{margin:0 0 5px;font-weight:800;font-size:18px;letter-spacing:-.04em}.panel-sub{margin:0 0 17px;font-size:11px;color:var(--muted);line-height:1.65}.action{width:100%;display:flex;justify-content:space-between;align-items:center;text-align:left;gap:10px;padding:14px 11px;color:var(--cream);background:#25374a;border:1px solid #546071;margin-bottom:8px;font-size:12px;font-weight:700}.action:hover{background:#32485e}.action:active{transform:translateY(1px)}.action .icon{font-size:16px}.action small{color:#b5c2cc;font-weight:400;font-size:10px}.action.featured{border-color:#daba74;background:#53452f}.action.featured:hover{background:#655238}.separate{height:1px;background:var(--border);margin:15px 0}.micro{color:var(--muted);font-size:11px;line-height:1.65}.micro b{color:var(--cream)}.mbti-action{grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:3px 0 12px}.mbti-action p{font-size:10px;color:var(--muted);margin:0;line-height:1.5}.mbti-action b{color:var(--butter)}.mbti-cast{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:14px 0}.mbti-card{border:2px solid #c9c0ab;padding:7px 3px;display:flex;align-items:center;flex-direction:column;gap:3px;color:#293e50;background:#ede4d3;min-width:0;min-height:122px}.mbti-card.selected{border-color:#9d6b20;background:#f2dcae;box-shadow:inset 0 0 0 2px #fcf0cb}.mbti-card canvas{width:64px;height:64px;image-rendering:pixelated;display:block}.mbti-card strong{font-size:11px}.mbti-card span{font-size:9px;line-height:1.3;word-break:keep-all}.mbti-desc{font-size:11px;color:#56606a;line-height:1.65}.bubble-area{margin-top:13px}.bubble-area label{display:block;color:var(--butter);font:700 10px ui-monospace,Menlo,monospace;letter-spacing:.12em;margin-bottom:8px}.bubble-controls{display:flex;gap:6px}.bubble-controls input{width:100%;min-width:0;background:#0e1d2e;border:1px solid #5f6a75;color:#fff;padding:11px 8px;border-radius:0;font-size:12px}.bubble-controls button{background:var(--butter);color:#211d1d;border:0;padding:0 12px;font-size:12px;font-weight:800}.bubble-example{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}.preset{border:1px solid #4c6274;background:transparent;color:#bdc9d4;padding:7px 8px;font-size:10px}.preset:hover{color:#fff;border-color:#c1d1d8}.mobile-pad{display:none;gap:7px;justify-content:center;margin:14px 0 0;align-items:center}.pad{border:1px solid #63788b;color:var(--cream);background:#273b50;width:48px;height:38px;border-radius:4px;font-size:17px;user-select:none;touch-action:none}.pad.act{background:#655238;border-color:#daba74}.pad:active{background:#60768e}
+/* Persistent same-page radio dock: do not unload the iframe when hidden. */
+.radio-dock{position:fixed;bottom:18px;right:18px;z-index:55;width:min(400px,calc(100vw - 28px));background:#182a3d;border:2px solid #e4c978;box-shadow:6px 7px 0 #0a1320,0 10px 40px #0008}
+.radio-dock[hidden]{display:none!important}.radio-head{padding:11px 13px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:#23374b;color:#f8eddb}
+.radio-label{font:800 11px ui-monospace,monospace;letter-spacing:.09em}.radio-sub{font-size:10px;color:#bdcbd1;margin-top:4px}.radio-head button{color:#fff;background:#40586b;border:1px solid #8698a6;padding:6px 9px;font-size:12px}
+.radio-body{padding:10px;max-height:320px;overflow:auto}.radio-dock.collapsed .radio-body{display:none}.radio-dock iframe{width:100%;height:250px;border:1px solid #5c6a76;background:#fff}.radio-note{font-size:10px;color:#c1cbd0;line-height:1.6;margin:7px 0 0}.radio-demo{padding:22px 10px;border:1px dashed #60748a;line-height:1.65;font-size:12px;text-align:center;color:#d4dee1}.radio-demo[hidden]{display:none!important}.radio-site{color:#ecd28c;font-size:11px;display:inline-block;margin-top:9px}
+.bottom-line{display:flex;gap:16px;justify-content:space-between;border-top:1px solid var(--border);margin-top:31px;padding-top:14px;align-items:start}.foot{font-size:10px;letter-spacing:.09em;color:#8799aa;line-height:1.8}.foot strong{color:var(--cream)}
+.overlay{position:fixed;z-index:80;inset:0;background:#08101fcc;display:flex;align-items:center;justify-content:center;padding:17px;backdrop-filter:blur(4px)}.overlay[hidden]{display:none!important}.modal{width:min(490px,100%);max-height:calc(100vh - 30px);overflow:auto;background:var(--cream);color:#182535;border:5px solid #293e53;box-shadow:12px 12px 0 #0a111b;padding:20px}.modal-top{display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:2px solid #bdaf93;padding-bottom:10px}.modal-kicker{font:800 10px ui-monospace,Menlo,monospace;letter-spacing:.14em;color:#667482}.modal h2{font-size:23px;letter-spacing:-.06em;margin:10px 0 8px}.modal p{font-size:12px;line-height:1.65;color:#56606a}.x{background:transparent;border:0;color:#27374a;font-size:24px;padding:0 4px;line-height:1}.hold-board{background:#bba486;border:7px solid #8c7458;min-height:230px;position:relative;margin:18px 0 12px;background-image:repeating-linear-gradient(0deg,transparent 0 30px,#a98f70 30px 31px),repeating-linear-gradient(90deg,transparent 0 54px,#bba286 54px 55px)}.hold{position:absolute;border:4px solid rgba(0,0,0,.14);width:43px;height:32px;border-radius:42% 55% 35% 58%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:850;box-shadow:0 6px 0 #675f59;font:800 15px ui-monospace,monospace;transition:transform .12s}.hold:enabled:hover{transform:translateY(-3px)}.hold.done{outline:3px solid #fff6df;box-shadow:0 2px 0 #61584e;transform:translateY(3px)}.hold.current{outline:3px dashed #151f28}.hold-0{left:10%;top:65%;background:#cc735c}.hold-1{left:29%;top:41%;background:#3d6279}.hold-2{left:51%;top:49%;background:#b59245}.hold-3{left:71%;top:18%;background:#67785f}.hold-4{left:82%;top:68%;background:#807286}.hold-5{left:15%;top:13%;background:#5d7188}.hold-6{left:53%;top:8%;background:#a75f54}.hold-7{left:77%;top:44%;background:#738b77}.modal-foot{display:flex;gap:10px;justify-content:space-between;align-items:center;margin-top:12px}.btn-main{border:0;background:#15243a;color:#f7eccb;padding:11px 16px;font-weight:800;font-size:12px}.btn-quiet{background:none;border:1px solid #aaa18d;color:#324358;padding:10px 13px;font-weight:700;font-size:12px}.board-note{font-size:12px;color:#4f5b5f}.records{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0}.record{background:#e3dccd;border:2px solid #bdb198;padding:15px 5px 10px;color:#27364c;min-height:146px;display:flex;align-items:center;flex-direction:column;gap:12px}.record.selected{border-color:#212f42;box-shadow:inset 0 0 0 2px #212f42}.record-art{height:82px;width:82px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:repeating-radial-gradient(circle at center,#252d35 0 5px,#3a424a 6px 7px,#262b35 8px 10px);position:relative}.record-art:before{content:"";border-radius:50%;width:32px;height:32px;background:var(--disk);border:4px solid #333b44}.record-art:after{content:"";position:absolute;background:#232d37;width:5px;height:5px;border-radius:50%}.record-title{font:800 10px ui-monospace,monospace;letter-spacing:.04em}.stamp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:16px 0 12px}.stamp{border:1px solid #c5bca9;background:#e6ddcd;padding:13px;min-height:130px}.stamp .sigil{font-size:23px;font-weight:900;color:#34506b;margin-bottom:12px}.stamp h3{font-size:12px;margin:0 0 7px}.stamp p{font-size:11px;margin:0}.earned{border-color:#8b794f;background:#f1e1b8}.stat-vals{display:flex;gap:18px;padding:15px 0;border-bottom:1px solid #c1b59e}.stat-vals strong{display:block;font-size:20px}.stat-vals span{color:#5b6064;font-size:10px}.warn{background:#e3d7ba;padding:10px;font-size:11px;line-height:1.6;color:#4b4c46;margin:14px 0 0}
+@media(max-width:850px){.layout{grid-template-columns:1fr}.action-panel{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px}.action-panel .panel-meta,.action-panel .panel-title,.action-panel .panel-sub,.action-panel .separate,.action-panel .micro,.action-panel .bubble-area{grid-column:1/-1}.action{margin:0}.intro{align-items:start}.mobile-pad{display:flex}}@media(max-width:460px){.shell{padding:12px 12px 30px}.intro{padding:18px 0 14px;display:block}.scene-stat{margin-top:12px;width:max-content}.brand-title{font-size:11px}.mast{padding-bottom:13px}.world-overline,.world-coord{font-size:7px;padding:5px 6px}.action-panel{padding:12px}.action{font-size:11px;padding:11px 8px}.action small{font-size:9px}.status{font-size:11px}.control-bar{display:block}.keyhelp{margin-top:7px}.modal{padding:13px}.records{gap:5px}.record{padding:11px 2px 8px}.record-art{width:68px;height:68px}.record-title{font-size:8px}.stamp-grid{grid-template-columns:1fr}}
+@media(max-width:460px){.mbti-cast{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}.mbti-card{min-height:110px;padding:5px 1px}.mbti-card canvas{width:55px;height:55px}.mbti-card strong{font-size:10px}.mbti-card span{font-size:8px}.radio-dock{bottom:8px;right:8px;width:calc(100vw - 16px)}.radio-dock iframe{height:200px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="shell">
+<header class="mast">
+  <div class="brand"><div class="moon" aria-hidden="true"></div><div><div class="brand-title">AFTER MOON</div><div class="brand-sub">PRIVATE BOULDERING CLUB</div></div></div>
+  <div class="mast-right"><span class="small-tag" id="access-tag">INTERACTIVE PROTOTYPE · DEMO</span><button class="chip-btn" id="radio-open">◉ AFTER HOURS RADIO</button><button class="chip-btn" id="mbti-open">☾ MY MOON RABBIT</button><button class="chip-btn" id="profile-open">MY PROFILE / STAMPS</button></div>
+</header>
+<section class="intro"><div><span class="index">AFTER HOURS / EXPERIMENTAL LOUNGE</span><h1>The Little Club<span style="color:var(--butter)">.</span></h1><p>올라가고, 음악을 고르고, 잠시 머물고. 밤이 되면 모닥불 앞으로.</p></div><div class="scene-stat"><span class="dot"></span><span id="scene-name">INSIDE THE CLUB</span></div></section>
+<main class="layout">
+  <div>
+    <div class="world"><canvas id="game" width="512" height="320" role="img" aria-label="픽셀아트 클럽 장면. 아래 버튼과 방향키로 조작할 수 있습니다."></canvas><div class="world-overline">AFTER HOURS · THE LITTLE CLUB</div><div class="world-coord" id="room-caption">PLYWOOD / MATS / LOUNGE</div></div>
+    <div class="control-bar"><div id="status" class="status" aria-live="polite">어서 오세요. 하고 싶은 일을 골라보세요.<small>장면을 누르거나, 아래 버튼으로 이동할 수 있습니다.</small></div><div class="keyhelp">← ↑ ↓ → / WASD : 이동 · E : 상호작용</div></div>
+    <div class="mobile-pad" aria-label="모바일 이동 컨트롤"><button class="pad" data-move="left" aria-label="왼쪽으로 이동">←</button><button class="pad" data-move="up" aria-label="위로 이동">↑</button><button class="pad" data-move="down" aria-label="아래로 이동">↓</button><button class="pad" data-move="right" aria-label="오른쪽으로 이동">→</button><button class="pad act" id="interact" aria-label="가까운 사물과 상호작용">E</button></div>
+  </div>
+  <aside class="action-panel" aria-label="게임 액션">
+    <div class="panel-meta"><span>01 / WHAT TO DO</span><span id="progress">0 / 3</span></div>
+    <div class="mbti-action"><button class="chip-btn" id="mbti-select-open">MY RABBIT · <span id="mbti-current">INFP</span></button><p id="mbti-motion-desc">말풍선과 쉬는 동작이 달라져요.</p></div><h2 class="panel-title" id="panel-title">Tonight's little plans</h2><p class="panel-sub" id="panel-sub">벽에 올라갔다가, 레코드를 고르고, 소파에 앉아 쉬어보세요.</p>
+    <button type="button" class="action" id="act-climb" data-action="climb"><span>01&nbsp; <span class="icon">▣</span>&nbsp; CLIMB<small style="display:block;margin-top:4px">짧은 볼더링 루트</small></span><span>↗</span></button>
+    <button type="button" class="action" id="act-record" data-action="record"><span>02&nbsp; <span class="icon">◉</span>&nbsp; PICK A RECORD<small style="display:block;margin-top:4px">오늘 밤의 무드 선택</small></span><span>↗</span></button>
+    <button type="button" class="action" id="act-sofa" data-action="sofa"><span>03&nbsp; <span class="icon">▤</span>&nbsp; TAKE A REST<small style="display:block;margin-top:4px">소파에서 잠시 쉬기</small></span><span>↗</span></button>
+    <button type="button" class="action featured" id="act-outside" data-action="outside"><span><span class="icon">☾</span>&nbsp; GO OUTSIDE<small style="display:block;margin-top:4px">캠프파이어로 이동</small></span><span>→</span></button>
+    <button type="button" class="action" id="act-bonfire" data-action="bonfire" hidden><span><span class="icon">♨</span>&nbsp; SIT BY THE FIRE<small style="display:block;margin-top:4px">모닥불 앞에 앉기</small></span><span>↗</span></button>
+    <button type="button" class="action featured" id="act-inside" data-action="inside" hidden><span>←&nbsp; BACK INSIDE</span><span>↗</span></button>
+    <div class="bubble-area" id="bubble-area" hidden><label for="bubble-input">SPEECH BUBBLE / 말풍선</label><div class="bubble-controls"><input id="bubble-input" type="text" maxlength="36" autocomplete="off" placeholder="모닥불 앞에서 한마디"/><button type="button" id="bubble-send">띄우기</button></div><div class="bubble-example"><button type="button" class="preset" data-say="오늘도 잘 놀았다">오늘도 잘 놀았다</button><button type="button" class="preset" data-say="다음엔 같이 올라요">다음엔 같이 올라요</button></div></div>
+    <button type="button" class="action" id="act-radio"><span><span class="icon">♫</span>&nbsp; AFTER HOURS RADIO<small style="display:block;margin-top:4px">게임 화면에서 기존 라디오 조작</small></span><span>↗</span></button>
+    <div class="separate"></div><div class="micro"><b>오늘의 작은 기록</b><br><span id="session-record">등반 0회 · 고른 레코드 없음 · 휴식 전</span><br><br>게임 안의 기록은 공식 회원 스탬프와 별개입니다. 회원 스탬프는 프로필에서 확인합니다.</div>
+  </aside>
+</main>
+<footer class="bottom-line"><div class="foot"><strong>AFTER MOON</strong> · A LIVING ROOM WITH A CLIMBING WALL.<br>실제 공간을 모티프로 한 픽셀아트 해석이며 시공 도면이나 실측 배치도가 아닙니다.</div><div class="foot" style="text-align:right">DEMO BUILD · LIVE RADIO REQUIRES HOST SITE<br>홈페이지에서는 유효 회원권 서버 검증 후 제공</div></footer>
+</div>
+
+<section class="radio-dock collapsed" id="radio-dock" hidden aria-label="AFTER HOURS RADIO 도크">
+  <div class="radio-head"><div><div class="radio-label">◉ AFTER HOURS RADIO</div><div class="radio-sub">클럽을 둘러보면서 음악을 들어보세요</div></div><button id="radio-toggle" type="button" aria-label="라디오 접기">접기</button><button id="radio-dismiss" type="button" aria-label="라디오 숨기기">×</button></div>
+  <div class="radio-body" id="radio-body">
+    <div class="radio-demo" id="radio-demo">독립 데모에는 실제 라디오 소스가 연결되지 않았습니다.<br>홈페이지 연동 시 기존 <b>/radio</b> 화면을 이 안에서 엽니다.</div>
+    <iframe id="radio-frame" title="AFTER HOURS RADIO" loading="lazy" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="same-origin" hidden></iframe>
+    <p class="radio-note">기존 홈페이지의 라디오 화면을 다시 사용합니다. 음원은 직접 선택하여 재생하며, 게임 장면을 바꿔도 플레이어를 새로 생성하지 않습니다.</p>
+    <a class="radio-site" id="radio-site" href="/radio" target="_blank" rel="noopener noreferrer" hidden>라디오 원본 화면에서 열기 ↗</a>
+  </div>
+</section>
+<div id="overlay" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="modal"><div class="modal-top"><span class="modal-kicker" id="modal-kicker">THE LITTLE CLUB</span><button class="x" type="button" id="modal-close" aria-label="닫기">×</button></div><div id="modal-body"></div></div></div>
+<script>
+(() => {
+'use strict';
+// Standalone demo only. Actual membership authorization MUST occur on the hosting server.
+// Production embedding may set window.AFTER_MOON_CONTEXT before this script:
+// { name: string, stamps: Array<{id:string,title:string,description?:string,awardedAt?:string}>, membershipValid: boolean }
+const context = window.AFTER_MOON_CONTEXT || null;
+// Demo is available only for local file / localhost preview. In public hosting, fail closed.
+const isDemo = !context && (location.protocol === 'file:' || ['localhost','127.0.0.1'].includes(location.hostname));
+const authorized = isDemo || (!!context && context.membershipValid === true);
+const $ = x => document.getElementById(x);
+const canvas = $('game'), ctx = canvas.getContext('2d', {alpha:false});
+ctx.imageSmoothingEnabled = false;
+const W=512,H=320;
+const C={navy:'#152638',navy2:'#23374a',deep:'#0d1b2b',light:'#f0e7d5',yellow:'#f2d37d',orange:'#e8895a',wood:'#b79b76',wood2:'#9b7c5e',wood3:'#dbc5a0',mat:'#41678b',mat2:'#6e8395',gray:'#7f9299',green:'#547e6c',teal:'#86ab9c',shadow:'#1c3042'};
+const rabbitTypes=['INTJ','INTP','ENTJ','ENTP','INFJ','INFP','ENFJ','ENFP','ISTJ','ISFJ','ESTJ','ESFJ','ISTP','ISFP','ESTP','ESFP'];
+const rabbitLabels={INTJ:'루트 연구',INTP:'홀드 관찰',ENTJ:'동선 지휘',ENTP:'즉흥 토론',INFJ:'달 구경',INFP:'쿠션 포옹',ENFJ:'응원',ENFP:'신나게 인사',ISTJ:'장비 정리',ISFJ:'차 나눔',ESTJ:'체크리스트',ESFJ:'간식 배달',ISTP:'초크 손질',ISFP:'음악 감상',ESTP:'가벼운 점프',ESFP:'리듬 타기'};
+const startType=rabbitTypes.includes(String(context?.mbti||'').toUpperCase())?String(context.mbti).toUpperCase():'INFP';
+const state={mbti:startType,scene:'indoor',player:{x:277,y:258},target:null,near:null,climbs:0,record:null,rested:false,restUntil:0,bubble:'',bubbleUntil:0,atFire:false,step:0,climbPath:[0,1,2,3],climbAt:0,modal:null,t:0,access:authorized};
+let keys=new Set();
+const spots={indoor:[{id:'climb',x:166,y:194,r:72},{id:'record',x:412,y:205,r:57},{id:'sofa',x:404,y:257,r:52},{id:'outside',x:489,y:278,r:55}],outdoor:[{id:'bonfire',x:282,y:232,r:83},{id:'inside',x:28,y:270,r:68}]};
+function pix(x,y,w,h,c){ctx.fillStyle=c;ctx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h))}
+function line(x,y,w,h,c){pix(x,y,w,h,c)}
+function text(s,x,y,color='#f6ebd4',size=9,align='left'){ctx.fillStyle=color;ctx.textAlign=align;ctx.font=`bold ${size}px ui-monospace,Menlo,monospace`;ctx.fillText(s,x,y);ctx.textAlign='left'}
+function wooden(x,y,w,h){pix(x,y,w,h,C.wood);for(let iy=y+12;iy<y+h;iy+=26)pix(x,iy,w,2,'#987a60');for(let ix=x+24;ix<x+w;ix+=57)pix(ix,y,2,h,'#c0a581');for(let iy=y+18;iy<y+h;iy+=40){pix(x+12,iy,4,2,'#806951');pix(x+w-22,iy+5,4,2,'#806951')}}
+function ellipse(x,y,rx,ry,c){ctx.fillStyle=c;ctx.beginPath();ctx.ellipse(Math.round(x),Math.round(y),rx,ry,0,0,Math.PI*2);ctx.fill()}
+function rounded(x,y,w,h,r,c){ctx.fillStyle=c;ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill()}
+function drawHold(x,y,clr,scale=1){pix(x-8*scale,y-2*scale,17*scale,9*scale,'#4a4a4b');pix(x-7*scale,y-5*scale,14*scale,9*scale,clr);pix(x-3*scale,y-8*scale,9*scale,7*scale,clr);pix(x+1*scale,y-5*scale,2*scale,2*scale,'#eadac4')}
+// Original tiny moon-rabbit sprite system. Each MBTI has a distinct motion/prop.
+// MBTI descriptions are playful fiction, never an assessment of real people.
+function drawRabbit(g,x,y,type,t,scale=1,walking=false,player=false){
+ const sn=Math.sin,cs=Math.cos;const phase=t*.054;const motion=type||'INFP';
+ const hop=motion==='ESTP'?Math.abs(sn(phase*1.65))*6:motion==='ENFP'?Math.abs(sn(phase*1.2))*3:0;
+ const dance=motion==='ESFP'?sn(phase*1.3)*2.5:motion==='ISFP'?sn(phase*.5)*1.2:0;
+ const bob=(walking?Math.abs(sn(phase*1.4))*2:0)+hop+Math.max(0,dance);
+ g.save();g.translate(Math.round(x),Math.round(y-bob));g.scale(scale,scale);
+ const px=(a,b,w,h,color)=>{g.fillStyle=color;g.fillRect(Math.round(a),Math.round(b),Math.max(1,Math.round(w)),Math.max(1,Math.round(h)))};
+ const oval=(a,b,rx,ry,color)=>{g.fillStyle=color;g.beginPath();g.ellipse(a,b,rx,ry,0,0,Math.PI*2);g.fill()};
+ const fur=player?'#f3eee2':'#ded8cd',shade=player?'#c9bfb0':'#bcb3a8',inner='#c28d8f',eye='#2b343c';
+ oval(0,17+bob,11,3,'#17233366');
+ // Feet alternate on movement; hopping rises above the ground, not a sliding layer.
+ const stride=walking?sn(phase*1.6)*2:0;
+ px(-7,12,6,5+Math.max(0,stride),shade);px(1,12,6,5+Math.max(0,-stride),shade);
+ // Small tail and torso breathing.
+ oval(-10,6,4,4,fur);
+ oval(0,3,11,13,fur);oval(1,5,7,9,'#f4e9dc');
+ const earWave=sn(phase*.5)*(motion==='ENFP'||motion==='ESFP'?3:1.5);
+ // Ears attached and subtly tilted; individual motion changes intensity.
+ g.save();g.translate(-5,-14);g.rotate((earWave-1)*Math.PI/180);px(-3,-14,6,16,fur);px(-1,-12,3,11,inner);g.restore();
+ g.save();g.translate(5,-14);g.rotate((-earWave+1)*Math.PI/180);px(-3,-16,6,18,fur);px(-1,-14,3,12,inner);g.restore();
+ const headBob=(motion==='ISFP'?sn(phase)*1.5:motion==='INTP'?sn(phase*.4):0);
+ oval(0,-10+headBob,11,10,fur);px(-10,-13+headBob,20,6,fur);
+ const blink=(Math.floor(t/155)%5===0 && t%155<5);
+ if(blink){px(-5,-10,3,1,eye);px(4,-10,3,1,eye)}else{px(-5,-12,2,3,eye);px(4,-12,2,3,eye)}
+ px(0,-7,2,2,inner);px(-7,-6,3,2,'#ddb5aa');px(7,-6,3,2,'#ddb5aa');
+ // Arms: eight unique action families plus further prop-specific motion.
+ let L=0,R=0;
+ if(['ENFJ','ENFP','ESFP'].includes(motion)){L=-5-Math.abs(sn(phase))*6;R=-4-Math.abs(cs(phase))*7}
+ if(motion==='ENTJ'||motion==='ESTJ'){R=-7-Math.abs(sn(phase*.7))*2}
+ if(motion==='ENTP'){L=-5-sn(phase)*5;R=-7-cs(phase)*5}
+ if(motion==='INFJ'){R=-6+sn(phase*.35)*3}
+ if(motion==='ISFP'){L=sn(phase*.6)*2;R=-sn(phase*.5)*2}
+ if(motion==='ISTP'||motion==='INTP'){R=sn(phase*1.6)*3}
+ px(-13,-1+L,6,7,fur);px(8,-1+R,6,7,fur);
+ // Expression accessories and interaction props, built from pixels.
+ switch(motion){
+  case 'INTJ':px(9,-1,9,8,'#4d6374');px(11,0,6,1,'#e2c889');px(11,3,5,1,'#e2c889');break;
+  case 'INTP':px(9,5,8,5,'#7e907b');px(11,6,3,2,'#d7c596');break;
+  case 'ENTJ':px(13,-7,11,2,'#e1c07b');px(21,-10,3,7,'#b99464');break;
+  case 'ENTP':px(-17,-13,8,6,'#e9cb8d');px(-15,-10,2,2,eye);break;
+  case 'INFJ':px(12,-23,2,2,'#f1d475');px(16,-27,2,2,'#f1d475');break;
+  case 'INFP':px(-6,0,15,11,'#7c8da3');px(-2,2,7,3,'#b6bfca');break;
+  case 'ENFJ':px(-15,-14,4,4,'#f1d475');px(11,-15,4,4,'#f1d475');break;
+  case 'ENFP':px(12,-19,3,3,'#eed386');break;
+  case 'ISTJ':px(8,7,12,9,'#5c6c71');px(10,10,7,2,'#d1b375');break;
+  case 'ISFJ':px(8,3,9,8,'#dcbb84');px(16,5,3,4,'#dcbb84');px(11,-2+sn(phase*.5),1,4,'#e4dccc');break;
+  case 'ESTJ':px(10,-2,11,11,'#9d805c');px(12,0,7,2,'#eee4d0');px(12,4,6,1,'#eee4d0');break;
+  case 'ESFJ':px(-11,3,24,3,'#b48d5f');px(-2,0,9,5,'#e3ba79');break;
+  case 'ISTP':px(10,1,9,7,'#8c9597');px(12,-1,4,3,'#f1e3ce');break;
+  case 'ISFP':px(-10,-15,4,9,'#c6ad70');px(8,-15,4,9,'#c6ad70');px(-8,-18,17,3,'#647b89');break;
+  case 'ESTP':px(11,-1,10,4,'#d9a577');break;
+  case 'ESFP':px(-16,-19,5,5,'#e5af83');px(12,-20,5,5,'#e5af83');break;
+ }
+ if(player){px(-3,-37,6,3,'#f1d274')}
+ g.restore();
+}
+const sceneRabbits={
+ indoor:[['ISTP',65,271],['ENFP',123,270],['ISFP',242,280],['ESFJ',324,271],['INTJ',454,284],['ISTJ',191,271]],
+ outdoor:[['ENFJ',112,258],['INFJ',167,277],['ESTP',343,276],['ISFJ',452,278]]
+};
+function drawOtherRabbits(){
+ for(let i=0;i<sceneRabbits[state.scene].length;i++){
+  const [type,x,y]=sceneRabbits[state.scene][i];
+  if(Math.hypot(state.player.x-x,state.player.y-y)<25)continue;
+  drawRabbit(ctx,x,y,type,state.t+i*17,.76,false);
+  // Keep reference-like type labels, but do not imply these are actual club members.
+  rounded(x-13,y-46,27,10,2,'#142435d9');text(type,x+.5,y-38,'#f1e6ca',7,'center');
+ }
+}
+function openRabbitGallery(){
+ const cards=rabbitTypes.map(type=>`<button type="button" class="mbti-card ${state.mbti===type?'selected':''}" data-rabbit="${type}" aria-label="${type}: ${rabbitLabels[type]}"><canvas width="80" height="80" data-rabbit-preview="${type}" aria-hidden="true"></canvas><strong>${type}</strong><span>${rabbitLabels[type]}</span></button>`).join('');
+ openModal('CHARACTER / MBTI MOTION','Choose your moon rabbit.',`<p class="mbti-desc">보내주신 MBTI별 행동 레퍼런스를 달토끼로 재해석했습니다. 외형보다 <b>서로 다른 움직임</b>을 중심으로 제작했습니다. 아래 캐릭터는 실제 회원이 아닌 데모 연출입니다.</p><div class="mbti-cast">${cards}</div><p class="mbti-desc">선택하면 게임 속 내 토끼의 모션이 바뀝니다. 선택값은 이 데모 화면에만 적용됩니다.</p>`);
+ document.querySelectorAll('[data-rabbit]').forEach(button=>button.onclick=()=>{state.mbti=button.dataset.rabbit;$('mbti-current').textContent=state.mbti;$('mbti-motion-desc').textContent=rabbitLabels[state.mbti]+' 모션 적용';closeModal();setStatus(state.mbti+' 달토끼로 변경했습니다.',rabbitLabels[state.mbti]+' · MBTI는 놀이용 캐릭터 설정입니다.')})
+}
+function drawRabbitGallery(){if(!state.modal)return;document.querySelectorAll('[data-rabbit-preview]').forEach(canvas=>{const g=canvas.getContext('2d');g.imageSmoothingEnabled=false;g.clearRect(0,0,80,80);g.fillStyle='#d9cbb4';g.fillRect(0,0,80,80);g.fillStyle='#b9aa8f';g.fillRect(0,66,80,14);drawRabbit(g,40,52,canvas.dataset.rabbitPreview,state.t,1.25,false)})}
+function drawMoon(x,y,r){ellipse(x,y,r,r,C.yellow);ellipse(x+r*.42,y-r*.25,r*.83,r*.83,'#172639')}
+function indoorScene(){
+  pix(0,0,W,H,'#101e30');pix(0,0,W,35,'#213044');
+  // planks and floor: stylized motif, not surveyed layout
+  wooden(13,37,482,238);for(let y=275;y<H;y+=14){pix(0,y,W,14,y%28===0?'#6f675e':'#807366');pix(0,y,W,1,'#97846e')}
+  // bouldering wall, plywood panels, bolts
+  wooden(26,49,272,132);pix(26,49,272,6,'#e6c895');pix(26,174,272,8,'#5f4c3d');
+  for(let y=68;y<170;y+=28)for(let x=44;x<287;x+=29)pix(x,y,2,2,'#7c624f');
+  const holds=[[52,78,'#da855e'],[99,61,'#527a6e'],[135,92,'#d6ae66'],[188,68,'#53759a'],[243,91,'#b77e63'],[79,122,'#667b9f'],[137,131,'#5e7c66'],[201,118,'#d1a963'],[260,144,'#667a97'],[52,153,'#b9aa87'],[168,153,'#d4816c']];holds.forEach(a=>drawHold(...a));
+  pix(26,183,280,78,'#4b7090');pix(32,185,135,70,'#526f8e');pix(170,185,130,70,'#7e919e');pix(31,219,270,3,'#344e66');pix(166,186,3,70,'#3d5c78');
+  // side training wall silhouette, fixed sloping overhang visual
+  pix(338,50,136,88,'#74634e');pix(330,55,136,88,'#af9371');pix(332,59,128,6,'#cfb388');pix(338,132,126,5,'#675442');
+  [[350,81,'#596c81'],[398,75,'#c78e63'],[429,108,'#527665'],[376,119,'#baa05e'],[449,79,'#8792a8'],[350,120,'#7e676a']].forEach(a=>drawHold(...a));
+  pix(324,146,145,45,'#8a7a69');pix(327,150,139,39,'#a08f7a');
+  // record player and shelf
+  pix(352,150,101,10,'#51463c');pix(358,157,90,47,'#4a5664');pix(363,160,80,30,'#bb9368');pix(374,161,35,28,'#2b333e');ellipse(392,177,15,11,'#182536');ellipse(392,177,4,4,C.orange);pix(414,162,2,17,'#384453');pix(414,178,17,2,'#384453');pix(417,190,20,8,'#7d6551');
+  // floor rug and sofa
+  pix(333,216,143,52,'#bb8a61');for(let i=0;i<6;i++)pix(337+i*23,220,9,45,'#bc956f');
+  pix(344,225,114,29,'#6c7979');pix(340,220,116,17,'#778883');pix(347,219,106,16,'#a7a9a0');pix(348,242,111,18,'#4f646b');pix(334,223,14,32,'#5f7175');pix(454,223,12,32,'#5f7175');pix(340,253,11,8,'#3b4b53');pix(450,253,9,8,'#3b4b53');
+  // lamp, plant, posters
+  pix(484,164,3,69,'#c8a56e');pix(473,159,24,13,C.yellow);pix(480,231,12,7,'#46392c');pix(312,245,17,16,'#7f6959');pix(317,220,5,26,'#436d5c');pix(308,227,15,7,'#547d66');pix(318,212,13,8,'#6b8a72');
+  pix(308,65,18,29,'#f1d17d');pix(311,71,12,15,'#182739');pix(314,73,6,7,'#cf9370');
+  // door / outdoors
+  pix(473,259,39,61,'#202d3e');pix(480,265,32,50,'#38465a');pix(489,274,20,32,'#bea775');pix(489,274,5,32,'#5e6e7c');pix(503,289,3,3,'#243442');text('EXIT',478,256,C.yellow,9);
+  // location tags
+  rounded(41,44,86,17,2,'#243b53');text('BOULDER WALL',47,56,C.light,8);text('110°',433,57,C.light,8);text('RECORDS',347,147,C.light,8);text('LOUNGE',392,216,C.light,8);
+  // lights
+  pix(114,30,9,6,C.yellow);pix(276,30,9,6,C.yellow);pix(423,30,9,6,C.yellow);ellipse(118,46,29,7,'#f0cd7355');ellipse(427,47,20,6,'#f0cd7355');
+}
+function pine(x,y,s=1){pix(x-3*s,y+12*s,6*s,22*s,'#493c36');for(let i=0;i<4;i++){const k=i*8*s;pix(x-(18-i*2)*s,y-(35-i*5)*s+k,(36-i*4)*s,10*s,i%2?'#28505a':'#315b62')}}
+function outdoorScene(){
+  pix(0,0,W,H,'#152739');pix(0,140,W,180,'#243c48');
+  // sky and moon
+  drawMoon(424,57,25);const stars=[[50,67],[110,35],[173,75],[217,39],[313,78],[358,29],[468,113],[25,110],[146,105],[255,91],[381,103],[487,48]];stars.forEach(([x,y],i)=>pix(x,y,i%3?2:3,i%2?2:3,i%3?'#a0b4b7':C.yellow));
+  // mountain silhouettes
+  ctx.fillStyle='#1a3242';ctx.beginPath();ctx.moveTo(0,160);ctx.lineTo(0,127);ctx.lineTo(68,75);ctx.lineTo(136,143);ctx.lineTo(196,97);ctx.lineTo(279,162);ctx.lineTo(356,101);ctx.lineTo(428,158);ctx.lineTo(512,111);ctx.lineTo(512,196);ctx.fill();
+  ctx.fillStyle='#254351';ctx.beginPath();ctx.moveTo(0,211);ctx.lineTo(0,176);ctx.lineTo(73,136);ctx.lineTo(142,188);ctx.lineTo(232,144);ctx.lineTo(307,202);ctx.lineTo(420,139);ctx.lineTo(512,186);ctx.lineTo(512,258);ctx.fill();
+  pix(0,213,W,107,'#344e49');for(let i=0;i<36;i++){let x=(i*87+39)%512,y=224+(i*39)%94;pix(x,y,8,2,i%2?'#3e6255':'#527060')}
+  pine(85,159,1.6);pine(480,164,1.35);pine(166,200,.75);
+  // little tent
+  ctx.fillStyle='#c89a6c';ctx.beginPath();ctx.moveTo(340,235);ctx.lineTo(400,151);ctx.lineTo(465,236);ctx.fill();ctx.fillStyle='#d2b17f';ctx.beginPath();ctx.moveTo(400,151);ctx.lineTo(416,237);ctx.lineTo(341,235);ctx.fill();ctx.fillStyle='#3c5351';ctx.beginPath();ctx.moveTo(404,192);ctx.lineTo(431,236);ctx.lineTo(381,236);ctx.fill();pix(402,232,4,4,'#201f24');
+  // rocks and fire light
+  ellipse(270,229,73,46,'#8d6c4799');ellipse(270,228,54,33,'#b2834b88');for(let i=0;i<8;i++){const a=i*.785;ellipse(270+35*Math.cos(a),229+24*Math.sin(a),9,5,'#7a7770')}
+  // logs
+  pix(234,254,68,8,'#796046');pix(235,250,66,7,'#a27d56');pix(232,261,6,10,'#493b2f');pix(295,261,6,10,'#493b2f');
+  // fireplace logs
+  pix(250,230,42,5,'#513f31');pix(258,225,31,7,'#9f6946');pix(248,231,40,3,'#322a25');
+  const fire=Math.sin(state.t*.011),fire2=Math.sin(state.t*.018+3);
+  pix(265+fire*2,210,18,22,'#df743d');pix(268+fire2*2,201,13,27,'#ffaf49');pix(271+fire*2,208,7,18,'#f9d985');pix(261+fire2*2,221,6,6,'#ffbf59');
+  for(let i=0;i<5;i++)pix(257+i*7+Math.sin(state.t*.006+i)*3,195+(i%3)*4-Math.abs(Math.sin(state.t*.008+i))*14,2,2,i%2?C.yellow:C.orange);
+  // cabin door left, sign
+  pix(0,226,48,94,'#6c5947');pix(9,236,32,77,'#8d7660');pix(17,249,15,53,'#3a4450');pix(27,273,3,3,C.yellow);pix(45,265,10,38,'#64513c');text('INSIDE',6,221,C.yellow,8);
+  pix(172,277,106,11,'#675841');pix(178,272,95,7,'#937551');
+  text('NIGHT CAMP',178,45,C.cream,12);text('STAY A LITTLE LONGER',179,59,'#a8c6c9',8);
+}
+function drawBubble(){if(!state.bubble||Date.now()>state.bubbleUntil){state.bubble='';return}ctx.font='bold 10px sans-serif';const w=Math.min(195,Math.max(78,ctx.measureText(state.bubble).width+20));const x=Math.max(8,Math.min(W-w-8,state.player.x-w/2)),y=state.player.y-60;rounded(x,y,w,27,4,'#f7eddb');rounded(x+2,y+2,w-4,23,3,'#f7eddb');pix(state.player.x-4,y+27,9,7,'#f7eddb');text(state.bubble,x+w/2,y+17,'#243449',10,'center')}
+function render(){state.t++;if(!state.access){pix(0,0,W,H,C.deep);text('MEMBERS ONLY',W/2,H/2,C.yellow,22,'center');text('유효한 회원권을 확인해 주세요',W/2,H/2+26,C.light,12,'center');return}
+  if(state.scene==='indoor')indoorScene();else outdoorScene();
+  if(state.scene==='outdoor'&&state.atFire){ellipse(209,264,11,5,'#273b3a')}
+  drawOtherRabbits();
+  drawRabbit(ctx,state.player.x,state.player.y,state.mbti,state.t,1.05,!!state.target||keys.size>0,true);
+  rounded(state.player.x-18,state.player.y-49,37,11,2,'#1d2d40d9');text(state.mbti,state.player.x+.5,state.player.y-41,C.yellow,8,'center');
+  drawBubble();
+  // small player marker
+  pix(state.player.x-1,state.player.y-26,3,3,C.yellow)
+}
+function limitPlayer(){const isIndoor=state.scene==='indoor';state.player.x=Math.max(isIndoor?24:13,Math.min(isIndoor?494:495,state.player.x));state.player.y=Math.max(isIndoor?189:203,Math.min(291,state.player.y))}
+function setStatus(main,sub=''){const e=$('status');e.textContent=main;if(sub){const sm=document.createElement('small');sm.textContent=sub;e.appendChild(sm)}}
+function updateUI(){const out=state.scene==='outdoor';$('scene-name').textContent=out?'THE CAMPFIRE':'INSIDE THE CLUB';$('room-caption').textContent=out?'MOONLIGHT / BONFIRE / CONVERSATION':'PLYWOOD / MATS / LOUNGE';$('panel-title').textContent=out?'Under the moonlight':'Tonight\'s little plans';$('panel-sub').textContent=out?'모닥불 앞에 앉아 짧은 한마디를 남겨보세요.':'벽에 올라갔다가, 레코드를 고르고, 소파에 앉아 쉬어보세요.';for(const id of ['climb','record','sofa','outside'])$('act-'+id).hidden=out;for(const id of ['bonfire','inside'])$('act-'+id).hidden=!out;$('bubble-area').hidden=!out;$('progress').textContent=(Number(state.climbs>0)+Number(!!state.record)+Number(state.rested))+' / 3';$('session-record').textContent=`등반 ${state.climbs}회 · ${state.record?state.record:'고른 레코드 없음'} · ${state.rested?'휴식 완료':'휴식 전'}`}
+function moveTo(id){if(!state.access)return;const spot=(spots[state.scene]||[]).find(s=>s.id===id);if(!spot)return;const p=spot;state.target={x:p.x,y:p.y,action:id};setStatus(({'climb':'볼더링 벽으로 가는 중…','record':'레코드 플레이어로 가는 중…','sofa':'소파로 가는 중…','outside':'달빛이 있는 바깥으로…','inside':'다시 클럽 안으로…','bonfire':'모닥불 쪽으로 가는 중…'})[id])}
+function openModal(kicker,title,body){state.modal=true;$('modal-kicker').textContent=kicker;$('modal-body').innerHTML=`<h2 id="modal-title">${title}</h2>${body}`;$('overlay').hidden=false;$('modal-close').focus()}
+function closeModal(){state.modal=false;$('overlay').hidden=true;$('modal-body').innerHTML=''}
+function act(id){state.target=null;if(id==='climb')climbGame();if(id==='record')recordsGame();if(id==='sofa'){state.restUntil=Date.now()+3600;state.rested=true;state.player={x:399,y:225};setStatus('오늘은 여기까지. 잠깐 앉아 쉬어가세요.','실제 회원 스탬프에는 반영되지 않습니다.');updateUI()}if(id==='outside'){state.scene='outdoor';state.player={x:75,y:255};state.atFire=false;state.bubble='';updateUI();setStatus('달빛 아래 캠프파이어에 도착했습니다.','모닥불 옆에 앉거나 말풍선을 띄워보세요.')}if(id==='inside'){state.scene='indoor';state.player={x:469,y:270};state.bubble='';state.atFire=false;updateUI();setStatus('다시 클럽 안으로 돌아왔습니다.')}if(id==='bonfire'){state.atFire=true;state.player={x:211,y:235};setStatus('모닥불 앞에 앉았습니다.','오른쪽 말풍선 입력창에 한마디를 남겨보세요.')}}
+function climbGame(){state.climbAt=0;state.climbPath=[0,1,2,3];drawClimbModal()}
+function drawClimbModal(message='노란 점선으로 표시된 홀드부터 차례로 터치하세요.'){
+  const html=`<p>아주 짧은 가상 볼더링 루트입니다. 실제 문제나 회원 스탬프와는 관계없습니다.</p><div class="hold-board" id="hold-board">${[0,1,2,3,4,5,6,7].map(i=>`<button type="button" data-hold="${i}" class="hold hold-${i} ${state.climbPath.slice(0,state.climbAt).includes(i)?'done':''} ${state.climbPath[state.climbAt]===i?'current':''}" aria-label="홀드 ${i+1}">${i+1}</button>`).join('')}</div><div class="board-note" id="climb-note">${message}</div><div class="modal-foot"><span class="board-note" id="climb-progress">ROUTE ${state.climbAt} / 4</span><button type="button" class="btn-quiet" id="climb-reset">처음부터</button></div>`;
+  if(!state.modal)openModal('CLIMBING / SHORT ROUTE','A little climb.',html);else $('modal-body').innerHTML=`<h2 id="modal-title">A little climb.</h2>${html}`;
+  document.querySelectorAll('[data-hold]').forEach(b=>b.addEventListener('click',()=>{
+    const i=Number(b.dataset.hold);if(i===state.climbPath[state.climbAt]){state.climbAt++;if(state.climbAt===4){state.climbs++;closeModal();setStatus('등반 성공! 오늘의 작은 루트를 완등했습니다.','게임 기록 +1 · 실제 스탬프와는 별개');updateUI();return}drawClimbModal('좋아요. 다음 홀드를 찾아보세요.')}else $('climb-note').textContent='이번 순서가 아닙니다. 노란 표시가 있는 홀드를 선택하세요.';
+  }));$('climb-reset').onclick=()=>{state.climbAt=0;drawClimbModal()}}
+function recordsGame(){const disks=[{id:'NIGHT WALK',color:'#e38e6a',small:'느린 산책'},{id:'MOON DUST',color:'#e8cc7c',small:'조용한 밤'},{id:'AFTER WORK',color:'#88a78b',small:'퇴근의 여운'}];const h=`<p>오늘 밤의 레코드를 골라보세요. 이 선택은 공간의 분위기만 바꿉니다. 실제 음원이나 홈페이지 라디오를 재생하지 않습니다.</p><div class="records">${disks.map(d=>`<button type="button" class="record ${state.record===d.id?'selected':''}" data-disk="${d.id}"><span class="record-art" style="--disk:${d.color}"></span><span class="record-title">${d.id}</span><span style="font-size:10px">${d.small}</span></button>`).join('')}</div><div class="board-note">기존 AFTER HOURS RADIO와 독립된 게임 선택 기능입니다.</div>`;openModal('RECORD PLAYER','Pick a record.',h);document.querySelectorAll('[data-disk]').forEach(b=>b.onclick=()=>{state.record=b.dataset.disk;closeModal();setStatus('레코드를 골랐습니다: '+state.record,'음악 재생 대신 오늘 밤의 무드만 기록합니다.');updateUI()})}
+function speak(s){if(state.scene!=='outdoor'||!state.access)return;s=(s||'').trim().slice(0,36);if(!s)return;state.bubble=s;state.bubbleUntil=Date.now()+8500;setStatus('말풍선을 띄웠습니다.','현재는 내 화면에만 표시됩니다. 다른 회원과 공유하려면 서버 연동이 필요합니다.');$('bubble-input').value=''}
+// The host app MUST enforce membership on the server before sending this HTML.
+// On the live site the existing /radio page is embedded in a persistent dock.
+// In standalone mode we do NOT substitute invented music or external streams.
+let radioInitialized=false;
+function openRadio(){
+ if(!state.access)return;
+ const dock=$('radio-dock');dock.hidden=false;dock.classList.remove('collapsed');
+ $('radio-toggle').textContent='접기';
+ if(!radioInitialized){
+   radioInitialized=true;
+   const liveRadio=!isDemo && context && context.membershipValid===true;
+   if(liveRadio){
+     const raw=(typeof context.radioPath==='string' && context.radioPath.startsWith('/') && !context.radioPath.startsWith('//'))?context.radioPath:'/radio';
+     // Same-origin relative path only. Never load arbitrary remote URLs here.
+     const u=new URL(raw,location.origin);
+     if(u.origin===location.origin && u.pathname.startsWith('/radio')){
+       $('radio-frame').src=u.pathname+u.search;
+       $('radio-frame').hidden=false;
+       $('radio-demo').hidden=true;
+       $('radio-site').href=u.pathname+u.search;
+       $('radio-site').hidden=false;
+     }
+   }
+ }
+ setStatus('AFTER HOURS RADIO를 게임 화면에서 열었습니다.','재생은 기존 라디오 플레이어에서 직접 시작하세요.');
+}
+$('radio-open').onclick=openRadio;$('act-radio').onclick=openRadio;
+$('radio-toggle').onclick=()=>{const d=$('radio-dock');const collapsed=d.classList.toggle('collapsed');$('radio-toggle').textContent=collapsed?'펼치기':'접기'};
+$('radio-dismiss').onclick=()=>{$('radio-dock').hidden=true;};
+function showProfile(){const stamps=Array.isArray(context?.stamps)?context.stamps:[];const name=String(context?.name||'DEMO PLAYER').slice(0,32);const display=[...stamps].filter(x=>x&&x.title).slice(0,24);const total=display.length;const safe=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const st=display.map(x=>`<div class="stamp earned"><div class="sigil">✳</div><h3>${safe(x.title)}</h3><p>${safe(x.description||'획득한 스탬프')}</p><p style="margin-top:6px">${safe(x.awardedAt||'')}</p></div>`).join('');
+  const body=`<div class="stat-vals"><div><strong>${safe(name)}</strong><span>MEMBER PROFILE · ${safe(state.mbti)} MOON RABBIT</span></div><div><strong>${total}</strong><span>VERIFIED STAMPS</span></div></div>${total?`<div class="stamp-grid">${st}</div>`:'<div class="stamp-grid"><div class="stamp"><div class="sigil">＋</div><h3>아직 등록된 스탬프가 없습니다.</h3><p>실제 획득 내역이 연결되면 여기에 표시됩니다.</p></div></div>'}<div class="warn">6+1·12+2 회원권 관련 스탬프와 100홀드 지구력 완등 등 실제 스탬프는 기존 회원 데이터의 지급 기록만 표시합니다. 게임의 등반·레코드·캠핑으로 자동 지급하지 않습니다.</div>${isDemo?'<p style="margin-top:10px">현재 데모에는 실제 회원·스탬프 데이터가 연결되어 있지 않습니다.</p>':''}`;
+  openModal('YOUR CORNER / PROFILE','My stamp archive.',body)
+}
+function nearest(){const available=spots[state.scene];let best=null,dist=Infinity;for(const s of available){const d=Math.hypot(state.player.x-s.x,state.player.y-s.y);if(d<dist){best=s;dist=d}}if(best && dist<75)act(best.id);else setStatus('가까운 상호작용 장소로 이동해 보세요.','장면 클릭 또는 오른쪽 액션 버튼을 이용할 수 있습니다.')}
+function tick(){if(state.access&&!state.modal){const p=state.player;let dx=0,dy=0;if(keys.has('ArrowLeft')||keys.has('a'))dx--;if(keys.has('ArrowRight')||keys.has('d'))dx++;if(keys.has('ArrowUp')||keys.has('w'))dy--;if(keys.has('ArrowDown')||keys.has('s'))dy++;
+  if(dx||dy){const l=Math.hypot(dx,dy)||1;p.x+=dx/l*2.25;p.y+=dy/l*2.25;state.target=null;limitPlayer()}else if(state.target){const d=Math.hypot(state.target.x-p.x,state.target.y-p.y);if(d<5){const action=state.target.action;state.target=null;act(action)}else{p.x+=(state.target.x-p.x)/d*2.8;p.y+=(state.target.y-p.y)/d*2.8;limitPlayer();}}}
+ render();drawRabbitGallery();requestAnimationFrame(tick)}
+for(const b of document.querySelectorAll('[data-action]'))b.onclick=()=>moveTo(b.dataset.action);
+$('mbti-open').onclick=openRabbitGallery;$('mbti-select-open').onclick=openRabbitGallery;$('mbti-current').textContent=state.mbti;$('mbti-motion-desc').textContent=rabbitLabels[state.mbti]+' 모션 적용';$('profile-open').onclick=showProfile;$('modal-close').onclick=closeModal;$('overlay').addEventListener('click',e=>{if(e.target===$('overlay'))closeModal()});
+$('bubble-send').onclick=()=>speak($('bubble-input').value);$('bubble-input').addEventListener('keydown',e=>{if(e.key==='Enter')speak(e.target.value)});
+document.querySelectorAll('[data-say]').forEach(b=>b.onclick=()=>speak(b.dataset.say));
+$('interact').onclick=nearest;
+canvas.addEventListener('click',e=>{if(state.modal||!state.access)return;const rect=canvas.getBoundingClientRect();const x=(e.clientX-rect.left)/rect.width*W,y=(e.clientY-rect.top)/rect.height*H;const items=spots[state.scene];let nearestSpot=null,min=Infinity;for(const s of items){const d=Math.hypot(x-s.x,y-s.y);if(d<min){min=d;nearestSpot=s}}if(nearestSpot&&min<nearestSpot.r+20)moveTo(nearestSpot.id);else{state.target={x,y,action:null};setStatus('클럽 안을 둘러보는 중…','관심 있는 장소를 누르면 상호작용할 수 있습니다.')}});
+window.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.modal){closeModal();return}if(state.modal||e.target instanceof HTMLInputElement)return;const key=e.key.length===1?e.key.toLowerCase():e.key;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','w','a','s','d','e'].includes(key)){e.preventDefault();if(key==='e')nearest();else keys.add(key)}});
+window.addEventListener('keyup',e=>keys.delete(e.key.length===1?e.key.toLowerCase():e.key));window.addEventListener('blur',()=>keys.clear());
+for(const b of document.querySelectorAll('[data-move]')){const key={'left':'ArrowLeft','up':'ArrowUp','right':'ArrowRight','down':'ArrowDown'}[b.dataset.move];const end=()=>keys.delete(key);b.addEventListener('pointerdown',e=>{e.preventDefault();b.setPointerCapture(e.pointerId);keys.add(key)});b.addEventListener('pointerup',end);b.addEventListener('pointercancel',end);b.addEventListener('lostpointercapture',end)}
+if(!state.access){$('access-tag').textContent='MEMBERSHIP REQUIRED';setStatus('유효한 회원권이 필요합니다.','회원권 상태는 서버에서 검증해야 합니다.');document.querySelectorAll('[data-action]').forEach(b=>b.disabled=true);$('profile-open').disabled=true;$('mbti-open').disabled=true;$('mbti-select-open').disabled=true;$('radio-open').disabled=true;$('act-radio').disabled=true}
+else if(!isDemo){$('access-tag').textContent='MEMBER SESSION · VERIFIED BY HOST REQUIRED'}
+updateUI();requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

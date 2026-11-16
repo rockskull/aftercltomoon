@@ -29,12 +29,22 @@ function shuffled<T>(items: T[]): T[] {
  * members add to it, admins remove from it. The player (when the crew has turned it
  * on) plays the list in order on whatever device opens the page — at the clubhouse,
  * one shared device. Nothing here controls another person's player.
+ *
+ * `onPlayingChange` (optional) lets a host screen hear when the radio starts or
+ * stops, e.g. THE LITTLE CLUB pausing its own music.
  */
-export function RadioStation({ initial }: { initial: RadioState }) {
+export function RadioStation({ initial, onPlayingChange }: { initial: RadioState; onPlayingChange?: (playing: boolean) => void }) {
   const [state, setState] = useState(initial);
   const tracks = state.tracks;
   const [currentId, setCurrentId] = useState<string | null>(initial.tracks[0]?.id ?? null);
   const [playing, setPlaying] = useState(false);
+  const onPlaying = useRef(onPlayingChange);
+  useEffect(() => {
+    onPlaying.current = onPlayingChange;
+  });
+  useEffect(() => {
+    onPlaying.current?.(playing);
+  }, [playing]);
   const [repeatOne, setRepeatOne] = useState(false);
   // Shuffle: every track once in a random order (queue), then a new round. `history` lets ⏮ go back.
   const [shuffle, setShuffle] = useState(false);

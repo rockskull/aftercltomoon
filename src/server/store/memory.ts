@@ -166,6 +166,7 @@ export function demoTables(now = Date.now()): Tables {
     ],
     PushSubscriptions: [],
     NotificationPrefs: [],
+    ClubProfiles: [],
     EventWatch: [],
     AuditLog: [],
     // Fictional bookkeeping (the demo is public; never real names or amounts here).
