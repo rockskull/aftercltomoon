@@ -79,7 +79,7 @@ export const isSessionId = (value: unknown): value is string => typeof value ===
 
 /**
  * Another person as the browser receives it: an opaque id (never the member id or email),
- * their rabbit, their current status line and ON/OFF. Only people who agreed to be shown.
+ * their rabbit, their current status line and ON/OFF.
  */
 export interface ClubMember {
   id: string;
@@ -94,8 +94,8 @@ export type ClubSyncResponse =
   | {
       ok: true;
       members: ClubMember[];
-      /** My own row, so a change made on another device shows here too. */
-      me: { statusText: string | null; visible: boolean } | null;
+      /** My own line, so a change made on another device shows here too. */
+      me: { statusText: string | null } | null;
       /** false while the database has no session table yet (everyone then shows OFF). */
       presence: boolean;
     }

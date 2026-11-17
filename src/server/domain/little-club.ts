@@ -30,25 +30,16 @@ export function littleClubVerdict(member: { status: string } | null): ClubVerdic
 export const GUEST_KEY_PREFIX = "GUEST-";
 export const isGuestKey = (key: string) => key.startsWith(GUEST_KEY_PREFIX);
 
+/**
+ * Everyone who saved a rabbit is shown to the others in the club (name tag, status line, ON/OFF) —
+ * there is no "only me" choice (decided 2026-11-17, instead of the v7 handoff's opt-in).
+ */
 export interface ClubProfile {
   nickname: string;
   mbti: Mbti;
-  /**
-   * Agreed to be shown to the others (name tag, status line, ON/OFF). Only an explicit opt-in counts:
-   * entering the club is not consent (see CONSENT).
-   */
-  visible: boolean;
   /** The person's current status line (the speech bubble); "" = none. */
   status: string;
 }
-
-/**
- * The value of ClubProfiles.visible that means "agreed to be shown", written only when the person ticks
- * the box (v7, 2026-11-17). Rows from before — empty, or "true" from the earlier pre-ticked box — don't
- * count, so those people start hidden and opt in again.
- */
-export const CONSENT = "agreed";
-const isTrue = (v: unknown) => cellText(v as string).trim() === CONSENT;
 
 /** The member's own profile, or null before the first save (a row with an unknown MBTI counts as none). */
 export function clubProfileOf(tables: Tables, memberId: string): ClubProfile | null {
@@ -56,16 +47,16 @@ export function clubProfileOf(tables: Tables, memberId: string): ClubProfile | n
   if (!row) return null;
   const mbti = cellText(row.mbti).trim().toUpperCase();
   const nickname = cleanNickname(cellText(row.nickname));
-  return nickname && isMbti(mbti) ? { nickname, mbti, visible: isTrue(row.visible), status: cleanBubble(cellText(row.status)) } : null;
+  return nickname && isMbti(mbti) ? { nickname, mbti, status: cleanBubble(cellText(row.status)) } : null;
 }
 
 /** Shown when the database doesn't have the profile table yet (deployed before the schema update). */
 export const CLUB_TABLE_MISSING = "리틀 클럽 프로필 저장소가 아직 준비되지 않았어요. 운영진이 DB 업데이트를 마치면 저장할 수 있어요.";
 
-/** Save (first time) or change the member's nickname + MBTI (+ the show-to-others choice). Only ever touches that member's own row. */
+/** Save (first time) or change the member's nickname + MBTI. Only ever touches that member's own row. */
 export function planClubProfileSave(
   data: Tables,
-  ctx: { now: number; memberId: string; nickname: string; mbti: string; visible?: boolean },
+  ctx: { now: number; memberId: string; nickname: string; mbti: string },
 ): Planned {
   if (data.ClubProfiles === undefined) return { refuse: CLUB_TABLE_MISSING };
   const nickname = cleanNickname(ctx.nickname);
@@ -79,11 +70,8 @@ export function planClubProfileSave(
   const at = seoulIso(ctx.now);
   const commitId = newId("C", ctx.now, 8);
   const current = rows[0];
-  // Not shown unless the person ticks it (now or before).
-  const visible = ctx.visible ?? (current ? isTrue(current.visible) : false);
-  const shown = visible ? CONSENT : "false";
   const status = current ? cleanBubble(cellText(current.status)) : "";
-  if (current && cellText(current.nickname) === nickname && cellText(current.mbti) === mbti && isTrue(current.visible) === visible) return { noop: true };
+  if (current && cellText(current.nickname) === nickname && cellText(current.mbti) === mbti) return { noop: true };
   const audit = (before: unknown, after: unknown) => ({
     type: "append" as const,
     table: "AuditLog" as const,
@@ -99,17 +87,17 @@ export function planClubProfileSave(
     },
   });
   if (current) {
-    const before = { nickname: cellText(current.nickname), mbti: cellText(current.mbti), visible: cellText(current.visible) };
+    const before = { nickname: cellText(current.nickname), mbti: cellText(current.mbti) };
     return {
       commit: {
         id: commitId,
         checks: [{ type: "exists", table: "ClubProfiles", id: ctx.memberId, fields: before }],
-        ops: [{ type: "update", table: "ClubProfiles", id: ctx.memberId, set: { nickname, mbti, visible: shown, updated_at: at } }, audit(before, { nickname, mbti, visible: shown })],
+        ops: [{ type: "update", table: "ClubProfiles", id: ctx.memberId, set: { nickname, mbti, updated_at: at } }, audit(before, { nickname, mbti })],
       },
-      result: { nickname, mbti, visible, status },
+      result: { nickname, mbti, status },
     };
   }
-  const row = { member_id: ctx.memberId, nickname, mbti, created_at: at, updated_at: at, visible: shown, status: "" };
+  const row = { member_id: ctx.memberId, nickname, mbti, created_at: at, updated_at: at, status: "" };
   return {
     commit: {
       id: commitId,
@@ -118,9 +106,9 @@ export function planClubProfileSave(
         // Two tabs saving the first profile at once: only one row ever lands.
         { type: "absent", table: "ClubProfiles", where: { member_id: ctx.memberId } },
       ],
-      ops: [{ type: "append", table: "ClubProfiles", row }, audit(null, { nickname, mbti, visible: shown })],
+      ops: [{ type: "append", table: "ClubProfiles", row }, audit(null, { nickname, mbti })],
     },
-    result: { nickname, mbti, visible, status: "" },
+    result: { nickname, mbti, status: "" },
   };
 }
 
@@ -181,8 +169,8 @@ export function isOnline(data: Tables, key: string, now: number): boolean {
 
 /**
  * This tab says "I'm here" (or, with `leave`, "this tab is closing"). Only the caller's own row, and
- * only this tab's entry; other tabs of the same person stay ON. Someone not shown to the others keeps
- * no entries at all. Expired entries are dropped on every write, so no clean-up job is needed.
+ * only this tab's entry; other tabs of the same person stay ON. Someone without a rabbit yet keeps no
+ * entries. Expired entries are dropped on every write, so no clean-up job is needed.
  */
 export function planSessionSignal(data: Tables, ctx: { now: number; key: string; session: string; leave?: boolean }): Planned {
   if (data.ClubSessions === undefined || data.ClubProfiles === undefined) return { refuse: CLUB_TABLE_MISSING };
@@ -191,7 +179,7 @@ export function planSessionSignal(data: Tables, ctx: { now: number; key: string;
   const row = data.ClubSessions.find((r) => cellText(r.member_id) === ctx.key);
   let next = liveSessions(sessionsOf(row), ctx.now);
   delete next[ctx.session];
-  if (!ctx.leave && profile?.visible) next[ctx.session] = ctx.now;
+  if (!ctx.leave && profile) next[ctx.session] = ctx.now;
   next = Object.fromEntries(Object.entries(next).sort((a, b) => b[1] - a[1]).slice(0, MAX_SESSIONS));
   const sessions = Object.keys(next).length ? JSON.stringify(next) : "";
   const current = cellText(row?.sessions);
@@ -220,9 +208,9 @@ export interface ClubMemberRow {
 }
 
 /**
- * Everyone shown to the others, ON or OFF, never the person asking: a saved rabbit, an explicit
- * opt-in, and still allowed in (`allowed`: not suspended). Nickname, MBTI, status line and ON/OFF
- * only; no times, no tabs, no places. ON people first, at most 40.
+ * Everyone in the club, ON or OFF, never the person asking: a saved rabbit and still allowed in
+ * (`allowed`: not suspended). Nickname, MBTI, status line and ON/OFF only; no times, no tabs, no
+ * places. ON people first, at most 40.
  */
 export function clubMembersOf(data: Tables, selfKey: string, now: number, allowed: (key: string) => boolean): ClubMemberRow[] {
   const out: ClubMemberRow[] = [];
@@ -230,7 +218,7 @@ export function clubMembersOf(data: Tables, selfKey: string, now: number, allowe
     const key = cellText(row.member_id);
     if (!key || key === selfKey || !allowed(key)) continue;
     const profile = clubProfileOf(data, key);
-    if (!profile?.visible) continue;
+    if (!profile) continue;
     out.push({ key, nickname: profile.nickname, mbti: profile.mbti, statusText: profile.status || null, isOnline: isOnline(data, key, now) });
   }
   return out.sort((a, b) => Number(b.isOnline) - Number(a.isOnline)).slice(0, 40);

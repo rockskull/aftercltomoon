@@ -123,18 +123,18 @@ describe("saving the profile", () => {
 
 describe("v7: status lines and ON/OFF", () => {
   const m = (id: string, status = "active"): Row => ({ member_id: id, name: id, email: `${id}@x.dev`, role: "member", status });
-  /** A: me. B: shown, ON in one tab. C: chose only-me. D: shown, last signal 80 s ago. E: from before the setting (empty = not shown). */
+  /** A: me. B: ON in one tab. C: ON (an old "only me" row — everyone is shown now). D: last signal 80 s ago. E: no line. S: suspended. */
   function club(): Tables {
     return {
-      Members: [m("A"), m("B"), m("C"), m("D"), m("E"), m("F"), m("S", "inactive")],
+      Members: [m("A"), m("B"), m("C"), m("D"), m("E"), m("S", "inactive")],
       ClubProfiles: [
-        { member_id: "A", nickname: "에이", mbti: "INFP", visible: "agreed", status: "" },
-        { member_id: "B", nickname: "비", mbti: "ESTP", visible: "agreed", status: "불멍 중" },
-        { member_id: "C", nickname: "씨", mbti: "ISFJ", visible: "false", status: "비밀" },
-        { member_id: "D", nickname: "디", mbti: "ENFJ", visible: "agreed", status: "다음엔 같이 올라요" },
-        { member_id: "E", nickname: "이", mbti: "INTP", visible: "", status: "" },
-        { member_id: "F", nickname: "에프", mbti: "ISFP", visible: "true", status: "예전 기본값" }, // pre-ticked box of the earlier version → not consent
-        { member_id: "S", nickname: "에스", mbti: "ISTP", visible: "agreed", status: "정지됨" },
+        { member_id: "A", nickname: "에이", mbti: "INFP", status: "" },
+        { member_id: "B", nickname: "비", mbti: "ESTP", status: "불멍 중" },
+        { member_id: "C", nickname: "씨", mbti: "ISFJ", visible: "false", status: "슬랩 중" },
+        { member_id: "D", nickname: "디", mbti: "ENFJ", status: "다음엔 같이 올라요" },
+        { member_id: "E", nickname: "이", mbti: "INTP", status: "" },
+        { member_id: "S", nickname: "에스", mbti: "ISTP", status: "정지됨" },
+        { member_id: "Z", nickname: "", mbti: "NOPE", status: "" }, // not a usable rabbit
       ],
       ClubSessions: [
         { member_id: "B", sessions: JSON.stringify({ aaaaaaaaaa: NOW - 20_000 }), updated_at: "" },
@@ -154,14 +154,16 @@ describe("v7: status lines and ON/OFF", () => {
     expect(applyCommit(data, planned.commit)).toEqual({ ok: true });
   };
 
-  it("hands over only people who opted in — ON or OFF — with nickname, MBTI, status line and ON/OFF only", () => {
+  it("hands over everyone with a rabbit — ON or OFF — with nickname, MBTI, status line and ON/OFF only", () => {
     const data = club();
     const list = clubMembersOf(data, "A", NOW, allowed(data));
     expect(list).toEqual([
       { key: "B", nickname: "비", mbti: "ESTP", statusText: "불멍 중", isOnline: true },
+      { key: "C", nickname: "씨", mbti: "ISFJ", statusText: "슬랩 중", isOnline: true }, // no "only me" any more
       { key: "D", nickname: "디", mbti: "ENFJ", statusText: "다음엔 같이 올라요", isOnline: false }, // OFF, line kept
+      { key: "E", nickname: "이", mbti: "INTP", statusText: null, isOnline: false },
     ]);
-    // never me; C chose only-me, E and F never opted in under the current box, S is suspended
+    // never me; S is suspended; Z has no usable rabbit
     expect(list.map((p) => p.key)).not.toContain("A");
     expect(Object.keys(list[0]).sort()).toEqual(["isOnline", "key", "mbti", "nickname", "statusText"]);
   });
@@ -205,12 +207,11 @@ describe("v7: status lines and ON/OFF", () => {
     expect(Object.keys(sessionsOf(data.ClubSessions!.find((r) => r.member_id === "A")))).toEqual(["3333333333"]);
   });
 
-  it("someone not shown keeps no ON entry at all (and turning it off clears theirs)", () => {
+  it("anyone with a rabbit signals ON; someone without one keeps no entry", () => {
     const data = club();
-    expect(planSessionSignal(data, { now: NOW, key: "E", session: "4444444444" })).toEqual({ noop: true }); // no row made
-    // C has an entry from before; their next signal clears it
-    apply(data, planSessionSignal(data, { now: NOW, key: "C", session: "cccccccccc" }));
-    expect(isOnline(data, "C", NOW)).toBe(false);
+    apply(data, planSessionSignal(data, { now: NOW, key: "E", session: "4444444444" }));
+    expect(isOnline(data, "E", NOW)).toBe(true);
+    expect(planSessionSignal(data, { now: NOW, key: "NOBODY", session: "5555555555" })).toEqual({ noop: true }); // no row made
   });
 
   it("two tabs signalling at once: the second re-reads instead of overwriting", () => {
@@ -251,19 +252,16 @@ describe("v7: status lines and ON/OFF", () => {
     expect(planClubStatus(data, { now: NOW, key: "NOBODY", status: "hi" })).toHaveProperty("refuse");
   });
 
-  it("is not shown until the person opts in; the choice is kept on later saves", () => {
-    const data: Tables = { Members: [m("A")], ClubProfiles: [], AuditLog: [] };
+  it("is shown to the others as soon as the rabbit is saved; renaming keeps the status line", () => {
+    const data: Tables = { Members: [m("A"), m("B")], ClubProfiles: [], AuditLog: [] };
     const made = planClubProfileSave(data, { now: NOW, memberId: "A", nickname: "에이", mbti: "INFP" });
     if (!("commit" in made)) throw new Error("refused");
     applyCommit(data, made.commit);
-    expect(clubProfileOf(data, "A")!.visible).toBe(false); // entering is not consent
-    const shown = planClubProfileSave(data, { now: NOW, memberId: "A", nickname: "에이", mbti: "INFP", visible: true });
-    if (!("commit" in shown)) throw new Error("refused");
-    applyCommit(data, shown.commit);
-    expect(clubProfileOf(data, "A")!.visible).toBe(true);
+    expect(clubMembersOf(data, "B", NOW, () => true).map((p) => p.key)).toEqual(["A"]);
+    data.ClubProfiles![0].status = "쉬는 중";
     const renamed = planClubProfileSave(data, { now: NOW, memberId: "A", nickname: "에이에이", mbti: "INFP" });
     if (!("commit" in renamed)) throw new Error("refused");
     applyCommit(data, renamed.commit);
-    expect(clubProfileOf(data, "A")).toEqual({ nickname: "에이에이", mbti: "INFP", visible: true, status: "" });
+    expect(clubProfileOf(data, "A")).toEqual({ nickname: "에이에이", mbti: "INFP", status: "쉬는 중" });
   });
 });

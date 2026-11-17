@@ -21,8 +21,8 @@ import { LITTLE_CLUB_TABLES, STAMP_TABLES, SYNC_TABLES, type Tables } from "./st
 /**
  * THE LITTLE CLUB on the server: the gate every screen and action goes through,
  * and the data the page hands to the game. Everything here is about the signed-in
- * person, plus — for the others who opted in to be shown — only their nickname, MBTI, status line
- * and ON/OFF (behind an opaque id). Nobody's stamps, member id, email, times or places leave the server.
+ * person, plus — for everyone else in the club — only their nickname, MBTI, status line and ON/OFF
+ * (behind an opaque id). Nobody's stamps, member id, email, times or places leave the server.
  */
 
 /** null member = signed in with Google but not on the member list. */
@@ -66,9 +66,9 @@ function toMembers(tables: Tables, selfKey: string, now: number, allowed: (key: 
   return clubMembersOf(tables, selfKey, now, allowed).map(({ key, ...m }) => ({ id: peerId(key), ...m }));
 }
 
-function meOf(tables: Tables, key: string): { statusText: string | null; visible: boolean } | null {
+function meOf(tables: Tables, key: string): { statusText: string | null } | null {
   const profile = clubProfileOf(tables, key);
-  return profile ? { statusText: profile.status || null, visible: profile.visible } : null;
+  return profile ? { statusText: profile.status || null } : null;
 }
 
 /** Profiles and sessions, each read on its own (a database without the session table yet must not break profiles). */
@@ -221,7 +221,7 @@ export interface LittleClubData extends ClubNotices {
   radio: RadioState | null;
   /** false until the database has the session table (then everyone shows OFF). */
   presenceReady: boolean;
-  /** The others who opted in to be shown, ON or OFF, with their status line (the first sync refreshes it). */
+  /** Everyone else in the club, ON or OFF, with their status line (the first sync refreshes it). */
   members: ClubMember[];
   /** Request time (server), so the wall calendar shows the same day. */
   now: number;

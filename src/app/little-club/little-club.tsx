@@ -45,8 +45,8 @@ import {
 
 /**
  * THE LITTLE CLUB — the game screen. The server already decided this person may be here; nothing in
- * the browser grants access. Rabbits with a name tag are people who opted in to be shown (their
- * status line and ON/OFF come from the one 30-second sync); where they stand and how they move is
+ * the browser grants access. Rabbits with a name tag are the other people in the club (everyone with
+ * a rabbit is shown; their status line and ON/OFF come from the one 30-second sync); where they stand and how they move is
  * decided here in the browser only. Untagged rabbits and the two dogs are scenery.
  */
 
@@ -188,8 +188,6 @@ interface GameState {
   keys: Set<string>;
   bubble: string;
   tag: string;
-  /** Shown to the others (my tag then reads "… · ON"). */
-  shown: boolean;
   mbti: Mbti;
   dirty: boolean;
   /** The wall calendar's month and today. */
@@ -277,7 +275,6 @@ export function LittleClub({ data }: { data: LittleClubData }) {
     keys: new Set(),
     bubble: data.profile?.status ?? "",
     tag: profile ? nameTag(profile.nickname, profile.mbti) : "",
-    shown: profile?.visible ?? false,
     mbti: profile?.mbti ?? "INFP",
     dirty: true,
     cal: wallCalendar(data.now),
@@ -350,7 +347,6 @@ export function LittleClub({ data }: { data: LittleClubData }) {
   /** Bumped by every status save (and true while one is on its way), so a sync answer can't undo it. */
   const statusSeq = useRef(0);
   const statusSaving = useRef(false);
-  const syncNowRef = useRef<() => void>(() => {});
   useEffect(() => {
     seedRef.current = browserSeed();
     game.current.dirty = true;
@@ -371,12 +367,8 @@ export function LittleClub({ data }: { data: LittleClubData }) {
       setRoster(res.members);
     }
     setPresenceReady(res.presence);
-    // My own line / choice changed on another device.
-    if (res.me && seqAtStart === statusSeq.current && !statusSaving.current) {
-      setBubbleState(res.me.statusText ?? "");
-      const visible = res.me.visible;
-      setProfile((p) => (p && p.visible !== visible ? { ...p, visible } : p));
-    }
+    // My own line changed on another device.
+    if (res.me && seqAtStart === statusSeq.current && !statusSaving.current) setBubbleState(res.me.statusText ?? "");
   }, []);
   useEffect(() => {
     if (!syncOn) return;
@@ -445,37 +437,15 @@ export function LittleClub({ data }: { data: LittleClubData }) {
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", onPageHide);
     window.addEventListener("pageshow", onPageShow);
-    syncNowRef.current = () => void run();
     void run(); // right away on entry
     return () => {
       stopped = true;
       leave();
-      syncNowRef.current = () => {};
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
       window.removeEventListener("pageshow", onPageShow);
     };
   }, [syncOn, applySync]);
-  // Once: say what showing means (or how to turn it on).
-  useEffect(() => {
-    if (!syncOn || !profile) return;
-    const shown = profile.visible;
-    const timer = window.setTimeout(() => {
-      try {
-        if (localStorage.getItem("acm-little-club-v7-intro")) return;
-        localStorage.setItem("acm-little-club-v7-intro", "1");
-      } catch {
-        return;
-      }
-      setToast(
-        shown
-          ? { title: "다른 멤버에게 내 토끼가 보여요", body: "별명 · MBTI, 말풍선, ON/OFF가 보여요. 툴바의 ‘공개’ 버튼으로 언제든 나만 보기로 바꿀 수 있어요.", url: null, open: "profile" }
-          : { title: "지금은 나만 보기예요", body: "툴바의 ‘나만 보기’를 누르면 공개할 수 있어요. 공개하면 별명 · MBTI, 말풍선, ON/OFF가 다른 멤버에게 보여요.", url: null, open: "profile" },
-      );
-    }, 1500);
-    return () => window.clearTimeout(timer);
-  }, [syncOn, profile]);
-
   useEffect(() => {
     game.current.bubble = bubble;
     game.current.dirty = true;
@@ -484,7 +454,6 @@ export function LittleClub({ data }: { data: LittleClubData }) {
   useEffect(() => {
     const g = game.current;
     g.tag = profile ? nameTag(profile.nickname, profile.mbti) : "";
-    g.shown = profile?.visible ?? false;
     g.mbti = profile?.mbti ?? "INFP";
     g.dirty = true;
   }, [profile]);
@@ -652,7 +621,7 @@ export function LittleClub({ data }: { data: LittleClubData }) {
         setDraft("");
         say(
           res.statusText ? "말풍선을 저장했어요." : "말풍선을 지웠어요.",
-          res.statusText ? (profile?.visible ? "안팎 어디서나 그대로이고, 다른 멤버 화면에는 30초 안에 바뀌어요. 지우기 전까지 남아요." : "안팎 어디서나 그대로예요. 지금은 나만 보기라 다른 멤버에게는 안 보여요.") : undefined,
+          res.statusText ? "안팎 어디서나 그대로이고, 다른 멤버 화면에는 30초 안에 바뀌어요. 지우기 전까지 남아요." : undefined,
         );
       } else {
         setBubbleState(before);
@@ -665,21 +634,6 @@ export function LittleClub({ data }: { data: LittleClubData }) {
     } finally {
       statusSaving.current = false;
       setSavingBubble(false);
-    }
-  }
-
-  async function toggleVisible() {
-    if (!profile) return;
-    const next = !profile.visible;
-    try {
-      const res = await saveClubProfile({ nickname: profile.nickname, mbti: profile.mbti, visible: next });
-      if (res.ok) {
-        setProfile((p) => ({ ...res.profile, status: p?.status ?? res.profile.status }));
-        syncNowRef.current(); // my ON entry is added / dropped now, not in 30 s
-        say(next ? "다른 멤버에게 내 토끼가 보여요." : "이제 나만 보여요.", next ? "별명 · MBTI, 말풍선, ON/OFF가 다른 멤버에게 보여요." : "다른 멤버 화면에서 내 토끼와 말풍선이 30초 안에 사라져요.");
-      } else say("바꾸지 못했어요.", res.message);
-    } catch {
-      say("바꾸지 못했어요.", "잠시 후 다시 시도해 주세요.");
     }
   }
 
@@ -848,11 +802,6 @@ export function LittleClub({ data }: { data: LittleClubData }) {
         <ToolButton onClick={() => setModal("profile")} label="내 토끼 설정">
           ☾ {profile ? nameTag(profile.nickname, profile.mbti) : "MY RABBIT"}
         </ToolButton>
-        {profile && data.profileStoreReady && (
-          <ToolButton onClick={toggleVisible} label={profile.visible ? "다른 멤버에게 보이는 중 (누르면 나만 보기)" : "나만 보기 중 (누르면 공개)"} active={profile.visible}>
-            {profile.visible ? "👀 공개" : "🙈 나만 보기"}
-          </ToolButton>
-        )}
         {bellCount > 0 && (
           <ToolButton onClick={() => setModal("notices")} label={`회원권 알림 ${bellCount}개`} active>
             🔔 알림 · {bellCount}
@@ -910,7 +859,7 @@ export function LittleClub({ data }: { data: LittleClubData }) {
               {scene === "indoor" ? (night ? "Inside · Night lights" : "Inside the club") : "The campfire"}
               {onlineCount > 0 && <span className="ml-1.5 text-[#8fe3b0]">· ON {onlineCount}</span>}
             </span>
-            <ul className="sr-only" aria-label="공개한 멤버">
+            <ul className="sr-only" aria-label="클럽의 다른 멤버">
               {roster.map((m) => (
                 <li key={m.id}>
                   {nameTag(m.nickname, m.mbti, m.isOnline)}
@@ -1027,12 +976,12 @@ export function LittleClub({ data }: { data: LittleClubData }) {
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-cream/50">
               {bubble ? <>지금 말풍선: <b className="text-cream/80">{bubble}</b>. </> : null}
-              하나만, 지금 것만 남아요. 안팎 어디서나 같고, 지우기 전까지 남아요(게임을 나가도).{profile?.visible ? " 공개 중이라 다른 멤버에게도 보여요." : " 나만 보기 중이라 나에게만 보여요."} 대화 기록은 없어요.
+              하나만, 지금 것만 남아요. 안팎 어디서나 같고, 지우기 전까지 남아요(게임을 나가도). 다른 멤버에게도 보여요. 대화 기록은 없어요.
             </p>
           </form>
 
           <p className="mt-4 border-t border-cream/15 pt-3 text-[11px] leading-relaxed text-cream/50">
-            이름표가 있는 토끼는 공개에 동의한 멤버예요. <b className="text-[#8fe3b0]">ON</b>은 지금 이 게임 화면을 보고 있다는 뜻이고(약 30초마다 갱신), 실제로 암장에 있다는 뜻은 아니에요. 자리와 동작은 각자 화면에서 정해져요.{!presenceReady && " (ON/OFF는 준비 중이라 지금은 모두 OFF로 보여요.)"} 이름표 없는 토끼와 강아지 두 마리는 장면을 꾸미는 캐릭터예요. 게임 속 행동은 회원 기록·스탬프에 반영되지 않아요.
+            이름표가 있는 토끼는 리틀 클럽에 들어온 다른 멤버예요. <b className="text-[#8fe3b0]">ON</b>은 지금 이 게임 화면을 보고 있다는 뜻이고(약 30초마다 갱신), 실제로 암장에 있다는 뜻은 아니에요. 자리와 동작은 각자 화면에서 정해져요.{!presenceReady && " (ON/OFF는 준비 중이라 지금은 모두 OFF로 보여요.)"} 이름표 없는 토끼와 강아지 두 마리는 장면을 꾸미는 캐릭터예요. 게임 속 행동은 회원 기록·스탬프에 반영되지 않아요.
           </p>
         </aside>
       </div>
@@ -1208,7 +1157,7 @@ function render(g: CanvasRenderingContext2D, s: GameState, t: number, now: numbe
     const bubbleTop = fit(x, tagTop - bs.h - 1, bs.w, bs.h);
     drawBubble(g, x, bubbleTop + 26, bubble);
   };
-  drawLabel(px, py, scale, s.tag, s.shown ? "ON" : undefined, s.bubble);
+  drawLabel(px, py, scale, s.tag, "ON", s.bubble);
   for (const l of labels) drawLabel(l.x, l.y, l.scale, l.tag, l.state, l.bubble);
 }
 
@@ -1339,8 +1288,6 @@ function ProfileModal({
 }) {
   const [nickname, setNickname] = useState(initial?.nickname ?? defaultNickname);
   const [mbti, setMbti] = useState<Mbti | null>(initial?.mbti ?? null);
-  // Not shown until the person ticks it: entering the club is not consent.
-  const [visible, setVisible] = useState(initial?.visible ?? false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const clean = cleanNickname(nickname);
@@ -1349,11 +1296,11 @@ function ProfileModal({
     e.preventDefault();
     if (!clean) return setError(`별명은 1~${NICKNAME_MAX}자로, 글자·숫자·띄어쓰기 위주로 적어 주세요.`);
     if (!mbti) return setError("MBTI 달토끼를 하나 골라 주세요.");
-    if (!storeReady) return onSaved({ nickname: clean, mbti, visible, status: "" }, false);
+    if (!storeReady) return onSaved({ nickname: clean, mbti, status: "" }, false);
     setBusy(true);
     setError(null);
     try {
-      const res = await saveClubProfile({ nickname: clean, mbti, visible });
+      const res = await saveClubProfile({ nickname: clean, mbti });
       if (res.ok) onSaved(res.profile, true);
       else setError(res.message);
     } catch {
@@ -1399,13 +1346,9 @@ function ProfileModal({
             ))}
           </div>
         </fieldset>
-        <label className="flex items-start gap-2 rounded-sm border-2 border-plywood-400 bg-plywood-200 px-3 py-2 text-[13px]">
-          <input type="checkbox" checked={visible} onChange={(e) => setVisible(e.target.checked)} className="mt-1 size-4 accent-[var(--color-brown)]" />
-          <span>
-            <b>다른 멤버에게 내 토끼 공개하기 (동의)</b>
-            <span className="block text-[12px] text-ink-soft">체크하면 이 게임을 하는 다른 사람에게 내 별명 · MBTI, 말풍선, 지금 게임 화면을 보고 있는지(ON/OFF)가 보여요. 내 위치·접속 시각·회원 정보는 보내지 않아요. 체크하지 않으면 나만 보여요. 게임에 들어온 것만으로는 공개되지 않고, 툴바에서 언제든 바꿀 수 있어요.</span>
-          </span>
-        </label>
+        <p className="rounded-sm border-2 border-plywood-400 bg-plywood-200 px-3 py-2 text-[12px] leading-relaxed text-ink-soft">
+          리틀 클럽에 들어온 다른 멤버에게 내 토끼와 <b className="text-midnight">별명 · MBTI · 말풍선 · ON/OFF</b>(지금 게임 화면을 보고 있는지)가 보여요. 내 위치·접속 시각·회원 정보는 보내지 않아요.
+        </p>
         {!storeReady && <p className="rounded-sm bg-plywood-200 px-3 py-2 text-[12px] text-brown">프로필 저장소가 아직 준비 중이에요. 지금 고른 토끼는 이번 방문에만 쓰여요.</p>}
         {error && (
           <p role="alert" className="text-[13px] font-semibold text-[#b8402e]">

@@ -149,13 +149,13 @@ export const TABLES = {
     "status",
   ],
   /**
-   * THE LITTLE CLUB: one row per person (nickname + MBTI of their moon rabbit, whether they agreed
-   * to be shown to the others, and their one current status line). `visible` is "agreed" only after
-   * an explicit opt-in (see CONSENT in src/server/domain/little-club.ts). `status` is the latest line only (no history), kept until they change or
-   * clear it. Read on its own (see LITTLE_CLUB_TABLES), so a database without the table yet only
-   * closes the club, never the rest of the site.
+   * THE LITTLE CLUB: one row per person (nickname + MBTI of their moon rabbit and their one current
+   * status line). Everyone with a row is shown to the others in the club. `status` is the latest line
+   * only (no history), kept until they change or clear it. (The database may still hold an old
+   * `visible` column from before 2026-11-17; it is no longer read.) Read on its own (see
+   * LITTLE_CLUB_TABLES), so a database without the table yet only closes the club, never the rest of the site.
    */
-  ClubProfiles: ["member_id", "nickname", "mbti", "created_at", "updated_at", "visible", "status"],
+  ClubProfiles: ["member_id", "nickname", "mbti", "created_at", "updated_at", "status"],
   /**
    * THE LITTLE CLUB ON/OFF: one row per person, overwritten. `sessions` is a small JSON map of that
    * person's open game tabs → last signal (epoch ms), pruned on every write; someone is ON while any

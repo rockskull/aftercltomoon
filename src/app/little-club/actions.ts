@@ -11,20 +11,19 @@ import { LITTLE_CLUB_TABLES } from "@/server/store/schema";
 export type SaveProfileResult = { ok: true; profile: ClubProfile } | { ok: false; message: string; reason?: ClubBlock };
 
 /**
- * Save the signed-in member's nickname + MBTI (+ whether others may see them). The member comes from
+ * Save the signed-in member's nickname + MBTI. The member comes from
  * the session (re-checked against the live data), never from the request: there is no way to name
  * another member here. The status line and ON/OFF have their own API (src/app/api/little-club).
  */
-export async function saveClubProfile(input: { nickname: string; mbti: string; visible?: boolean }): Promise<SaveProfileResult> {
+export async function saveClubProfile(input: { nickname: string; mbti: string }): Promise<SaveProfileResult> {
   const gate = await littleClubGate({ fresh: true });
   if (!gate.ok) return { ok: false, reason: gate.reason, message: gate.reason === "login" ? "로그인이 필요해요." : "이용이 중지된 계정이에요. 운영진에게 문의해 주세요." };
   const memberId = gate.profileKey;
   const nickname = typeof input?.nickname === "string" ? input.nickname : "";
   const mbti = typeof input?.mbti === "string" ? input.mbti : "";
-  const visible = typeof input?.visible === "boolean" ? input.visible : undefined;
   let outcome;
   try {
-    outcome = await runCommit<ClubProfile>(["Members", ...LITTLE_CLUB_TABLES], (data) => planClubProfileSave(data, { now: Date.now(), memberId, nickname, mbti, visible }));
+    outcome = await runCommit<ClubProfile>(["Members", ...LITTLE_CLUB_TABLES], (data) => planClubProfileSave(data, { now: Date.now(), memberId, nickname, mbti }));
   } catch (error) {
     // e.g. the profile table doesn't exist yet in the database
     console.error("[little-club] profile save failed", error);
@@ -35,7 +34,7 @@ export async function saveClubProfile(input: { nickname: string; mbti: string; v
   // noop (nothing changed) has no result: echo the cleaned values back (the status line is untouched here).
   return {
     ok: true,
-    profile: outcome.result ?? { nickname: cleanNickname(nickname) ?? nickname, mbti: mbti.trim().toUpperCase() as ClubProfile["mbti"], visible: visible ?? false, status: "" },
+    profile: outcome.result ?? { nickname: cleanNickname(nickname) ?? nickname, mbti: mbti.trim().toUpperCase() as ClubProfile["mbti"], status: "" },
   };
 }
 
