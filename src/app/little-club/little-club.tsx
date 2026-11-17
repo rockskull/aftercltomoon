@@ -7,13 +7,13 @@ import { ClubCalendar } from "@/components/calendar/club-calendar";
 import { BANNER_COPY } from "@/components/member-banner-client";
 import { buttonPrimary, cn } from "@/components/ui";
 import { toDateKey } from "@/lib/dates";
-import { BUBBLE_MAX, cleanBubble, cleanNickname, MBTI_MOTIONS, MBTI_TYPES, nameTag, NICKNAME_MAX, type ClubPeer, type Mbti } from "@/lib/little-club";
+import { BUBBLE_MAX, cleanBubble, cleanNickname, MBTI_MOTIONS, MBTI_TYPES, nameTag, NICKNAME_MAX, SYNC_BACKOFF_MS, type ClubMember, type ClubSyncResponse, type Mbti } from "@/lib/little-club";
 import { gradeInfo, gradeLabel } from "@/lib/problems";
 import type { ClubProfile } from "@/server/domain/little-club";
-import type { ClubNotice, ClubNotices, LittleClubData } from "@/server/little-club";
+import type { ClubNotice, ClubNotices, LittleClubData, StatusResult } from "@/server/little-club";
 import { markAllRead } from "../me/actions";
 import { RadioStation } from "../radio/radio-station";
-import { peekPresence, refreshClubNotices, saveClubProfile, syncPresence } from "./actions";
+import { refreshClubNotices, saveClubProfile } from "./actions";
 import { BGM_TITLES, ClubBgm, type BgmTrack } from "./bgm";
 import {
   clampToFloor,
@@ -31,6 +31,7 @@ import {
   drawTable,
   bubbleSize,
   tagSize,
+  type TagState,
   H,
   SPOTS,
   spotAt,
@@ -43,21 +44,79 @@ import {
 } from "./scene";
 
 /**
- * THE LITTLE CLUB — the game screen. The server already decided this member may
- * be here and handed over only their own data; nothing in the browser grants access.
- * The other rabbits and the two dogs are scenery, never real members or presence.
+ * THE LITTLE CLUB — the game screen. The server already decided this person may be here; nothing in
+ * the browser grants access. Rabbits with a name tag are people who opted in to be shown (their
+ * status line and ON/OFF come from the one 30-second sync); where they stand and how they move is
+ * decided here in the browser only. Untagged rabbits and the two dogs are scenery.
  */
 
 type ModalId = "profile" | "problems" | "stamps" | "calendar" | "notices" | null;
 
 const START: Record<SceneId, [number, number]> = { indoor: [220, 290], outdoor: [62, 272] };
 
-/** Where someone appears in a scene: near the door, nudged by their nickname so two people never stack exactly. */
+const hash = (seed: string) => {
+  let h = 2166136261;
+  for (const ch of seed) h = Math.imul(h ^ ch.codePointAt(0)!, 16777619) >>> 0;
+  return h;
+};
+
+/** Where I appear in a scene: near the door, nudged by my nickname. */
 function spawnAt(scene: SceneId, seed: string): [number, number] {
-  let h = 0;
-  for (const ch of seed) h = (h * 31 + ch.codePointAt(0)!) >>> 0;
+  const h = hash(seed);
   const [x, y] = START[scene];
   return clampToFloor(scene, x + (scene === "indoor" ? (h % 81) - 40 : h % 70), y + ((h >> 8) % 21) - 10);
+}
+
+/**
+ * Where the others stand (chosen in this browser, never sent by the server): spread over the
+ * floor, away from the hot spots and the door. Each person keeps their spot while the page is open.
+ */
+const MEMBER_SLOTS: Record<SceneId, Array<[number, number]>> = {
+  indoor: [
+    [190, 172], [300, 178], [236, 222], [338, 212], [128, 252], [408, 262], [160, 200],
+    [286, 236], [86, 288], [470, 296], [48, 192], [372, 190], [200, 262], [440, 240],
+  ],
+  outdoor: [
+    [336, 262], [150, 238], [420, 264], [110, 292], [470, 284], [250, 298], [360, 296], [190, 226], [440, 300], [230, 282],
+  ],
+};
+
+/** A per-browser seed, so each browser arranges people its own (stable) way. */
+function browserSeed(): string {
+  try {
+    let seed = localStorage.getItem("acm-little-club-seed");
+    if (!seed) {
+      seed = Math.random().toString(36).slice(2, 10);
+      localStorage.setItem("acm-little-club-seed", seed);
+    }
+    return seed;
+  } catch {
+    return "local";
+  }
+}
+
+/** Gives every newcomer a free spot (people already placed never move). */
+function placeMembers(placed: Map<string, [number, number]>, ids: string[], scene: SceneId, seed: string) {
+  const present = new Set(ids);
+  for (const id of [...placed.keys()]) if (!present.has(id)) placed.delete(id);
+  const slots = MEMBER_SLOTS[scene];
+  const used = new Set([...placed.values()].map(([x, y]) => `${x},${y}`));
+  for (const id of ids) {
+    if (placed.has(id)) continue;
+    const h = hash(`${seed}:${scene}:${id}`);
+    let spot: [number, number] | null = null;
+    for (let k = 0; k < slots.length; k++) {
+      const s = slots[(h + k) % slots.length];
+      if (!used.has(`${s[0]},${s[1]}`)) {
+        spot = s;
+        break;
+      }
+    }
+    // More people than spots: next to one, nudged.
+    spot ??= clampToFloor(scene, slots[h % slots.length][0] + ((h >> 5) % 41) - 20, slots[h % slots.length][1] + ((h >> 11) % 17) - 8);
+    used.add(`${spot[0]},${spot[1]}`);
+    placed.set(id, spot);
+  }
 }
 
 /** Decorative rabbits (not members): type, x, y, pose. */
@@ -91,8 +150,19 @@ const SPOT_TEXT: Record<SpotId, { label: string; hint: string; going: string }> 
 
 const PRESETS = ["오늘은 슬랩 연습", "쉬는 중 ☕", "같이 볼더링?", "불멍 중", "다음엔 같이 올라요"];
 
-/** Someone else in the club, with where their rabbit is drawn right now (it walks to x, y). */
-type Peer = ClubPeer & { rx: number; ry: number };
+async function postJson<T>(url: string, method: "POST" | "PATCH", body: unknown): Promise<T> {
+  const res = await fetch(url, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body), cache: "no-store" });
+  return (await res.json()) as T;
+}
+
+/** This page load's tab id (each tab and each reload is its own session for ON/OFF). */
+function newSessionId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  }
+}
 
 function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -118,6 +188,8 @@ interface GameState {
   keys: Set<string>;
   bubble: string;
   tag: string;
+  /** Shown to the others (my tag then reads "… · ON"). */
+  shown: boolean;
   mbti: Mbti;
   dirty: boolean;
   /** The wall calendar's month and today. */
@@ -182,9 +254,10 @@ export function LittleClub({ data }: { data: LittleClubData }) {
   const [scene, setScene] = useState<SceneId>("indoor");
   const [night, setNight] = useState(false);
   const [status, setStatus] = useState<{ main: string; sub?: string }>({ main: "어서 와요. 하고 싶은 걸 골라 보세요.", sub: "장면을 누르거나 아래 버튼으로 움직일 수 있어요." });
-  // One bubble that follows me everywhere (kept on the server with my presence; fades after 30 min).
-  const [bubble, setBubbleState] = useState(data.myBubble);
+  // My one status line (the bubble), the same inside and outside, kept on the server until I change it.
+  const [bubble, setBubbleState] = useState(data.profile?.status ?? "");
   const [draft, setDraft] = useState("");
+  const [savingBubble, setSavingBubble] = useState(false);
   const [radio, setRadio] = useState<{ mounted: boolean; open: boolean }>({ mounted: false, open: false });
   const [radioPlaying, setRadioPlaying] = useState(false);
   const [bgmOn, setBgmOn] = useState(false);
@@ -202,8 +275,9 @@ export function LittleClub({ data }: { data: LittleClubData }) {
     poseUntil: 0,
     climbStart: 0,
     keys: new Set(),
-    bubble: data.myBubble,
+    bubble: data.profile?.status ?? "",
     tag: profile ? nameTag(profile.nickname, profile.mbti) : "",
+    shown: profile?.visible ?? false,
     mbti: profile?.mbti ?? "INFP",
     dirty: true,
     cal: wallCalendar(data.now),
@@ -263,82 +337,144 @@ export function LittleClub({ data }: { data: LittleClubData }) {
   }, [ring]);
   const bellCount = notices.notices.length + (notices.banner ? 1 : 0);
 
-  // ---- presence: the others in the club right now ----
-  const peersRef = useRef<Map<string, Peer>>(new Map(data.peers.map((p) => [p.id, { ...p, rx: p.x, ry: p.y }])));
-  const [peerCount, setPeerCount] = useState(data.peers.length);
-  const presenceOn = data.presenceReady && profile !== null;
-  const presenceOnRef = useRef(presenceOn);
+  // ---- the others + the one periodic sync (v7) ----
+  // Everyone who opted in, ON or OFF, with their status line. Their spots and motions are local.
+  const membersRef = useRef<Map<string, ClubMember>>(new Map(data.members.map((m) => [m.id, m])));
+  const placedRef = useRef<Record<SceneId, Map<string, [number, number]>>>({ indoor: new Map(), outdoor: new Map() });
+  const seedRef = useRef("local");
+  // The same people as text, for screen readers (the canvas itself is one picture).
+  const [roster, setRoster] = useState<ClubMember[]>(data.members);
+  const onlineCount = roster.filter((m) => m.isOnline).length;
+  const [presenceReady, setPresenceReady] = useState(data.presenceReady);
+  const syncOn = data.profileStoreReady && profile !== null;
+  /** Bumped by every status save (and true while one is on its way), so a sync answer can't undo it. */
+  const statusSeq = useRef(0);
+  const statusSaving = useRef(false);
+  const syncNowRef = useRef<() => void>(() => {});
   useEffect(() => {
-    presenceOnRef.current = presenceOn;
-  });
-  const applyPeers = useCallback((list: ClubPeer[]) => {
-    const prev = peersRef.current;
-    const next = new Map<string, Peer>();
-    for (const p of list) {
-      const old = prev.get(p.id);
-      const keep = old !== undefined && old.scene === p.scene;
-      next.set(p.id, { ...p, rx: keep ? old.rx : p.x, ry: keep ? old.ry : p.y });
-    }
-    peersRef.current = next;
+    seedRef.current = browserSeed();
     game.current.dirty = true;
-    setPeerCount(list.length);
   }, []);
-  /** Tell the club where I am (and my bubble), and hear who else is here. */
-  const sendPresence = useCallback(
-    async (extra?: { bubble?: string }) => {
-      if (!presenceOnRef.current) return;
-      const g = game.current;
-      try {
-        const res = await syncPresence({ scene: g.scene, x: Math.round(g.x), y: Math.round(g.y), ...extra });
-        if (res.ok) applyPeers(res.peers);
-      } catch {}
-    },
-    [applyPeers],
-  );
-  const sendRef = useRef(sendPresence);
+  const applySync = useCallback((res: Extract<ClubSyncResponse, { ok: true }>, seqAtStart: number) => {
+    const prev = membersRef.current;
+    const next = new Map<string, ClubMember>();
+    for (const m of res.members) next.set(m.id, m);
+    // Only what changed is swapped in; spots never move because of a sync.
+    let changed = next.size !== prev.size;
+    for (const [id, m] of next) {
+      const old = prev.get(id);
+      if (!old || old.statusText !== m.statusText || old.isOnline !== m.isOnline || old.nickname !== m.nickname || old.mbti !== m.mbti) changed = true;
+    }
+    if (changed) {
+      membersRef.current = next;
+      game.current.dirty = true;
+      setRoster(res.members);
+    }
+    setPresenceReady(res.presence);
+    // My own line / choice changed on another device.
+    if (res.me && seqAtStart === statusSeq.current && !statusSaving.current) {
+      setBubbleState(res.me.statusText ?? "");
+      const visible = res.me.visible;
+      setProfile((p) => (p && p.visible !== visible ? { ...p, visible } : p));
+    }
+  }, []);
   useEffect(() => {
-    sendRef.current = sendPresence;
-  });
-  useEffect(() => {
-    if (!presenceOn) return;
-    void sendPresence(); // I'm here
-    // A light refresh while the club is on screen (no realtime server): who's around, every 8 s;
-    // my own spot is sent when I stop or change scene, plus a keep-alive every 45 s.
-    const peek = async () => {
-      if (document.hidden) return;
+    if (!syncOn) return;
+    // One timer for the whole game (scene changes, moving, the radio never add requests).
+    const sessionId = newSessionId();
+    let timer = 0;
+    let inFlight = false;
+    let again = false;
+    let failures = 0;
+    let stopped = false;
+    let left = true;
+    const schedule = (ms: number) => {
+      window.clearTimeout(timer);
+      if (!stopped && !document.hidden) timer = window.setTimeout(run, ms);
+    };
+    async function run() {
+      if (stopped || document.hidden) return;
+      if (inFlight) {
+        again = true; // asked again while one is on its way: one more right after, never two at once
+        return;
+      }
+      window.clearTimeout(timer);
+      inFlight = true;
+      left = false;
+      const seq = statusSeq.current;
+      let ok = false;
       try {
-        const res = await peekPresence();
-        if (res.ok) applyPeers(res.peers);
+        const res = await postJson<ClubSyncResponse>("/api/little-club/sync", "POST", { sessionId });
+        if (res.ok) {
+          ok = true;
+          if (!stopped) applySync(res, seq);
+        } else if (res.reason === "login" || res.reason === "suspended") {
+          stopped = true;
+        }
       } catch {}
+      inFlight = false;
+      failures = ok ? 0 : Math.min(failures + 1, SYNC_BACKOFF_MS.length - 1);
+      if (again && ok) {
+        again = false;
+        void run();
+      } else {
+        again = false;
+        schedule(SYNC_BACKOFF_MS[failures]);
+      }
+    }
+    /** Best effort: this tab's entry only. If it's lost, the 75 s window turns the tab OFF anyway. */
+    const leave = () => {
+      window.clearTimeout(timer);
+      if (left) return;
+      left = true;
+      const body = JSON.stringify({ sessionId });
+      try {
+        void fetch("/api/little-club/presence/leave", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body }).catch(() => {});
+      } catch {
+        navigator.sendBeacon?.("/api/little-club/presence/leave", body);
+      }
     };
-    const poll = window.setInterval(peek, 8000);
-    const keep = window.setInterval(() => {
-      if (!document.hidden) void sendPresence();
-    }, 45000);
-    const onVisible = () => {
-      if (!document.hidden) void sendPresence();
+    const onVisibility = () => {
+      if (document.hidden) leave();
+      else void run();
     };
-    document.addEventListener("visibilitychange", onVisible);
+    const onPageHide = () => leave();
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted && !document.hidden) void run();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
+    syncNowRef.current = () => void run();
+    void run(); // right away on entry
     return () => {
-      window.clearInterval(poll);
-      window.clearInterval(keep);
-      document.removeEventListener("visibilitychange", onVisible);
+      stopped = true;
+      leave();
+      syncNowRef.current = () => {};
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
     };
-  }, [presenceOn, sendPresence, applyPeers]);
-  // Once: say that others can now see my rabbit (and where to turn it off).
+  }, [syncOn, applySync]);
+  // Once: say what showing means (or how to turn it on).
   useEffect(() => {
-    if (!presenceOn || !profile?.visible) return;
+    if (!syncOn || !profile) return;
+    const shown = profile.visible;
     const timer = window.setTimeout(() => {
       try {
-        if (localStorage.getItem("acm-little-club-presence-intro")) return;
-        localStorage.setItem("acm-little-club-presence-intro", "1");
+        if (localStorage.getItem("acm-little-club-v7-intro")) return;
+        localStorage.setItem("acm-little-club-v7-intro", "1");
       } catch {
         return;
       }
-      setToast({ title: "이제 함께 접속한 멤버가 내 토끼를 볼 수 있어요", body: "별명 · MBTI 이름표와 말풍선이 보여요. 툴바의 ‘공개’ 버튼으로 언제든 나만 보기로 바꿀 수 있어요.", url: null, open: "profile" });
+      setToast(
+        shown
+          ? { title: "다른 멤버에게 내 토끼가 보여요", body: "별명 · MBTI, 말풍선, ON/OFF가 보여요. 툴바의 ‘공개’ 버튼으로 언제든 나만 보기로 바꿀 수 있어요.", url: null, open: "profile" }
+          : { title: "지금은 나만 보기예요", body: "툴바의 ‘나만 보기’를 누르면 공개할 수 있어요. 공개하면 별명 · MBTI, 말풍선, ON/OFF가 다른 멤버에게 보여요.", url: null, open: "profile" },
+      );
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [presenceOn, profile?.visible]);
+  }, [syncOn, profile]);
 
   useEffect(() => {
     game.current.bubble = bubble;
@@ -348,6 +484,7 @@ export function LittleClub({ data }: { data: LittleClubData }) {
   useEffect(() => {
     const g = game.current;
     g.tag = profile ? nameTag(profile.nickname, profile.mbti) : "";
+    g.shown = profile?.visible ?? false;
     g.mbti = profile?.mbti ?? "INFP";
     g.dirty = true;
   }, [profile]);
@@ -392,8 +529,7 @@ export function LittleClub({ data }: { data: LittleClubData }) {
       g.target = null;
       g.pose = "stand";
       g.dirty = true;
-      setScene(next);
-      void sendRef.current();
+      setScene(next); // local only: no request
     },
     [],
   );
@@ -495,16 +631,41 @@ export function LittleClub({ data }: { data: LittleClubData }) {
     say("벽을 살짝 올라가 보는 중…", "게임 연출이에요. 실제 완등 기록이나 스탬프와는 관계없어요.");
   }
 
-  // ---- bubbles ----
-  function setBubble(text: string) {
+  // ---- my status line (saved only on 저장 / 삭제) ----
+  async function saveBubble(text: string) {
     const clean = cleanBubble(text);
-    setBubbleState(clean);
-    setDraft("");
-    void sendPresence({ bubble: clean });
-    say(
-      clean ? "말풍선을 띄웠어요." : "말풍선을 지웠어요.",
-      clean ? (presenceOn && profile?.visible ? "밖으로 나가도 따라다니고, 함께 있는 멤버에게도 보여요. 30분 뒤 사라져요." : "밖으로 나가도 따라다녀요. 30분 뒤 사라져요.") : undefined,
-    );
+    const before = bubble;
+    statusSeq.current++;
+    setBubbleState(clean); // shows at once; others see it with their next sync
+    if (!data.profileStoreReady) {
+      setDraft("");
+      say(clean ? "말풍선을 띄웠어요." : "말풍선을 지웠어요.", "저장소 준비 전이라 이 화면에서만 보여요.");
+      return;
+    }
+    setSavingBubble(true);
+    statusSaving.current = true;
+    try {
+      const res = await postJson<StatusResult>("/api/little-club/status", "PATCH", { statusText: clean || null });
+      statusSeq.current++;
+      if (res.ok) {
+        setBubbleState(res.statusText ?? "");
+        setDraft("");
+        say(
+          res.statusText ? "말풍선을 저장했어요." : "말풍선을 지웠어요.",
+          res.statusText ? (profile?.visible ? "안팎 어디서나 그대로이고, 다른 멤버 화면에는 30초 안에 바뀌어요. 지우기 전까지 남아요." : "안팎 어디서나 그대로예요. 지금은 나만 보기라 다른 멤버에게는 안 보여요.") : undefined,
+        );
+      } else {
+        setBubbleState(before);
+        say("말풍선을 저장하지 못했어요.", res.message);
+      }
+    } catch {
+      statusSeq.current++;
+      setBubbleState(before);
+      say("말풍선을 저장하지 못했어요.", "잠시 후 다시 시도해 주세요.");
+    } finally {
+      statusSaving.current = false;
+      setSavingBubble(false);
+    }
   }
 
   async function toggleVisible() {
@@ -513,8 +674,9 @@ export function LittleClub({ data }: { data: LittleClubData }) {
     try {
       const res = await saveClubProfile({ nickname: profile.nickname, mbti: profile.mbti, visible: next });
       if (res.ok) {
-        setProfile(res.profile);
-        say(next ? "다른 멤버에게 내 토끼가 보여요." : "이제 나만 보여요.", next ? "이름표와 말풍선이 함께 접속한 멤버에게 보여요." : "다른 멤버 화면에서 내 토끼가 사라져요.");
+        setProfile((p) => ({ ...res.profile, status: p?.status ?? res.profile.status }));
+        syncNowRef.current(); // my ON entry is added / dropped now, not in 30 s
+        say(next ? "다른 멤버에게 내 토끼가 보여요." : "이제 나만 보여요.", next ? "별명 · MBTI, 말풍선, ON/OFF가 다른 멤버에게 보여요." : "다른 멤버 화면에서 내 토끼와 말풍선이 30초 안에 사라져요.");
       } else say("바꾸지 못했어요.", res.message);
     } catch {
       say("바꾸지 못했어요.", "잠시 후 다시 시도해 주세요.");
@@ -545,8 +707,6 @@ export function LittleClub({ data }: { data: LittleClubData }) {
     let raf = 0;
     let last = performance.now();
     let visible = true;
-    let wasMoving = false;
-    let settle = 0;
     const io = new IntersectionObserver((entries) => {
       visible = entries.some((e) => e.isIntersecting);
       game.current.dirty = true;
@@ -597,41 +757,21 @@ export function LittleClub({ data }: { data: LittleClubData }) {
         g.pose = "stand";
         g.dirty = true;
       }
-      if (wasMoving && !moving) {
-        window.clearTimeout(settle);
-        settle = window.setTimeout(() => void sendRef.current(), 700);
-      }
-      wasMoving = moving;
-
-      // the others walk to where they last said they were
-      const walking = new Set<string>();
-      for (const peer of peersRef.current.values()) {
-        if (peer.scene !== g.scene) continue;
-        const d = Math.hypot(peer.x - peer.rx, peer.y - peer.ry);
-        if (d < 1) continue;
-        if (reduced || d > 260) {
-          peer.rx = peer.x;
-          peer.ry = peer.y;
-        } else {
-          const step = Math.min(d, 110 * dt);
-          peer.rx += ((peer.x - peer.rx) / d) * step;
-          peer.ry += ((peer.y - peer.ry) / d) * step;
-          walking.add(peer.id);
-        }
-        g.dirty = true;
-      }
+      // the others: a spot each, picked here (moving never sends anything)
+      const members = [...membersRef.current.values()];
+      const placed = placedRef.current[g.scene];
+      if (placed.size !== members.length || members.some((m) => !placed.has(m.id))) placeMembers(placed, members.map((m) => m.id), g.scene, seedRef.current);
 
       // reduced motion: draw only when something changed (no idle animation)
       if (reduced && !moving && !g.dirty && g.pose !== "climb") return;
       g.dirty = false;
       const t = reduced ? 0 : now / 16.67;
       g2.setTransform(scale, 0, 0, scale, 0, 0);
-      render(g2, g, t, now, moving, reduced, peersRef.current, walking);
+      render(g2, g, t, now, moving, reduced, members, placed);
     };
     raf = requestAnimationFrame(frame);
     return () => {
       cancelAnimationFrame(raf);
-      window.clearTimeout(settle);
       io.disconnect();
       ro.disconnect();
     };
@@ -708,7 +848,7 @@ export function LittleClub({ data }: { data: LittleClubData }) {
         <ToolButton onClick={() => setModal("profile")} label="내 토끼 설정">
           ☾ {profile ? nameTag(profile.nickname, profile.mbti) : "MY RABBIT"}
         </ToolButton>
-        {profile && data.profileStoreReady && data.presenceReady && (
+        {profile && data.profileStoreReady && (
           <ToolButton onClick={toggleVisible} label={profile.visible ? "다른 멤버에게 보이는 중 (누르면 나만 보기)" : "나만 보기 중 (누르면 공개)"} active={profile.visible}>
             {profile.visible ? "👀 공개" : "🙈 나만 보기"}
           </ToolButton>
@@ -768,8 +908,16 @@ export function LittleClub({ data }: { data: LittleClubData }) {
             />
             <span className="pointer-events-none absolute left-2 top-2 rounded-sm bg-midnight/75 px-2 py-1 font-label text-[9px] font-semibold uppercase tracking-[0.2em] text-cream/85">
               {scene === "indoor" ? (night ? "Inside · Night lights" : "Inside the club") : "The campfire"}
-              {peerCount > 0 && <span className="ml-1.5 text-butter">· 함께 {peerCount}</span>}
+              {onlineCount > 0 && <span className="ml-1.5 text-[#8fe3b0]">· ON {onlineCount}</span>}
             </span>
+            <ul className="sr-only" aria-label="공개한 멤버">
+              {roster.map((m) => (
+                <li key={m.id}>
+                  {nameTag(m.nickname, m.mbti, m.isOnline)}
+                  {m.statusText ? `, 말풍선: ${m.statusText}` : ""}
+                </li>
+              ))}
+            </ul>
             {toast && (
               <div role="status" className="absolute inset-x-2 top-9 mx-auto flex max-w-md items-start gap-2 rounded-md border-2 border-butter bg-midnight/95 p-2.5 text-cream shadow-[4px_4px_0_#05090f] sm:top-10">
                 <span aria-hidden="true" className="text-[18px] leading-none">🔔</span>
@@ -837,7 +985,7 @@ export function LittleClub({ data }: { data: LittleClubData }) {
             className="mt-4 border-t border-cream/15 pt-4"
             onSubmit={(e) => {
               e.preventDefault();
-              setBubble(draft);
+              if (draft.trim()) void saveBubble(draft);
             }}
           >
             <label htmlFor="bubble" className="font-label text-[10px] font-semibold uppercase tracking-[0.2em] text-butter">
@@ -853,29 +1001,38 @@ export function LittleClub({ data }: { data: LittleClubData }) {
                 placeholder={bubble || "한 줄로 짧게"}
                 className="min-w-0 flex-1 rounded-sm border border-cream/40 bg-midnight px-2 py-2 text-[13px] text-cream placeholder:text-cream/40"
               />
-              <button type="submit" className="rounded-sm bg-butter px-3 text-[12px] font-bold text-midnight">
-                띄우기
+              <button type="submit" disabled={savingBubble || !draft.trim()} className="rounded-sm bg-butter px-3 text-[12px] font-bold text-midnight disabled:opacity-50">
+                {savingBubble ? "저장 중" : "저장"}
               </button>
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {PRESETS.map((p) => (
-                <button key={p} type="button" onClick={() => setBubble(p)} className="rounded-sm border border-cream/25 px-2 py-1 text-[11px] text-cream/75 hover:text-cream">
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => {
+                    setDraft(p);
+                    document.getElementById("bubble")?.focus();
+                  }}
+                  className="rounded-sm border border-cream/25 px-2 py-1 text-[11px] text-cream/75 hover:text-cream"
+                >
                   {p}
                 </button>
               ))}
               {bubble && (
-                <button type="button" onClick={() => setBubble("")} className="rounded-sm border border-cream/25 px-2 py-1 text-[11px] text-cream/60 hover:text-cream">
-                  지우기
+                <button type="button" disabled={savingBubble} onClick={() => void saveBubble("")} className="rounded-sm border border-[#d9826d]/60 px-2 py-1 text-[11px] text-[#f0b3a4] hover:text-cream">
+                  삭제
                 </button>
               )}
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-cream/50">
-              하나만, 지금 것만 남아요. 밖으로 나가도 따라다니고 30분 뒤 사라져요.{presenceOn && profile?.visible ? " 함께 있는 멤버에게도 보여요." : ""} 대화 기록은 없어요.
+              {bubble ? <>지금 말풍선: <b className="text-cream/80">{bubble}</b>. </> : null}
+              하나만, 지금 것만 남아요. 안팎 어디서나 같고, 지우기 전까지 남아요(게임을 나가도).{profile?.visible ? " 공개 중이라 다른 멤버에게도 보여요." : " 나만 보기 중이라 나에게만 보여요."} 대화 기록은 없어요.
             </p>
           </form>
 
           <p className="mt-4 border-t border-cream/15 pt-3 text-[11px] leading-relaxed text-cream/50">
-            이름표가 있는 토끼는 지금 함께 접속한 멤버예요(공개한 사람만). 이름표 없는 토끼와 강아지 두 마리는 장면을 꾸미는 캐릭터예요. 게임 속 행동은 회원 기록·스탬프에 반영되지 않아요.
+            이름표가 있는 토끼는 공개에 동의한 멤버예요. <b className="text-[#8fe3b0]">ON</b>은 지금 이 게임 화면을 보고 있다는 뜻이고(약 30초마다 갱신), 실제로 암장에 있다는 뜻은 아니에요. 자리와 동작은 각자 화면에서 정해져요.{!presenceReady && " (ON/OFF는 준비 중이라 지금은 모두 OFF로 보여요.)"} 이름표 없는 토끼와 강아지 두 마리는 장면을 꾸미는 캐릭터예요. 게임 속 행동은 회원 기록·스탬프에 반영되지 않아요.
           </p>
         </aside>
       </div>
@@ -889,7 +1046,7 @@ export function LittleClub({ data }: { data: LittleClubData }) {
           closable={profile !== null}
           onClose={() => setModal(null)}
           onSaved={(p, saved) => {
-            setProfile(p);
+            setProfile((prev) => ({ ...p, status: prev?.status ?? p.status }));
             setModal(null);
             say(`${nameTag(p.nickname, p.mbti)} 달토끼로 들어왔어요.`, saved ? `${MBTI_MOTIONS[p.mbti]} 모션 · 다음에 와도 그대로예요.` : "저장소 준비 전이라 이번 방문에만 쓰여요.");
           }}
@@ -964,15 +1121,17 @@ export function LittleClub({ data }: { data: LittleClubData }) {
 // Drawing one frame
 // ---------------------------------------------------------------------------
 
-function render(g: CanvasRenderingContext2D, s: GameState, t: number, now: number, moving: boolean, reduced: boolean, peers: Map<string, Peer>, walking: Set<string>) {
+function render(g: CanvasRenderingContext2D, s: GameState, t: number, now: number, moving: boolean, reduced: boolean, members: ClubMember[], placed: Map<string, [number, number]>) {
   const indoor = s.scene === "indoor";
   if (indoor) drawIndoor(g, s.cal);
   else drawOutdoor(g, t);
 
   type Item = { y: number; draw: () => void };
   const items: Item[] = [];
-  EXTRAS[s.scene].forEach(([type, x, y, pose], i) => {
-    if (Math.hypot(s.x - x, s.y - y) < 18) return;
+  // Scenery rabbits make way as real people arrive.
+  const taken = members.map((m) => placed.get(m.id)).filter((p): p is [number, number] => p !== undefined);
+  EXTRAS[s.scene].slice(0, Math.max(0, EXTRAS[s.scene].length - members.length)).forEach(([type, x, y, pose], i) => {
+    if (Math.hypot(s.x - x, s.y - y) < 18 || taken.some(([mx, my]) => Math.hypot(mx - x, my - y) < 24)) return;
     items.push({ y, draw: () => drawRabbit(g, x, y, type, t + i * 37, depthScale(s.scene, y) * 0.8, { pose }) });
   });
   if (indoor) {
@@ -995,16 +1154,27 @@ function render(g: CanvasRenderingContext2D, s: GameState, t: number, now: numbe
     px -= 14;
     scale = depthScale("indoor", 230);
   }
-  // the others here (their own tag and bubble, drawn with mine after the lighting)
-  const labels: Array<{ x: number; y: number; scale: number; tag: string; bubble: string }> = [];
-  let n = 0;
-  for (const peer of peers.values()) {
-    if (peer.scene !== s.scene) continue;
-    const ps = depthScale(s.scene, peer.ry);
-    const offset = (n++ + 1) * 53;
-    items.push({ y: peer.ry, draw: () => drawRabbit(g, peer.rx, peer.ry, peer.mbti, t + offset, ps, { walking: walking.has(peer.id) }) });
-    labels.push({ x: peer.rx, y: peer.ry, scale: ps, tag: nameTag(peer.nickname, peer.mbti), bubble: peer.bubble });
+  // The others: their own MBTI motion at their spot. OFF = resting, a little faded (status line kept).
+  const labels: Array<{ x: number; y: number; scale: number; tag: string; state: TagState; bubble: string }> = [];
+  for (const m of members) {
+    const spot = placed.get(m.id);
+    if (!spot) continue;
+    const [mx, my] = spot;
+    const ms = depthScale(s.scene, my);
+    const phase = hash(m.id) % 997;
+    items.push({
+      y: my,
+      draw: () => {
+        g.save();
+        if (!m.isOnline) g.globalAlpha = 0.6;
+        drawRabbit(g, mx, my, m.mbti, t + phase, ms, { pose: m.isOnline ? "stand" : "sit" });
+        g.restore();
+      },
+    });
+    labels.push({ x: mx, y: my, scale: ms, tag: nameTag(m.nickname, m.mbti), state: m.isOnline ? "ON" : "OFF", bubble: m.statusText ?? "" });
   }
+  // ON people get the nearer label places; OFF labels move up out of their way.
+  labels.sort((a, b) => Number(b.state === "ON") - Number(a.state === "ON"));
 
   const playerY = s.pose === "climb" ? 400 : s.pose === "sit" && indoor && s.y < 150 ? 140 : s.y;
   items.push({ y: playerY, draw: () => drawRabbit(g, px, py, s.mbti, t, scale, { player: true, walking: moving, pose: s.pose }) });
@@ -1028,18 +1198,18 @@ function render(g: CanvasRenderingContext2D, s: GameState, t: number, now: numbe
     boxes.push({ x, y: top, w, h });
     return top;
   };
-  const drawLabel = (x: number, footY: number, sc: number, tag: string, bubble: string) => {
+  const drawLabel = (x: number, footY: number, sc: number, tag: string, state: TagState | undefined, bubble: string) => {
     if (!tag) return;
-    const ts = tagSize(g, tag);
+    const ts = tagSize(g, tag, state);
     const tagTop = fit(x, footY - 44 * sc - 10, ts.w, ts.h);
-    drawNameTag(g, x, tagTop + 10, tag);
+    drawNameTag(g, x, tagTop + 10, tag, state);
     if (!bubble) return;
     const bs = bubbleSize(g, bubble);
     const bubbleTop = fit(x, tagTop - bs.h - 1, bs.w, bs.h);
     drawBubble(g, x, bubbleTop + 26, bubble);
   };
-  drawLabel(px, py, scale, s.tag, s.bubble);
-  for (const l of labels) drawLabel(l.x, l.y, l.scale, l.tag, l.bubble);
+  drawLabel(px, py, scale, s.tag, s.shown ? "ON" : undefined, s.bubble);
+  for (const l of labels) drawLabel(l.x, l.y, l.scale, l.tag, l.state, l.bubble);
 }
 
 // ---------------------------------------------------------------------------
@@ -1169,7 +1339,8 @@ function ProfileModal({
 }) {
   const [nickname, setNickname] = useState(initial?.nickname ?? defaultNickname);
   const [mbti, setMbti] = useState<Mbti | null>(initial?.mbti ?? null);
-  const [visible, setVisible] = useState(initial?.visible ?? true);
+  // Not shown until the person ticks it: entering the club is not consent.
+  const [visible, setVisible] = useState(initial?.visible ?? false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const clean = cleanNickname(nickname);
@@ -1178,7 +1349,7 @@ function ProfileModal({
     e.preventDefault();
     if (!clean) return setError(`별명은 1~${NICKNAME_MAX}자로, 글자·숫자·띄어쓰기 위주로 적어 주세요.`);
     if (!mbti) return setError("MBTI 달토끼를 하나 골라 주세요.");
-    if (!storeReady) return onSaved({ nickname: clean, mbti, visible }, false);
+    if (!storeReady) return onSaved({ nickname: clean, mbti, visible, status: "" }, false);
     setBusy(true);
     setError(null);
     try {
@@ -1231,8 +1402,8 @@ function ProfileModal({
         <label className="flex items-start gap-2 rounded-sm border-2 border-plywood-400 bg-plywood-200 px-3 py-2 text-[13px]">
           <input type="checkbox" checked={visible} onChange={(e) => setVisible(e.target.checked)} className="mt-1 size-4 accent-[var(--color-brown)]" />
           <span>
-            <b>다른 멤버에게 내 토끼 보이기</b>
-            <span className="block text-[12px] text-ink-soft">켜 두면 함께 접속한 멤버에게 내 토끼, 별명 · MBTI, 있는 장면, 말풍선이 보여요. 끄면 나만 보여요. 나중에 툴바에서 바꿀 수 있어요.</span>
+            <b>다른 멤버에게 내 토끼 공개하기 (동의)</b>
+            <span className="block text-[12px] text-ink-soft">체크하면 이 게임을 하는 다른 사람에게 내 별명 · MBTI, 말풍선, 지금 게임 화면을 보고 있는지(ON/OFF)가 보여요. 내 위치·접속 시각·회원 정보는 보내지 않아요. 체크하지 않으면 나만 보여요. 게임에 들어온 것만으로는 공개되지 않고, 툴바에서 언제든 바꿀 수 있어요.</span>
           </span>
         </label>
         {!storeReady && <p className="rounded-sm bg-plywood-200 px-3 py-2 text-[12px] text-brown">프로필 저장소가 아직 준비 중이에요. 지금 고른 토끼는 이번 방문에만 쓰여요.</p>}

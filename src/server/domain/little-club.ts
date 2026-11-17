@@ -1,7 +1,7 @@
-import { BUBBLE_TTL_MS, cleanBubble, cleanNickname, isClubScene, isMbti, PRESENCE_TTL_MS, type ClubScene, type Mbti } from "@/lib/little-club";
+import { cleanBubble, cleanNickname, isMbti, MAX_SESSIONS, ONLINE_TTL_MS, type Mbti } from "@/lib/little-club";
 import type { Planned } from "../store";
 import { newId, seoulIso } from "../store/ids";
-import { cellText, type Tables } from "../store/schema";
+import { cellText, type Row, type Tables } from "../store/schema";
 
 /**
  * THE LITTLE CLUB: who may enter, and the one profile row per person.
@@ -33,11 +33,22 @@ export const isGuestKey = (key: string) => key.startsWith(GUEST_KEY_PREFIX);
 export interface ClubProfile {
   nickname: string;
   mbti: Mbti;
-  /** Shown to the others in the club (name tag, scene, bubble). Rows from before the setting count as shown. */
+  /**
+   * Agreed to be shown to the others (name tag, status line, ON/OFF). Only an explicit opt-in counts:
+   * entering the club is not consent (see CONSENT).
+   */
   visible: boolean;
+  /** The person's current status line (the speech bubble); "" = none. */
+  status: string;
 }
 
-const isFalse = (v: unknown) => ["false", "no", "0", "off"].includes(cellText(v as string).trim().toLowerCase());
+/**
+ * The value of ClubProfiles.visible that means "agreed to be shown", written only when the person ticks
+ * the box (v7, 2026-11-17). Rows from before — empty, or "true" from the earlier pre-ticked box — don't
+ * count, so those people start hidden and opt in again.
+ */
+export const CONSENT = "agreed";
+const isTrue = (v: unknown) => cellText(v as string).trim() === CONSENT;
 
 /** The member's own profile, or null before the first save (a row with an unknown MBTI counts as none). */
 export function clubProfileOf(tables: Tables, memberId: string): ClubProfile | null {
@@ -45,13 +56,13 @@ export function clubProfileOf(tables: Tables, memberId: string): ClubProfile | n
   if (!row) return null;
   const mbti = cellText(row.mbti).trim().toUpperCase();
   const nickname = cleanNickname(cellText(row.nickname));
-  return nickname && isMbti(mbti) ? { nickname, mbti, visible: !isFalse(row.visible) } : null;
+  return nickname && isMbti(mbti) ? { nickname, mbti, visible: isTrue(row.visible), status: cleanBubble(cellText(row.status)) } : null;
 }
 
 /** Shown when the database doesn't have the profile table yet (deployed before the schema update). */
 export const CLUB_TABLE_MISSING = "리틀 클럽 프로필 저장소가 아직 준비되지 않았어요. 운영진이 DB 업데이트를 마치면 저장할 수 있어요.";
 
-/** Save (first time) or change the member's nickname + MBTI. Only ever touches that member's own row. */
+/** Save (first time) or change the member's nickname + MBTI (+ the show-to-others choice). Only ever touches that member's own row. */
 export function planClubProfileSave(
   data: Tables,
   ctx: { now: number; memberId: string; nickname: string; mbti: string; visible?: boolean },
@@ -68,9 +79,11 @@ export function planClubProfileSave(
   const at = seoulIso(ctx.now);
   const commitId = newId("C", ctx.now, 8);
   const current = rows[0];
-  const visible = ctx.visible ?? (current ? !isFalse(current.visible) : true);
-  const shown = visible ? "true" : "false";
-  if (current && cellText(current.nickname) === nickname && cellText(current.mbti) === mbti && !isFalse(current.visible) === visible) return { noop: true };
+  // Not shown unless the person ticks it (now or before).
+  const visible = ctx.visible ?? (current ? isTrue(current.visible) : false);
+  const shown = visible ? CONSENT : "false";
+  const status = current ? cleanBubble(cellText(current.status)) : "";
+  if (current && cellText(current.nickname) === nickname && cellText(current.mbti) === mbti && isTrue(current.visible) === visible) return { noop: true };
   const audit = (before: unknown, after: unknown) => ({
     type: "append" as const,
     table: "AuditLog" as const,
@@ -93,10 +106,10 @@ export function planClubProfileSave(
         checks: [{ type: "exists", table: "ClubProfiles", id: ctx.memberId, fields: before }],
         ops: [{ type: "update", table: "ClubProfiles", id: ctx.memberId, set: { nickname, mbti, visible: shown, updated_at: at } }, audit(before, { nickname, mbti, visible: shown })],
       },
-      result: { nickname, mbti, visible },
+      result: { nickname, mbti, visible, status },
     };
   }
-  const row = { member_id: ctx.memberId, nickname, mbti, created_at: at, updated_at: at, visible: shown };
+  const row = { member_id: ctx.memberId, nickname, mbti, created_at: at, updated_at: at, visible: shown, status: "" };
   return {
     commit: {
       id: commitId,
@@ -107,78 +120,118 @@ export function planClubProfileSave(
       ],
       ops: [{ type: "append", table: "ClubProfiles", row }, audit(null, { nickname, mbti, visible: shown })],
     },
-    result: { nickname, mbti, visible },
+    result: { nickname, mbti, visible, status: "" },
   };
 }
 
 // ---------------------------------------------------------------------------
-// Presence: who is in the club right now (no history; one row per person)
+// The status line: the latest one only, saved when the person presses save / clear
 // ---------------------------------------------------------------------------
 
-const ms = (v: unknown) => {
-  const t = Date.parse(cellText(v as string));
-  return Number.isFinite(t) ? t : 0;
-};
-
 /**
- * Record where this person is (and, when given, their one current bubble). Only someone
- * with a saved rabbit takes part. Overwrites the single row; no audit trail (it is not a record).
+ * Set (or clear, with "") the person's one status line. Only ever their own row; no history and no
+ * audit trail (it is not a record). Kept until they change it, also while they are OFF.
  */
-export function planPresence(
-  data: Tables,
-  ctx: { now: number; key: string; scene: string; x: number; y: number; bubble?: string },
-): Planned {
-  if (data.ClubPresence === undefined || data.ClubProfiles === undefined) return { refuse: CLUB_TABLE_MISSING };
-  if (!clubProfileOf(data, ctx.key)) return { refuse: "먼저 내 토끼를 골라 주세요." };
-  if (!isClubScene(ctx.scene)) return { refuse: "장면을 확인해 주세요." };
-  const at = seoulIso(ctx.now);
-  const x = Math.round(Math.max(0, Math.min(512, Number(ctx.x) || 0)));
-  const y = Math.round(Math.max(0, Math.min(320, Number(ctx.y) || 0)));
-  const set: Record<string, string | number> = { scene: ctx.scene, x, y, seen_at: at };
-  if (ctx.bubble !== undefined) {
-    set.bubble = cleanBubble(ctx.bubble);
-    set.bubble_at = set.bubble ? at : "";
-  }
-  const exists = data.ClubPresence.some((r) => cellText(r.member_id) === ctx.key);
+export function planClubStatus(data: Tables, ctx: { now: number; key: string; status: string }): Planned {
+  if (data.ClubProfiles === undefined) return { refuse: CLUB_TABLE_MISSING };
+  const row = data.ClubProfiles.find((r) => cellText(r.member_id) === ctx.key);
+  if (!row || !clubProfileOf(data, ctx.key)) return { refuse: "먼저 내 토끼를 골라 주세요." };
+  const status = cleanBubble(ctx.status);
+  if (cellText(row.status) === status) return { noop: true };
   return {
     commit: {
       id: newId("C", ctx.now, 8),
-      checks: exists ? [{ type: "exists", table: "ClubPresence", id: ctx.key }] : [{ type: "absent", table: "ClubPresence", where: { member_id: ctx.key } }],
-      ops: exists
-        ? [{ type: "update", table: "ClubPresence", id: ctx.key, set }]
-        : [{ type: "append", table: "ClubPresence", row: { member_id: ctx.key, bubble: "", bubble_at: "", ...set } }],
+      checks: [{ type: "exists", table: "ClubProfiles", id: ctx.key }],
+      ops: [{ type: "update", table: "ClubProfiles", id: ctx.key, set: { status } }],
+    },
+    result: { statusText: status || null },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// ON / OFF: each open game tab signals with the periodic sync. One row per person holds a
+// tiny map of their tabs' last signals; ON = any tab signalled within ONLINE_TTL_MS.
+// ---------------------------------------------------------------------------
+
+/** Server-made tab key (a hash of the person + the tab's random id), as stored in the map. */
+const SESSION_KEY = /^[a-f0-9]{8,40}$/;
+
+/** A person's tabs → last signal (epoch ms). Anything unreadable counts as no tabs. */
+export function sessionsOf(row: Row | undefined): Record<string, number> {
+  try {
+    const parsed: unknown = JSON.parse(cellText(row?.sessions) || "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(parsed)) if (SESSION_KEY.test(k) && typeof v === "number" && Number.isFinite(v)) out[k] = v;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** Tabs still counted as open at `now` (a signal from the future is ignored too). */
+function liveSessions(sessions: Record<string, number>, now: number): Record<string, number> {
+  return Object.fromEntries(Object.entries(sessions).filter(([, t]) => now - t <= ONLINE_TTL_MS && t - now <= 60_000));
+}
+
+export function isOnline(data: Tables, key: string, now: number): boolean {
+  const row = (data.ClubSessions ?? []).find((r) => cellText(r.member_id) === key);
+  return Object.keys(liveSessions(sessionsOf(row), now)).length > 0;
+}
+
+/**
+ * This tab says "I'm here" (or, with `leave`, "this tab is closing"). Only the caller's own row, and
+ * only this tab's entry; other tabs of the same person stay ON. Someone not shown to the others keeps
+ * no entries at all. Expired entries are dropped on every write, so no clean-up job is needed.
+ */
+export function planSessionSignal(data: Tables, ctx: { now: number; key: string; session: string; leave?: boolean }): Planned {
+  if (data.ClubSessions === undefined || data.ClubProfiles === undefined) return { refuse: CLUB_TABLE_MISSING };
+  if (!SESSION_KEY.test(ctx.session)) return { refuse: "잘못된 요청이에요." };
+  const profile = clubProfileOf(data, ctx.key);
+  const row = data.ClubSessions.find((r) => cellText(r.member_id) === ctx.key);
+  let next = liveSessions(sessionsOf(row), ctx.now);
+  delete next[ctx.session];
+  if (!ctx.leave && profile?.visible) next[ctx.session] = ctx.now;
+  next = Object.fromEntries(Object.entries(next).sort((a, b) => b[1] - a[1]).slice(0, MAX_SESSIONS));
+  const sessions = Object.keys(next).length ? JSON.stringify(next) : "";
+  const current = cellText(row?.sessions);
+  if (current === sessions) return { noop: true };
+  if (!row && !sessions) return { noop: true };
+  const at = seoulIso(ctx.now);
+  return {
+    commit: {
+      id: newId("C", ctx.now, 8),
+      // Two tabs of the same person signalling at once: the second re-reads and re-plans.
+      checks: row ? [{ type: "exists", table: "ClubSessions", id: ctx.key, fields: { sessions: current } }] : [{ type: "absent", table: "ClubSessions", where: { member_id: ctx.key } }],
+      ops: row
+        ? [{ type: "update", table: "ClubSessions", id: ctx.key, set: { sessions, updated_at: at } }]
+        : [{ type: "append", table: "ClubSessions", row: { member_id: ctx.key, sessions, updated_at: at } }],
     },
   };
 }
 
-/** The bubble this person left (still fresh), so it is there again after a reload or on another device. */
-export function myBubbleOf(data: Tables, key: string, now: number): string {
-  const row = (data.ClubPresence ?? []).find((r) => cellText(r.member_id) === key);
-  if (!row || now - ms(row.bubble_at) > BUBBLE_TTL_MS) return "";
-  return cleanBubble(cellText(row.bubble));
+/** One person as the sync hands them over (the caller swaps the key for an opaque id). */
+export interface ClubMemberRow {
+  key: string;
+  nickname: string;
+  mbti: Mbti;
+  statusText: string | null;
+  isOnline: boolean;
 }
 
 /**
- * The others in the club right now: refreshed within the presence window, with a saved rabbit
- * they chose to show. Never the person asking. Keys stay on the server (the caller maps them).
+ * Everyone shown to the others, ON or OFF, never the person asking: a saved rabbit, an explicit
+ * opt-in, and still allowed in (`allowed`: not suspended). Nickname, MBTI, status line and ON/OFF
+ * only; no times, no tabs, no places. ON people first, at most 40.
  */
-export function peersOf(data: Tables, selfKey: string, now: number): Array<{ key: string; nickname: string; mbti: Mbti; scene: ClubScene; x: number; y: number; bubble: string }> {
-  const out: Array<{ key: string; nickname: string; mbti: Mbti; scene: ClubScene; x: number; y: number; bubble: string }> = [];
-  for (const row of data.ClubPresence ?? []) {
+export function clubMembersOf(data: Tables, selfKey: string, now: number, allowed: (key: string) => boolean): ClubMemberRow[] {
+  const out: ClubMemberRow[] = [];
+  for (const row of data.ClubProfiles ?? []) {
     const key = cellText(row.member_id);
-    if (!key || key === selfKey || now - ms(row.seen_at) > PRESENCE_TTL_MS) continue;
+    if (!key || key === selfKey || !allowed(key)) continue;
     const profile = clubProfileOf(data, key);
-    const scene = cellText(row.scene);
-    if (!profile || !profile.visible || !isClubScene(scene)) continue;
-    out.push({
-      key,
-      nickname: profile.nickname,
-      mbti: profile.mbti,
-      scene,
-      x: Number(cellText(row.x)) || 0,
-      y: Number(cellText(row.y)) || 0,
-      bubble: now - ms(row.bubble_at) > BUBBLE_TTL_MS ? "" : cleanBubble(cellText(row.bubble)),
-    });
+    if (!profile?.visible) continue;
+    out.push({ key, nickname: profile.nickname, mbti: profile.mbti, statusText: profile.status || null, isOnline: isOnline(data, key, now) });
   }
-  return out.slice(0, 40);
+  return out.sort((a, b) => Number(b.isOnline) - Number(a.isOnline)).slice(0, 40);
 }

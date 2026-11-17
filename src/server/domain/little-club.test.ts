@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { cleanBubble, cleanNickname, nameTag } from "@/lib/little-club";
 import { applyCommit } from "../store/commit";
 import type { Row, Tables } from "../store/schema";
-import { CLUB_TABLE_MISSING, clubProfileOf, GUEST_KEY_PREFIX, littleClubVerdict, myBubbleOf, peersOf, planClubProfileSave, planPresence } from "./little-club";
+import { CLUB_TABLE_MISSING, clubMembersOf, clubProfileOf, GUEST_KEY_PREFIX, isOnline, littleClubVerdict, planClubProfileSave, planClubStatus, planSessionSignal, sessionsOf } from "./little-club";
 
 const TODAY = "2026-12-10";
 const NOW = Date.parse(`${TODAY}T12:00:00+09:00`);
@@ -36,8 +36,10 @@ describe("nickname and bubble input", () => {
     expect(cleanBubble("a\u0000b​c")).toBe("abc");
   });
 
-  it("tags the rabbit as 별명 · MBTI", () => {
+  it("tags the rabbit as 별명 · MBTI (· ON/OFF in the game)", () => {
     expect(nameTag("달토끼", "INFP")).toBe("달토끼 · INFP");
+    expect(nameTag("달토끼", "INFP", true)).toBe("달토끼 · INFP · ON");
+    expect(nameTag("달토끼", "INFP", false)).toBe("달토끼 · INFP · OFF");
   });
 });
 
@@ -119,77 +121,149 @@ describe("saving the profile", () => {
   });
 });
 
-describe("who is in the club right now", () => {
-  const at = (minutesAgo: number) => new Date(NOW - minutesAgo * 60_000 + 9 * 3600_000).toISOString().slice(0, 19) + "+09:00";
+describe("v7: status lines and ON/OFF", () => {
+  const m = (id: string, status = "active"): Row => ({ member_id: id, name: id, email: `${id}@x.dev`, role: "member", status });
+  /** A: me. B: shown, ON in one tab. C: chose only-me. D: shown, last signal 80 s ago. E: from before the setting (empty = not shown). */
   function club(): Tables {
-    const m = (id: string): Row => ({ member_id: id, name: id, email: `${id}@x.dev`, role: "member", status: "active" });
     return {
-      Members: [m("A"), m("B"), m("C"), m("D")],
+      Members: [m("A"), m("B"), m("C"), m("D"), m("E"), m("F"), m("S", "inactive")],
       ClubProfiles: [
-        { member_id: "A", nickname: "에이", mbti: "INFP", visible: "true" },
-        { member_id: "B", nickname: "비", mbti: "ESTP", visible: "" }, // from before the setting → shown
-        { member_id: "C", nickname: "씨", mbti: "ISFJ", visible: "false" }, // chose "only me"
-        { member_id: "D", nickname: "디", mbti: "ENFJ", visible: "true" },
+        { member_id: "A", nickname: "에이", mbti: "INFP", visible: "agreed", status: "" },
+        { member_id: "B", nickname: "비", mbti: "ESTP", visible: "agreed", status: "불멍 중" },
+        { member_id: "C", nickname: "씨", mbti: "ISFJ", visible: "false", status: "비밀" },
+        { member_id: "D", nickname: "디", mbti: "ENFJ", visible: "agreed", status: "다음엔 같이 올라요" },
+        { member_id: "E", nickname: "이", mbti: "INTP", visible: "", status: "" },
+        { member_id: "F", nickname: "에프", mbti: "ISFP", visible: "true", status: "예전 기본값" }, // pre-ticked box of the earlier version → not consent
+        { member_id: "S", nickname: "에스", mbti: "ISTP", visible: "agreed", status: "정지됨" },
       ],
-      ClubPresence: [
-        { member_id: "B", scene: "outdoor", x: 200, y: 260, bubble: "불멍 중", bubble_at: at(5), seen_at: at(1) },
-        { member_id: "C", scene: "indoor", x: 100, y: 200, bubble: "", bubble_at: "", seen_at: at(0) },
-        { member_id: "D", scene: "indoor", x: 300, y: 250, bubble: "옛날 말풍선", bubble_at: at(45), seen_at: at(10) }, // left
+      ClubSessions: [
+        { member_id: "B", sessions: JSON.stringify({ aaaaaaaaaa: NOW - 20_000 }), updated_at: "" },
+        { member_id: "C", sessions: JSON.stringify({ cccccccccc: NOW - 1_000 }), updated_at: "" },
+        { member_id: "D", sessions: JSON.stringify({ dddddddddd: NOW - 80_000 }), updated_at: "" },
       ],
       AuditLog: [],
     };
   }
+  /** As the server decides it: on the member list and not suspended. */
+  const allowed = (data: Tables) => (key: string) => {
+    const row = (data.Members ?? []).find((r) => r.member_id === key);
+    return row !== undefined && littleClubVerdict({ status: String(row.status) }).ok;
+  };
+  const apply = (data: Tables, planned: ReturnType<typeof planSessionSignal>) => {
+    if (!("commit" in planned)) throw new Error(JSON.stringify(planned));
+    expect(applyCommit(data, planned.commit)).toEqual({ ok: true });
+  };
 
-  it("shows the others who are here and chose to be seen, never me", () => {
-    const peers = peersOf(club(), "A", NOW);
-    expect(peers.map((p) => p.key)).toEqual(["B"]); // C hid, D left 10 min ago
-    expect(peers[0]).toMatchObject({ nickname: "비", mbti: "ESTP", scene: "outdoor", x: 200, y: 260, bubble: "불멍 중" });
-    expect(peersOf(club(), "B", NOW).map((p) => p.key)).toEqual([]);
-  });
-
-  it("records only my own row, with one bubble that stays until I change it", () => {
+  it("hands over only people who opted in — ON or OFF — with nickname, MBTI, status line and ON/OFF only", () => {
     const data = club();
-    const first = planPresence(data, { now: NOW, key: "A", scene: "indoor", x: 120.6, y: 999, bubble: "  오늘은   슬랩 " });
-    if (!("commit" in first)) throw new Error("refused");
-    applyCommit(data, first.commit);
-    expect(data.ClubPresence!.find((r) => r.member_id === "A")).toMatchObject({ scene: "indoor", x: 121, y: 320, bubble: "오늘은 슬랩" });
-    // moving outside without a new bubble keeps it
-    const moved = planPresence(data, { now: NOW + 1000, key: "A", scene: "outdoor", x: 60, y: 270 });
-    if (!("commit" in moved)) throw new Error("refused");
-    applyCommit(data, moved.commit);
-    expect(myBubbleOf(data, "A", NOW + 1000)).toBe("오늘은 슬랩");
-    expect(data.ClubPresence!.filter((r) => r.member_id === "A")).toHaveLength(1);
-    expect(data.ClubPresence!.find((r) => r.member_id === "B")).toMatchObject({ scene: "outdoor", bubble: "불멍 중" }); // untouched
-    expect(data.AuditLog).toHaveLength(0); // presence is not a record
+    const list = clubMembersOf(data, "A", NOW, allowed(data));
+    expect(list).toEqual([
+      { key: "B", nickname: "비", mbti: "ESTP", statusText: "불멍 중", isOnline: true },
+      { key: "D", nickname: "디", mbti: "ENFJ", statusText: "다음엔 같이 올라요", isOnline: false }, // OFF, line kept
+    ]);
+    // never me; C chose only-me, E and F never opted in under the current box, S is suspended
+    expect(list.map((p) => p.key)).not.toContain("A");
+    expect(Object.keys(list[0]).sort()).toEqual(["isOnline", "key", "mbti", "nickname", "statusText"]);
   });
 
-  it("lets a bubble fade after 30 minutes", () => {
-    expect(myBubbleOf(club(), "D", NOW)).toBe("");
-    expect(myBubbleOf(club(), "B", NOW)).toBe("불멍 중");
-  });
-
-  it("needs a saved rabbit, a real scene, and the table", () => {
+  it("is ON within 75 s of a tab's last signal, OFF after", () => {
     const data = club();
-    expect(planPresence(data, { now: NOW, key: "NOBODY", scene: "indoor", x: 1, y: 1 })).toHaveProperty("refuse");
-    expect(planPresence(data, { now: NOW, key: "A", scene: "rooftop", x: 1, y: 1 })).toHaveProperty("refuse");
-    delete data.ClubPresence;
-    expect(planPresence(data, { now: NOW, key: "A", scene: "indoor", x: 1, y: 1 })).toEqual({ refuse: CLUB_TABLE_MISSING });
+    expect(isOnline(data, "B", NOW)).toBe(true);
+    expect(isOnline(data, "B", NOW + 54_000)).toBe(true); // 74 s after the signal
+    expect(isOnline(data, "B", NOW + 56_000)).toBe(false); // 76 s
+    expect(isOnline(data, "D", NOW)).toBe(false);
+    expect(isOnline(data, "NOBODY", NOW)).toBe(false);
   });
 
-  it("saves the show-to-others choice with the profile (shown by default)", () => {
-    const data: Tables = { Members: [{ member_id: "A", name: "A", email: "a@x.dev", role: "member", status: "active" }], ClubProfiles: [], AuditLog: [] };
+  it("a signal touches only my own row and my own tab, with no audit trail", () => {
+    const data = club();
+    apply(data, planSessionSignal(data, { now: NOW, key: "A", session: "1111111111" }));
+    expect(isOnline(data, "A", NOW)).toBe(true);
+    expect(data.ClubSessions!.filter((r) => r.member_id === "A")).toHaveLength(1);
+    expect(sessionsOf(data.ClubSessions!.find((r) => r.member_id === "B"))).toEqual({ aaaaaaaaaa: NOW - 20_000 }); // untouched
+    expect(data.AuditLog).toHaveLength(0);
+    // nothing about places or scenes is stored
+    expect(Object.keys(data.ClubSessions!.find((r) => r.member_id === "A")!).sort()).toEqual(["member_id", "sessions", "updated_at"]);
+  });
+
+  it("two tabs: closing one keeps me ON; closing both turns me OFF", () => {
+    const data = club();
+    apply(data, planSessionSignal(data, { now: NOW, key: "A", session: "1111111111" }));
+    apply(data, planSessionSignal(data, { now: NOW + 1000, key: "A", session: "2222222222" }));
+    apply(data, planSessionSignal(data, { now: NOW + 2000, key: "A", session: "1111111111", leave: true }));
+    expect(isOnline(data, "A", NOW + 2000)).toBe(true);
+    expect(Object.keys(sessionsOf(data.ClubSessions!.find((r) => r.member_id === "A")))).toEqual(["2222222222"]);
+    apply(data, planSessionSignal(data, { now: NOW + 3000, key: "A", session: "2222222222", leave: true }));
+    expect(isOnline(data, "A", NOW + 3000)).toBe(false);
+  });
+
+  it("a tab that never says goodbye drops out after the window, and old entries are pruned on the next write", () => {
+    const data = club();
+    apply(data, planSessionSignal(data, { now: NOW, key: "A", session: "1111111111" }));
+    expect(isOnline(data, "A", NOW + 76_000)).toBe(false);
+    apply(data, planSessionSignal(data, { now: NOW + 200_000, key: "A", session: "3333333333" }));
+    expect(Object.keys(sessionsOf(data.ClubSessions!.find((r) => r.member_id === "A")))).toEqual(["3333333333"]);
+  });
+
+  it("someone not shown keeps no ON entry at all (and turning it off clears theirs)", () => {
+    const data = club();
+    expect(planSessionSignal(data, { now: NOW, key: "E", session: "4444444444" })).toEqual({ noop: true }); // no row made
+    // C has an entry from before; their next signal clears it
+    apply(data, planSessionSignal(data, { now: NOW, key: "C", session: "cccccccccc" }));
+    expect(isOnline(data, "C", NOW)).toBe(false);
+  });
+
+  it("two tabs signalling at once: the second re-reads instead of overwriting", () => {
+    const data = club();
+    apply(data, planSessionSignal(data, { now: NOW, key: "A", session: "1111111111" }));
+    const one = planSessionSignal(data, { now: NOW + 10, key: "A", session: "1111111111" });
+    const two = planSessionSignal(data, { now: NOW + 20, key: "A", session: "2222222222" });
+    if (!("commit" in one) || !("commit" in two)) throw new Error("refused");
+    expect(applyCommit(data, one.commit).ok).toBe(true);
+    expect(applyCommit(data, two.commit)).toMatchObject({ ok: false, error: "conflict" });
+  });
+
+  it("ignores junk in the stored map and refuses a bad tab key or a missing table", () => {
+    expect(sessionsOf({ sessions: "not json" })).toEqual({});
+    expect(sessionsOf({ sessions: JSON.stringify({ "bad key!": 1, abcdef1234: "x", abcdef5678: 5 }) })).toEqual({ abcdef5678: 5 });
+    const data = club();
+    expect(planSessionSignal(data, { now: NOW, key: "A", session: "<script>" })).toHaveProperty("refuse");
+    delete data.ClubSessions;
+    expect(planSessionSignal(data, { now: NOW, key: "A", session: "1111111111" })).toEqual({ refuse: CLUB_TABLE_MISSING });
+  });
+
+  it("keeps one status line per person until they change or clear it (no history, no audit)", () => {
+    const data = club();
+    const set = planClubStatus(data, { now: NOW, key: "A", status: "  오늘은   슬랩 " });
+    if (!("commit" in set)) throw new Error("refused");
+    expect(set.result).toEqual({ statusText: "오늘은 슬랩" });
+    applyCommit(data, set.commit);
+    expect(clubProfileOf(data, "A")!.status).toBe("오늘은 슬랩");
+    expect(planClubStatus(data, { now: NOW, key: "A", status: "오늘은 슬랩" })).toEqual({ noop: true });
+    const cleared = planClubStatus(data, { now: NOW + 1, key: "A", status: "" });
+    if (!("commit" in cleared)) throw new Error("refused");
+    expect(cleared.result).toEqual({ statusText: null });
+    applyCommit(data, cleared.commit);
+    expect(clubProfileOf(data, "A")!.status).toBe("");
+    expect(data.ClubProfiles!.find((r) => r.member_id === "B")!.status).toBe("불멍 중"); // untouched
+    expect(data.AuditLog).toHaveLength(0);
+    // no rabbit yet → nothing to attach a line to
+    expect(planClubStatus(data, { now: NOW, key: "NOBODY", status: "hi" })).toHaveProperty("refuse");
+  });
+
+  it("is not shown until the person opts in; the choice is kept on later saves", () => {
+    const data: Tables = { Members: [m("A")], ClubProfiles: [], AuditLog: [] };
     const made = planClubProfileSave(data, { now: NOW, memberId: "A", nickname: "에이", mbti: "INFP" });
     if (!("commit" in made)) throw new Error("refused");
     applyCommit(data, made.commit);
+    expect(clubProfileOf(data, "A")!.visible).toBe(false); // entering is not consent
+    const shown = planClubProfileSave(data, { now: NOW, memberId: "A", nickname: "에이", mbti: "INFP", visible: true });
+    if (!("commit" in shown)) throw new Error("refused");
+    applyCommit(data, shown.commit);
     expect(clubProfileOf(data, "A")!.visible).toBe(true);
-    const hidden = planClubProfileSave(data, { now: NOW, memberId: "A", nickname: "에이", mbti: "INFP", visible: false });
-    if (!("commit" in hidden)) throw new Error("refused");
-    applyCommit(data, hidden.commit);
-    expect(clubProfileOf(data, "A")!.visible).toBe(false);
-    // changing only the nickname keeps the choice
     const renamed = planClubProfileSave(data, { now: NOW, memberId: "A", nickname: "에이에이", mbti: "INFP" });
     if (!("commit" in renamed)) throw new Error("refused");
     applyCommit(data, renamed.commit);
-    expect(clubProfileOf(data, "A")).toEqual({ nickname: "에이에이", mbti: "INFP", visible: false });
+    expect(clubProfileOf(data, "A")).toEqual({ nickname: "에이에이", mbti: "INFP", visible: true, status: "" });
   });
 });

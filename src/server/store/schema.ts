@@ -149,17 +149,19 @@ export const TABLES = {
     "status",
   ],
   /**
-   * THE LITTLE CLUB: one row per member (nickname + MBTI of their moon rabbit), only ever read
-   * by that member. Read on its own (see LITTLE_CLUB_TABLES), so a database without the table
-   * yet only closes the club's profile save, never the rest of the site.
+   * THE LITTLE CLUB: one row per person (nickname + MBTI of their moon rabbit, whether they agreed
+   * to be shown to the others, and their one current status line). `visible` is "agreed" only after
+   * an explicit opt-in (see CONSENT in src/server/domain/little-club.ts). `status` is the latest line only (no history), kept until they change or
+   * clear it. Read on its own (see LITTLE_CLUB_TABLES), so a database without the table yet only
+   * closes the club, never the rest of the site.
    */
-  ClubProfiles: ["member_id", "nickname", "mbti", "created_at", "updated_at", "visible"],
+  ClubProfiles: ["member_id", "nickname", "mbti", "created_at", "updated_at", "visible", "status"],
   /**
-   * THE LITTLE CLUB presence: where each person is right now (scene and spot) and their one
-   * current speech bubble. One row per person, overwritten (no history); a row not refreshed
-   * for a couple of minutes simply means "not here". Read on its own like ClubProfiles.
+   * THE LITTLE CLUB ON/OFF: one row per person, overwritten. `sessions` is a small JSON map of that
+   * person's open game tabs → last signal (epoch ms), pruned on every write; someone is ON while any
+   * tab signalled within the last 75 s. No positions, no scene, no history.
    */
-  ClubPresence: ["member_id", "scene", "x", "y", "bubble", "bubble_at", "seen_at"],
+  ClubSessions: ["member_id", "sessions", "updated_at"],
   AuditLog: ["log_id", "commit_id", "actor_id", "action", "target_id", "before_value", "after_value", "created_at"],
   Settings: ["key", "value", "description"],
   // v0.1 tables (read by the public feed / written by the proposal form)
@@ -316,8 +318,8 @@ export const STAMP_TABLES: TableName[] = ["StampDefinitions", "StampAwards"];
 /** THE LITTLE CLUB profiles, read on their own like the stamps (a missing table must not break other reads). */
 export const LITTLE_CLUB_TABLES: TableName[] = ["ClubProfiles"];
 
-/** Profiles + presence (who is in the club right now). */
-export const PRESENCE_TABLES: TableName[] = ["ClubProfiles", "ClubPresence"];
+/** Profiles + ON/OFF sessions: what the club's one periodic sync reads and writes. */
+export const SYNC_TABLES: TableName[] = ["ClubProfiles", "ClubSessions"];
 
 /** AFTER HOURS RADIO page: tracks, who may add/delete, and the player switch — one gateway call. */
 export const RADIO_TABLES: TableName[] = ["Members", "Memberships", "Payments", "RadioTracks", "Settings"];

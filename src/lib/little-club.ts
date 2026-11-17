@@ -54,29 +54,53 @@ export function cleanNickname(input: string): string | null {
   return value;
 }
 
-/** A status bubble: one short line, no control characters. "" clears it. */
+/** A status line (the speech bubble): one short line, no control characters. "" clears it. */
 export function cleanBubble(input: string): string {
   return [...input.normalize("NFC").replace(/[\p{Cc}\p{Cf}]/gu, "").replace(/\s+/g, " ").trim()].slice(0, BUBBLE_MAX).join("");
 }
 
-/** Someone counts as "here" while their presence was refreshed within this window. */
-export const PRESENCE_TTL_MS = 2 * 60_000;
-/** A speech bubble fades after this long. */
-export const BUBBLE_TTL_MS = 30 * 60_000;
+// ---------------------------------------------------------------------------
+// The one periodic sync (v7): while the game is on screen, one request every 30 s both says
+// "this tab is here" and fetches everyone's latest status line and ON/OFF. Nothing else is
+// polled; positions and motions never leave the browser.
+// ---------------------------------------------------------------------------
 
-export type ClubScene = "indoor" | "outdoor";
-export const isClubScene = (value: string): value is ClubScene => value === "indoor" || value === "outdoor";
+/** How often an open, visible game syncs. */
+export const SYNC_INTERVAL_MS = 30_000;
+/** After failures the next try waits longer (30 → 60 → 120 s), and goes back to 30 s on success. */
+export const SYNC_BACKOFF_MS = [30_000, 60_000, 120_000] as const;
+/** Someone is ON while one of their game tabs signalled within this window. */
+export const ONLINE_TTL_MS = 75_000;
+/** Open tabs remembered per person (a cap, so the row stays tiny). */
+export const MAX_SESSIONS = 6;
 
-/** Another person in the club, as the browser receives it (an opaque id, never a member id or email). */
-export interface ClubPeer {
+/** A tab's own random id (made in the browser for this page load only). */
+export const isSessionId = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9-]{8,64}$/.test(value);
+
+/**
+ * Another person as the browser receives it: an opaque id (never the member id or email),
+ * their rabbit, their current status line and ON/OFF. Only people who agreed to be shown.
+ */
+export interface ClubMember {
   id: string;
   nickname: string;
   mbti: Mbti;
-  scene: ClubScene;
-  x: number;
-  y: number;
-  bubble: string;
+  statusText: string | null;
+  isOnline: boolean;
 }
 
-/** The tag over the player's rabbit: "별명 · MBTI". */
-export const nameTag = (nickname: string, mbti: string) => `${nickname} · ${mbti}`;
+/** What POST /api/little-club/sync answers. */
+export type ClubSyncResponse =
+  | {
+      ok: true;
+      members: ClubMember[];
+      /** My own row, so a change made on another device shows here too. */
+      me: { statusText: string | null; visible: boolean } | null;
+      /** false while the database has no session table yet (everyone then shows OFF). */
+      presence: boolean;
+    }
+  | { ok: false; reason: "login" | "suspended" | "unavailable" | "bad-request" };
+
+/** The tag over a rabbit: "별명 · MBTI", or "별명 · MBTI · ON/OFF" in the game. */
+export const nameTag = (nickname: string, mbti: string, online?: boolean) =>
+  `${nickname} · ${mbti}${online === undefined ? "" : online ? " · ON" : " · OFF"}`;

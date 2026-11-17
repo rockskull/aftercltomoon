@@ -20,14 +20,18 @@
 - Vercel 환경변수의 `CLUB_API_URL`·`CLUB_API_SECRET`은 이전이 끝났으니 지워도 돼요(남아 있어도 DB가 우선).
 - ⚠️ 로컬 `.env.local`에 `DATABASE_URL`이 있으면 `npm run dev`도 **실제 DB**를 써요. 시험은 Neon 개발 브랜치나 데모(DATABASE_URL 없이)로.
 
-### THE LITTLE CLUB (`/little-club`, 2026-11-16)
+### THE LITTLE CLUB (`/little-club`, 2026-11-16 · v7 동기화 2026-11-17)
 
-- 로그인하면 들어오는 픽셀 아지트. 홈 **아지트 들어가기**·MY 메뉴에서 들어가요. 자세한 규칙은 README "THE LITTLE CLUB", 요구사항 원본은 `docs/little-club/handoff/`.
+- 로그인하면 들어오는 픽셀 아지트. 홈 **아지트 들어가기**·MY 메뉴에서 들어가요. 자세한 규칙은 README "THE LITTLE CLUB", 요구사항은 `docs/little-club/handoff-v7/`(정본, 처음 버전은 `handoff/`), 검수 결과는 `docs/little-club/VALIDATION.md`.
 - ⚠️ **DB:** 새 테이블 `club_profiles`가 필요해요. 운영 DB에 `npm run db:migrate -- --schema-only`(없는 것만 만들고 기존 데이터 그대로)를 실행해 주세요. 먼저 배포돼도 다른 화면은 영향이 없고, 리틀 클럽에서 별명·MBTI 저장만 "준비 중"으로 나와요(이번 방문에만 쓰기). 되돌리기: 코드를 되돌리면 테이블은 안 쓰여요(필요하면 `club_profiles`만 지우면 됨, 별명·MBTI만 사라짐).
-- ⚠️ **DB (함께 있기 추가분):** 새 테이블 `club_presence`와 `club_profiles.visible` 열이 필요해요. 같은 `npm run db:migrate -- --schema-only`로 추가돼요(기존 데이터 그대로). 먼저 배포돼도 혼자 노는 화면으로 동작해요(서로 안 보이고 말풍선은 이 화면에서만).
-- 함께 있기는 화면이 열려 있을 때 8초마다 읽기 1번, 멈출 때·45초마다 쓰기 1번이에요. 접속자가 있는 동안 Neon이 깨어 있어요(무료 한도 확인).
+- ✅ **DB (v7 동기화, 2026-11-17 운영 DB 적용 완료):** 새 테이블 `club_sessions`와 `club_profiles.status` 열. 같은 `npm run db:migrate -- --schema-only`로 추가돼요(없는 것만 추가, 기존 데이터 그대로). 마이그레이션 전에 배포되면: 말풍선 저장이 "저장소 준비 중"으로 막히고, 모두 OFF로 보여요(다른 화면은 영향 없음).
+- 예전 `club_presence` 테이블(좌표·장면·30분 말풍선)은 이제 안 써요. 자동으로 지우지 않았어요. 필요 없으면 운영진이 직접 `drop table club_presence;` (안에 있던 건 지난 위치와 지난 말풍선뿐).
+- **공개 동의 기본값이 바뀌었어요:** 이제 직접 켜야 공개(빈 값 = 비공개). 그 전에 만든 프로필(빈 값, 또는 이전 버전에서 미리 체크돼 있던 `true`)은 비공개로 시작해요(저장된 값은 건드리지 않음, 동의 값은 `agreed`). 툴바 `🙈 나만 보기`를 누르면 공개돼요.
+- 동기화: 게임이 보이는 탭에서 30초마다 `POST /api/little-club/sync` 1번, 숨김·닫기·다른 화면은 0번(+ leave 1번). 되돌리기: 코드를 되돌리면 새 테이블·열은 안 쓰여요.
+- Neon: 게임이 열려 있는 동안은 30초마다 깨어 있어요. 배포 전후 Neon 콘솔의 CU-hours를 홈페이지 전체와 함께 비교해 주세요(검수표 NOT VERIFIED 항목).
 - 입장 권한: 2026-11-16 사용자 결정으로 **로그인한 사람은 누구나**(이용 중지 계정만 제외). 핸드오프의 "유효 회원권 보유자만"을 넓힌 것. 다시 좁히려면 `littleClubVerdict`.
-- 원본 사진(강아지 2마리, 간판, 나이트 조명)이 없어 설명만 보고 그렸어요. 사진이 오면 `src/app/little-club/scene.ts`에서 다듬기.
+- v7 핸드오프 사진(강아지 2마리, 간판, 나이트 조명, 라운지 공사 사진)을 보고 `src/app/little-club/scene.ts`를 다듬었어요. 사진 원본은 `private/little-club-handoff-originals/v7/`(git 제외)에만 있어요.
+- v7 핸드오프는 "유효 회원권 보유자만"이라고 다시 적혀 있지만, 사용자가 11-16에 정한 "로그인한 사람 누구나"를 그대로 두었어요(확인 필요).
 
 ### MOON STAMPS ST-07 INVESTOR'S NOSE (2026-11-15)
 

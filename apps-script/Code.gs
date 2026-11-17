@@ -50,8 +50,8 @@ var TABLES = {
     'created_at', 'updated_at'],
   ProblemReviews: ['review_id', 'problem_id', 'member_id', 'display_name', 'fun_rating', 'difficulty_feel', 'send_status',
     'comment', 'created_at', 'updated_at', 'status'],
-  ClubProfiles: ['member_id', 'nickname', 'mbti', 'created_at', 'updated_at', 'visible'],
-  ClubPresence: ['member_id', 'scene', 'x', 'y', 'bubble', 'bubble_at', 'seen_at'],
+  ClubProfiles: ['member_id', 'nickname', 'mbti', 'created_at', 'updated_at', 'visible', 'status'],
+  ClubSessions: ['member_id', 'sessions', 'updated_at'],
   AuditLog: ['log_id', 'commit_id', 'actor_id', 'action', 'target_id', 'before_value', 'after_value', 'created_at'],
   Settings: ['key', 'value', 'description'],
 };

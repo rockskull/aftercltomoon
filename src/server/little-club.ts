@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { bannerKind, type BannerKind } from "@/lib/access";
 import { getClubData } from "@/lib/club-data";
 import { parseMoment } from "@/lib/dates";
-import { cleanNickname, type ClubPeer } from "@/lib/little-club";
+import { cleanBubble, cleanNickname, type ClubMember, type ClubSyncResponse } from "@/lib/little-club";
 import type { RadioState } from "@/lib/radio";
 import type { MyStamp } from "@/lib/stamps";
 import type { ClubEvent, Enrollment } from "@/lib/types";
@@ -11,17 +11,18 @@ import { viewerAccess } from "./auth/access";
 import { readSession } from "./auth/session";
 import { getViewer, type Viewer } from "./auth/viewer";
 import type { Member } from "./domain/model";
-import { clubProfileOf, GUEST_KEY_PREFIX, littleClubVerdict, myBubbleOf, peersOf, type ClubBlock, type ClubProfile } from "./domain/little-club";
+import { CLUB_TABLE_MISSING, clubMembersOf, clubProfileOf, GUEST_KEY_PREFIX, isGuestKey, littleClubVerdict, planClubStatus, planSessionSignal, type ClubBlock, type ClubProfile } from "./domain/little-club";
 import { memberStamps } from "./domain/stamps";
 import { loadProblemList } from "./problems";
 import { loadRadio } from "./radio";
-import { readTables } from "./store";
-import { LITTLE_CLUB_TABLES, STAMP_TABLES, type Tables } from "./store/schema";
+import { readTables, runCommit } from "./store";
+import { LITTLE_CLUB_TABLES, STAMP_TABLES, SYNC_TABLES, type Tables } from "./store/schema";
 
 /**
  * THE LITTLE CLUB on the server: the gate every screen and action goes through,
  * and the data the page hands to the game. Everything here is about the signed-in
- * person only; nobody else's nickname, MBTI or stamps ever leave the server.
+ * person, plus — for the others who opted in to be shown — only their nickname, MBTI, status line
+ * and ON/OFF (behind an opaque id). Nobody's stamps, member id, email, times or places leave the server.
  */
 
 /** null member = signed in with Google but not on the member list. */
@@ -43,14 +44,34 @@ export async function littleClubGate(opts: { fresh?: boolean } = {}): Promise<Cl
   return { ok: true, viewer, member: viewer.member, profileKey: profileKeyFor(viewer.session.email, viewer.member) };
 }
 
+type OpenGate = Extract<ClubGate, { ok: true }>;
+
 /** What the browser gets to tell people apart: an opaque id per person (not the member id or email). */
 const peerId = (key: string) => createHash("sha256").update(`little-club-peer:${key}`).digest("hex").slice(0, 12);
 
-function toPeers(tables: Tables, selfKey: string, now: number): ClubPeer[] {
-  return peersOf(tables, selfKey, now).map(({ key, ...p }) => ({ id: peerId(key), ...p }));
+/** A tab's key in the person's session map: bound to the signed-in person here, so a tab id alone can never touch another row. */
+const tabKey = (profileKey: string, sessionId: string) => createHash("sha256").update(`little-club-tab:${profileKey}:${sessionId}`).digest("hex").slice(0, 20);
+
+/** Who may still be shown to the others: anyone not suspended (keys that aren't member ids belong to signed-in guests). */
+function allowedIn(viewer: Viewer): (key: string) => boolean {
+  const byId = new Map(viewer.club.members.map((m) => [m.id, m]));
+  return (key) => {
+    if (isGuestKey(key)) return true;
+    const member = byId.get(key);
+    return member !== undefined && littleClubVerdict(member).ok;
+  };
 }
 
-/** Profiles and presence, each read on its own (a database without the presence table yet must not break profiles). */
+function toMembers(tables: Tables, selfKey: string, now: number, allowed: (key: string) => boolean): ClubMember[] {
+  return clubMembersOf(tables, selfKey, now, allowed).map(({ key, ...m }) => ({ id: peerId(key), ...m }));
+}
+
+function meOf(tables: Tables, key: string): { statusText: string | null; visible: boolean } | null {
+  const profile = clubProfileOf(tables, key);
+  return profile ? { statusText: profile.status || null, visible: profile.visible } : null;
+}
+
+/** Profiles and sessions, each read on its own (a database without the session table yet must not break profiles). */
 async function readClubTables(): Promise<{ tables: Tables; profilesReady: boolean; presenceReady: boolean }> {
   const tables: Tables = {};
   let profilesReady = false;
@@ -65,21 +86,84 @@ async function readClubTables(): Promise<{ tables: Tables; profilesReady: boolea
     console.error("[little-club] profile read failed", error);
   }
   try {
-    const t = await readTables(["ClubPresence"], { fresh: true });
-    if (t.ClubPresence !== undefined) {
-      tables.ClubPresence = t.ClubPresence;
+    const t = await readTables(["ClubSessions"], { fresh: true });
+    if (t.ClubSessions !== undefined) {
+      tables.ClubSessions = t.ClubSessions;
       presenceReady = profilesReady;
     }
   } catch (error) {
-    console.error("[little-club] presence read failed", error);
+    console.error("[little-club] session read failed", error);
   }
   return { tables, profilesReady, presenceReady };
 }
 
-/** Who else is here right now (for the browser's light refresh). */
-export async function loadPeers(profileKey: string, now: number): Promise<{ ready: boolean; peers: ClubPeer[] }> {
-  const { tables, presenceReady } = await readClubTables();
-  return { ready: presenceReady, peers: presenceReady ? toPeers(tables, profileKey, now) : [] };
+/**
+ * The one periodic request (every 30 s while the game is on screen): this tab is here, and here is
+ * everyone's latest status line and ON/OFF. One read + at most one small write of the caller's own row.
+ */
+export async function syncClub(gate: OpenGate, sessionId: string, now: number): Promise<ClubSyncResponse> {
+  const key = gate.profileKey;
+  const allowed = allowedIn(gate.viewer);
+  const seen: { data?: Tables } = {};
+  try {
+    const outcome = await runCommit(SYNC_TABLES, (data) => {
+      seen.data = data;
+      return planSessionSignal(data, { now, key, session: tabKey(key, sessionId) });
+    });
+    if (!outcome.ok && outcome.message !== CLUB_TABLE_MISSING) console.warn("[little-club] sync signal not saved:", outcome.message);
+  } catch (error) {
+    console.error("[little-club] sync failed", error); // e.g. no session table yet
+    seen.data = undefined;
+  }
+  if (seen.data?.ClubProfiles !== undefined && seen.data.ClubSessions !== undefined) {
+    return { ok: true, presence: true, members: toMembers(seen.data, key, now, allowed), me: meOf(seen.data, key) };
+  }
+  // Without the session table: status lines still come through, everyone shows OFF.
+  const { tables, profilesReady } = await readClubTables();
+  if (!profilesReady) return { ok: false, reason: "unavailable" };
+  return { ok: true, presence: false, members: toMembers({ ClubProfiles: tables.ClubProfiles }, key, now, allowed), me: meOf(tables, key) };
+}
+
+/** Best effort when a tab is hidden or closed: drop that tab's own entry (other tabs stay ON; the TTL covers a lost request). */
+export async function leaveClub(gate: OpenGate, sessionId: string, now: number): Promise<void> {
+  const key = gate.profileKey;
+  try {
+    await runCommit(SYNC_TABLES, (data) => planSessionSignal(data, { now, key, session: tabKey(key, sessionId), leave: true }));
+  } catch (error) {
+    console.error("[little-club] leave failed", error);
+  }
+}
+
+export type StatusResult = { ok: true; statusText: string | null } | { ok: false; message: string };
+
+/** Save or clear the caller's own status line (on the save / clear button only). */
+export async function saveClubStatus(gate: OpenGate, status: string, now: number): Promise<StatusResult> {
+  try {
+    const outcome = await runCommit<{ statusText: string | null }>(LITTLE_CLUB_TABLES, (data) => planClubStatus(data, { now, key: gate.profileKey, status }));
+    if (!outcome.ok) return { ok: false, message: outcome.message };
+    // noop (unchanged) has no result: the line is already what was sent.
+    return { ok: true, statusText: outcome.result ? outcome.result.statusText : cleanBubble(status) || null };
+  } catch (error) {
+    console.error("[little-club] status save failed", error);
+    return { ok: false, message: CLUB_TABLE_MISSING };
+  }
+}
+
+/**
+ * Same-site requests only for the club's API (the session cookie is SameSite=Lax already; this
+ * also refuses a request another site's page makes in the background).
+ */
+export function fromThisSite(request: Request): boolean {
+  const site = request.headers.get("sec-fetch-site");
+  if (site) return site === "same-origin";
+  const origin = request.headers.get("origin");
+  if (!origin) return true;
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
 }
 
 export interface ClubProblem {
@@ -135,12 +219,10 @@ export interface LittleClubData extends ClubNotices {
   /** Active MOON PROBLEMS (null when they couldn't be read). */
   problems: ClubProblem[] | null;
   radio: RadioState | null;
-  /** false until the database has the presence table (then the club is "just me"). */
+  /** false until the database has the session table (then everyone shows OFF). */
   presenceReady: boolean;
-  /** The others here right now (visible ones only). */
-  peers: ClubPeer[];
-  /** My one current bubble (kept on the server, so it follows me outside and across devices). */
-  myBubble: string;
+  /** The others who opted in to be shown, ON or OFF, with their status line (the first sync refreshes it). */
+  members: ClubMember[];
   /** Request time (server), so the wall calendar shows the same day. */
   now: number;
   /** The club calendar (the same public schedule as the home page). */
@@ -153,8 +235,7 @@ export async function loadLittleClub(viewer: Viewer, member: Member | null, prof
       ready: profilesReady,
       profile: profilesReady ? clubProfileOf(tables, profileKey) : null,
       presenceReady,
-      peers: presenceReady ? toPeers(tables, profileKey, now) : [],
-      myBubble: presenceReady ? myBubbleOf(tables, profileKey, now) : "",
+      members: profilesReady ? toMembers(tables, profileKey, now, allowedIn(viewer)) : [],
     })),
     (member ? readTables(STAMP_TABLES) : Promise.resolve(null))
       .then((t) => (t && member ? memberStamps(t, member.id).filter((s) => s.awardedAt !== null) : []))
@@ -187,8 +268,7 @@ export async function loadLittleClub(viewer: Viewer, member: Member | null, prof
     defaultNickname: cleanNickname(member?.name || viewer.session.name || "") ?? "",
     profileStoreReady: profile.ready,
     presenceReady: profile.presenceReady,
-    peers: profile.peers,
-    myBubble: profile.myBubble,
+    members: profile.members,
     stamps,
     problems,
     radio,
