@@ -83,10 +83,16 @@ async function readAdminCached(key: string): Promise<Tables> {
 /** Cache tag of the radio playlist; adding or deleting a track clears it. */
 export const RADIO_TAG = "club-radio";
 
-/** The radio page polls every ~20 s, so its shared cache turns over quickly (one sheet read per 15 s at most). */
+/**
+ * The radio page polls every ~20 s (also while a song plays in a hidden tab). Every write that can
+ * change what it shows clears this cache at once (RADIO_TAG: tracks, settings; PRIVATE_TAG: members,
+ * memberships, payments), so the cache can live long: the polls are answered from it and the
+ * database is read about once an hour at most, letting it sleep (Neon bills awake time) while the
+ * radio plays all evening. Changes made outside the site show within the hour.
+ */
 async function readRadioCached(key: string): Promise<Tables> {
   "use cache: remote";
-  cacheLife({ stale: 15, revalidate: 15, expire: 120 });
+  cacheLife({ stale: 15, revalidate: 3600, expire: 86_400 });
   cacheTag(RADIO_TAG, PRIVATE_TAG);
   return readSource(key.split(",") as TableName[]);
 }

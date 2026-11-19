@@ -256,6 +256,7 @@ export function RadioStation({ initial, onPlayingChange }: { initial: RadioState
   }, [state.playerEnabled, setQueueNow]);
 
   // Keep the list fresh (~20 s). A new request never interrupts the song on air.
+  // (Answered from the server's playlist cache; the database is only read when the list changed.)
   useEffect(() => {
     const timer = setInterval(async () => {
       if (document.hidden && !live.current.playing) return;
@@ -266,6 +267,30 @@ export function RadioStation({ initial, onPlayingChange }: { initial: RadioState
     }, POLL_MS);
     return () => clearInterval(timer);
   }, [applyState]);
+
+  // 목록 새로고침: the same request on demand (never interrupts the song on air either).
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshNote, setRefreshNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!refreshNote) return;
+    const t = window.setTimeout(() => setRefreshNote(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [refreshNote]);
+  async function refreshList() {
+    if (refreshing) return;
+    setRefreshing(true);
+    setRefreshNote(null);
+    try {
+      const res = await fetch("/api/radio", { cache: "no-store" });
+      if (!res.ok) throw new Error(String(res.status));
+      applyState((await res.json()) as RadioState);
+      setRefreshNote("최신 목록이에요");
+    } catch {
+      setRefreshNote("목록을 불러오지 못했어요. 잠시 후 다시 눌러 주세요.");
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   function onAdded(track: RadioTrack) {
     const s = live.current.state;
@@ -420,14 +445,31 @@ export function RadioStation({ initial, onPlayingChange }: { initial: RadioState
 
       {state.ready && (
         <section aria-labelledby="all-title">
-          <div className="flex items-end justify-between gap-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
             <SectionLabel id="all-title" eyebrow="All tracks" title={`전체 ${tracks.length}곡`} />
-            {state.canDelete && (
-              <Link href="/admin/radio" className="mb-1 font-label text-[11px] font-semibold uppercase tracking-[0.16em] text-butter underline underline-offset-4">
-                트랙 관리
-              </Link>
-            )}
+            <div className="mb-1 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={refreshList}
+                disabled={refreshing}
+                data-refresh-list
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-cream/40 px-3 font-label text-[11px] font-semibold uppercase tracking-[0.16em] text-cream hover:border-cream disabled:opacity-60"
+              >
+                <span aria-hidden className={refreshing ? "inline-block animate-spin" : "inline-block"}>
+                  ↻
+                </span>
+                {refreshing ? "불러오는 중…" : "목록 새로고침"}
+              </button>
+              {state.canDelete && (
+                <Link href="/admin/radio" className="font-label text-[11px] font-semibold uppercase tracking-[0.16em] text-butter underline underline-offset-4">
+                  트랙 관리
+                </Link>
+              )}
+            </div>
           </div>
+          <p role="status" aria-live="polite" className="mt-1 min-h-[18px] text-right text-[12px] text-cream/70" data-refresh-note>
+            {refreshNote}
+          </p>
           <ol className="mt-4 flex flex-col gap-2">
             {tracks.map((t, i) => {
               const onAir = t.id === current?.id && state.playerEnabled;
