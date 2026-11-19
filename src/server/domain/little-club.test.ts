@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { cleanBubble, cleanNickname, nameTag } from "@/lib/little-club";
+import { cleanBubble, cleanNickname, COOLDOWN_MS, nameTag, parseWallNumbers, PLAY_MS, playPhase } from "@/lib/little-club";
 import { applyCommit } from "../store/commit";
 import type { Row, Tables } from "../store/schema";
-import { CLUB_TABLE_MISSING, clubMembersOf, clubProfileOf, GUEST_KEY_PREFIX, isOnline, littleClubVerdict, planClubProfileSave, planClubStatus, planSessionSignal, sessionsOf } from "./little-club";
+import { CLUB_TABLE_MISSING, clubMembersOf, clubProfileOf, COOLDOWN_REFUSAL, GUEST_KEY_PREFIX, isOnline, littleClubVerdict, planClubProfileSave, planClubStatus, planSessionSignal, playStateOf, sessionsOf } from "./little-club";
 
 const TODAY = "2026-12-10";
 const NOW = Date.parse(`${TODAY}T12:00:00+09:00`);
@@ -185,7 +185,7 @@ describe("v7: status lines and ON/OFF", () => {
     expect(sessionsOf(data.ClubSessions!.find((r) => r.member_id === "B"))).toEqual({ aaaaaaaaaa: NOW - 20_000 }); // untouched
     expect(data.AuditLog).toHaveLength(0);
     // nothing about places or scenes is stored
-    expect(Object.keys(data.ClubSessions!.find((r) => r.member_id === "A")!).sort()).toEqual(["member_id", "sessions", "updated_at"]);
+    expect(Object.keys(data.ClubSessions!.find((r) => r.member_id === "A")!).sort()).toEqual(["member_id", "play_started_at", "sessions", "updated_at"]);
   });
 
   it("two tabs: closing one keeps me ON; closing both turns me OFF", () => {
@@ -263,5 +263,89 @@ describe("v7: status lines and ON/OFF", () => {
     if (!("commit" in renamed)) throw new Error("refused");
     applyCommit(data, renamed.commit);
     expect(clubProfileOf(data, "A")).toEqual({ nickname: "에이에이", mbti: "INFP", status: "쉬는 중" });
+  });
+});
+
+describe("4 minutes in the club, then 10 minutes' wait", () => {
+  const m = (id: string): Row => ({ member_id: id, name: id, email: `${id}@x.dev`, role: "member", status: "active" });
+  function club(): Tables {
+    return {
+      Members: [m("A"), m("B")],
+      ClubProfiles: [
+        { member_id: "A", nickname: "에이", mbti: "INFP", status: "" },
+        { member_id: "B", nickname: "비", mbti: "ESTP", status: "" },
+      ],
+      ClubSessions: [],
+      AuditLog: [],
+    };
+  }
+  const signal = (data: Tables, at: number, session = "1111111111", key = "A", leave = false) => {
+    const planned = planSessionSignal(data, { now: at, key, session, leave });
+    if ("commit" in planned) expect(applyCommit(data, planned.commit)).toEqual({ ok: true });
+    return "commit" in planned ? planned.result : "noop" in planned ? playStateOf(data, key, at) : planned;
+  };
+
+  it("tells the phase from the start time", () => {
+    expect(playPhase(0, NOW)).toEqual({ phase: "fresh" });
+    expect(playPhase(NOW, NOW + PLAY_MS - 1)).toEqual({ phase: "playing", endsAt: NOW + PLAY_MS });
+    expect(playPhase(NOW, NOW + PLAY_MS)).toEqual({ phase: "cooldown", until: NOW + PLAY_MS + COOLDOWN_MS });
+    expect(playPhase(NOW, NOW + PLAY_MS + COOLDOWN_MS)).toEqual({ phase: "fresh" });
+  });
+
+  it("the first signal starts the window; tabs share it; leaving and coming back never resets it", () => {
+    const data = club();
+    expect(signal(data, NOW)).toEqual({ phase: "playing", endsAt: NOW + PLAY_MS });
+    expect(signal(data, NOW + 30_000, "2222222222")).toEqual({ phase: "playing", endsAt: NOW + PLAY_MS }); // another tab
+    signal(data, NOW + 40_000, "1111111111", "A", true); // a problem page / closed tab
+    expect(signal(data, NOW + 90_000, "3333333333")).toEqual({ phase: "playing", endsAt: NOW + PLAY_MS }); // back: same window
+    expect(data.ClubSessions!.filter((r) => r.member_id === "A")).toHaveLength(1);
+    expect(data.ClubSessions!.find((r) => r.member_id === "A")!.play_started_at).toBe(String(NOW));
+  });
+
+  it("after 4 minutes the signal is refused (cooldown), the tab goes OFF, and nothing new starts until 10 minutes later", () => {
+    const data = club();
+    signal(data, NOW);
+    expect(signal(data, NOW + PLAY_MS + 1000)).toEqual({ phase: "cooldown", until: NOW + PLAY_MS + COOLDOWN_MS });
+    expect(isOnline(data, "A", NOW + PLAY_MS + 1000)).toBe(false);
+    // a new tab or a reload during the wait doesn't open a new window
+    expect(signal(data, NOW + PLAY_MS + 5 * 60_000, "4444444444")).toEqual({ phase: "cooldown", until: NOW + PLAY_MS + COOLDOWN_MS });
+    expect(data.ClubSessions!.find((r) => r.member_id === "A")!.play_started_at).toBe(String(NOW));
+    // after the wait: a fresh window
+    const later = NOW + PLAY_MS + COOLDOWN_MS + 1;
+    expect(signal(data, later, "5555555555")).toEqual({ phase: "playing", endsAt: later + PLAY_MS });
+  });
+
+  it("one person's window is theirs only", () => {
+    const data = club();
+    signal(data, NOW);
+    expect(signal(data, NOW + PLAY_MS + 1000, "bbbbbbbbbb", "B")).toEqual({ phase: "playing", endsAt: NOW + PLAY_MS + 1000 + PLAY_MS });
+  });
+
+  it("no status line changes during the wait", () => {
+    const data = club();
+    signal(data, NOW);
+    expect(planClubStatus(data, { now: NOW + PLAY_MS + 1, key: "A", status: "다시 왔어요" })).toEqual({ refuse: COOLDOWN_REFUSAL });
+    expect(planClubStatus(data, { now: NOW + 60_000, key: "A", status: "벽 앞" })).toHaveProperty("commit");
+  });
+
+  it("two tabs starting at once: only one window", () => {
+    const data = club();
+    const one = planSessionSignal(data, { now: NOW, key: "A", session: "1111111111" });
+    const two = planSessionSignal(data, { now: NOW + 5, key: "A", session: "2222222222" });
+    if (!("commit" in one) || !("commit" in two)) throw new Error("refused");
+    expect(applyCommit(data, one.commit).ok).toBe(true);
+    expect(applyCommit(data, two.commit)).toMatchObject({ ok: false, error: "conflict" });
+  });
+});
+
+describe("THE LIVING CLUB wall numbers", () => {
+  it("reads up to three MOON numbers", () => {
+    expect(parseWallNumbers("")).toEqual([]);
+    expect(parseWallNumbers("1, 4, 7")).toEqual([1, 4, 7]);
+    expect(parseWallNumbers("MOON 001 / MOON 012")).toEqual([1, 12]);
+    expect(parseWallNumbers("3 3 3")).toEqual([3]);
+    expect(parseWallNumbers("1, 2, 3, 4")).toBeNull();
+    expect(parseWallNumbers("코")).toBeNull();
+    expect(parseWallNumbers("0")).toBeNull();
   });
 });

@@ -159,9 +159,11 @@ export const TABLES = {
   /**
    * THE LITTLE CLUB ON/OFF: one row per person, overwritten. `sessions` is a small JSON map of that
    * person's open game tabs → last signal (epoch ms), pruned on every write; someone is ON while any
-   * tab signalled within the last 75 s. No positions, no scene, no history.
+   * tab signalled within the last 75 s. No positions, no scene, no history. `play_started_at` (epoch ms)
+   * is when the person's current 4-minute play window began (see playPhase in src/lib/little-club.ts):
+   * the time limit and the 10-minute wait are decided from it on the server.
    */
-  ClubSessions: ["member_id", "sessions", "updated_at"],
+  ClubSessions: ["member_id", "sessions", "updated_at", "play_started_at"],
   AuditLog: ["log_id", "commit_id", "actor_id", "action", "target_id", "before_value", "after_value", "created_at"],
   Settings: ["key", "value", "description"],
   // v0.1 tables (read by the public feed / written by the proposal form)

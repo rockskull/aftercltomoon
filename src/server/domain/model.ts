@@ -1,3 +1,4 @@
+import { DEFAULT_WALL_MESSAGE, parseWallNumbers } from "@/lib/little-club";
 import { parseNotices, type NoticeItem } from "@/lib/club-notice";
 import { CONSENT_DEFAULTS, consentUrl, type ConsentLinks } from "@/lib/consent";
 import { parseMoment, toDateKey } from "@/lib/dates";
@@ -131,6 +132,10 @@ export interface ClubSettings {
   radioPlayer: boolean;
   /** CLUB NOTICE (Settings club_notice); the defaults until an admin edits it. */
   clubNotice: NoticeItem[];
+  /** THE LIVING CLUB: MOON numbers to find on the game's wall ([] = the newest active problems). */
+  littleClubWall: number[];
+  /** Shown once a person has opened all the wall's problems in one visit. */
+  littleClubWallMessage: string;
 }
 
 export const DEFAULT_APPLY_NOTICE =
@@ -312,6 +317,8 @@ export function toSettings(rows: Row[] | undefined): ClubSettings {
     },
     radioPlayer: ["on", "true", "yes", "1", "켜기"].includes((map.get("radio_player") ?? "").trim().toLowerCase()),
     clubNotice: parseNotices(map.get("club_notice")),
+    littleClubWall: parseWallNumbers(map.get("little_club_wall") ?? "") ?? [],
+    littleClubWallMessage: map.get("little_club_wall_message") || DEFAULT_WALL_MESSAGE,
   };
 }
 

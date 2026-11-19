@@ -1,4 +1,4 @@
-import { cleanBubble, cleanNickname, isMbti, MAX_SESSIONS, ONLINE_TTL_MS, type Mbti } from "@/lib/little-club";
+import { cleanBubble, cleanNickname, isMbti, MAX_SESSIONS, ONLINE_TTL_MS, playPhase, type ClubPlay, type Mbti } from "@/lib/little-club";
 import type { Planned } from "../store";
 import { newId, seoulIso } from "../store/ids";
 import { cellText, type Row, type Tables } from "../store/schema";
@@ -124,6 +124,7 @@ export function planClubStatus(data: Tables, ctx: { now: number; key: string; st
   if (data.ClubProfiles === undefined) return { refuse: CLUB_TABLE_MISSING };
   const row = data.ClubProfiles.find((r) => cellText(r.member_id) === ctx.key);
   if (!row || !clubProfileOf(data, ctx.key)) return { refuse: "먼저 내 토끼를 골라 주세요." };
+  if (playStateOf(data, ctx.key, ctx.now).phase === "cooldown") return { refuse: COOLDOWN_REFUSAL };
   const status = cleanBubble(ctx.status);
   if (cellText(row.status) === status) return { noop: true };
   return {
@@ -162,6 +163,15 @@ function liveSessions(sessions: Record<string, number>, now: number): Record<str
   return Object.fromEntries(Object.entries(sessions).filter(([, t]) => now - t <= ONLINE_TTL_MS && t - now <= 60_000));
 }
 
+/** Shown when a game request comes in while the person is waiting to come back. */
+export const COOLDOWN_REFUSAL = "리틀 클럽은 잠시 쉬는 중이에요. 10분 뒤에 다시 들어올 수 있어요.";
+
+/** The person's play window (4 minutes from entering, then a 10-minute wait), from the server's record. */
+export function playStateOf(data: Tables, key: string, now: number): ClubPlay {
+  const row = (data.ClubSessions ?? []).find((r) => cellText(r.member_id) === key);
+  return playPhase(Number(cellText(row?.play_started_at)) || 0, now);
+}
+
 export function isOnline(data: Tables, key: string, now: number): boolean {
   const row = (data.ClubSessions ?? []).find((r) => cellText(r.member_id) === key);
   return Object.keys(liveSessions(sessionsOf(row), now)).length > 0;
@@ -171,30 +181,43 @@ export function isOnline(data: Tables, key: string, now: number): boolean {
  * This tab says "I'm here" (or, with `leave`, "this tab is closing"). Only the caller's own row, and
  * only this tab's entry; other tabs of the same person stay ON. Someone without a rabbit yet keeps no
  * entries. Expired entries are dropped on every write, so no clean-up job is needed.
+ *
+ * The first signal with a rabbit starts the 4-minute play window (play_started_at). While a window is
+ * running every tab shares it; once it is over, signals are refused (cooldown: the tab's entry is
+ * dropped, nothing else changes) until 10 minutes later, when the next signal starts a new window.
+ * A leave never touches the window, so going away and coming back can't reset or extend it.
+ * The result is the play state after this signal (a noop answers from `playStateOf`).
  */
 export function planSessionSignal(data: Tables, ctx: { now: number; key: string; session: string; leave?: boolean }): Planned {
   if (data.ClubSessions === undefined || data.ClubProfiles === undefined) return { refuse: CLUB_TABLE_MISSING };
   if (!SESSION_KEY.test(ctx.session)) return { refuse: "잘못된 요청이에요." };
   const profile = clubProfileOf(data, ctx.key);
   const row = data.ClubSessions.find((r) => cellText(r.member_id) === ctx.key);
+  const before = playStateOf(data, ctx.key, ctx.now);
+  // A new window starts with the first signal after the last one (and its wait) is over.
+  const starts = !ctx.leave && profile !== null && before.phase === "fresh";
+  const play: ClubPlay = starts ? playPhase(ctx.now, ctx.now) : before;
   let next = liveSessions(sessionsOf(row), ctx.now);
   delete next[ctx.session];
-  if (!ctx.leave && profile) next[ctx.session] = ctx.now;
+  if (!ctx.leave && profile && play.phase === "playing") next[ctx.session] = ctx.now;
   next = Object.fromEntries(Object.entries(next).sort((a, b) => b[1] - a[1]).slice(0, MAX_SESSIONS));
   const sessions = Object.keys(next).length ? JSON.stringify(next) : "";
   const current = cellText(row?.sessions);
-  if (current === sessions) return { noop: true };
-  if (!row && !sessions) return { noop: true };
+  if (current === sessions && !starts) return { noop: true };
+  if (!row && !sessions && !starts) return { noop: true };
   const at = seoulIso(ctx.now);
+  const set: Row = { sessions, updated_at: at };
+  if (starts) set.play_started_at = String(ctx.now);
   return {
     commit: {
       id: newId("C", ctx.now, 8),
-      // Two tabs of the same person signalling at once: the second re-reads and re-plans.
-      checks: row ? [{ type: "exists", table: "ClubSessions", id: ctx.key, fields: { sessions: current } }] : [{ type: "absent", table: "ClubSessions", where: { member_id: ctx.key } }],
-      ops: row
-        ? [{ type: "update", table: "ClubSessions", id: ctx.key, set: { sessions, updated_at: at } }]
-        : [{ type: "append", table: "ClubSessions", row: { member_id: ctx.key, sessions, updated_at: at } }],
+      // Two tabs of the same person signalling at once: the second re-reads and re-plans (so only one starts the window).
+      checks: row
+        ? [{ type: "exists", table: "ClubSessions", id: ctx.key, fields: { sessions: current, play_started_at: cellText(row.play_started_at) } }]
+        : [{ type: "absent", table: "ClubSessions", where: { member_id: ctx.key } }],
+      ops: row ? [{ type: "update", table: "ClubSessions", id: ctx.key, set }] : [{ type: "append", table: "ClubSessions", row: { member_id: ctx.key, play_started_at: "", ...set } }],
     },
+    result: play,
   };
 }
 

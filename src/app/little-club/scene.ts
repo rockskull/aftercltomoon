@@ -464,6 +464,74 @@ export function drawTable(g: G) {
 
 export const TABLE_DEPTH = 278;
 
+// ---------------------------------------------------------------------------
+// THE LIVING CLUB: three find points on the climbing wall. They are game spots only — the real
+// problems' holds are not mapped, so these never stand for where a problem actually is.
+// ---------------------------------------------------------------------------
+
+/** (u, v) on the wall for find point 1, 2, 3: back, middle, front; low, high, low. */
+const WALL_FIND_UV: ReadonlyArray<[number, number]> = [
+  [0.2, 0.58],
+  [0.5, 0.3],
+  [0.82, 0.62],
+];
+
+/** Where find point i shows on the wall. */
+export function wallFindPoint(i: number): [number, number] {
+  const [u, v] = WALL_FIND_UV[i] ?? WALL_FIND_UV[0];
+  return wallPoint(u, v);
+}
+
+/** Where the rabbit stands to look at find point i (on the floor in front of the wall). */
+export function wallFindStand(i: number): [number, number] {
+  const [u] = WALL_FIND_UV[i] ?? WALL_FIND_UV[0];
+  const [x, y] = wallPoint(u, 0);
+  return clampToFloor("indoor", x - 22, y + 6);
+}
+
+/** The find point (if any) under a click, with a generous radius for fingers. */
+export function wallFindAt(x: number, y: number, count: number): number | null {
+  let best: number | null = null;
+  let dist = 22;
+  for (let i = 0; i < count; i++) {
+    const [fx, fy] = wallFindPoint(i);
+    const d = Math.hypot(x - fx, y - fy);
+    if (d < dist) {
+      best = i;
+      dist = d;
+    }
+  }
+  return best;
+}
+
+/** Drawn after the lighting, so they stay findable at night. Found ones turn into a small tick. */
+export function drawWallFinds(g: G, found: readonly boolean[], t: number, reduced: boolean) {
+  found.forEach((done, i) => {
+    const [x, y] = wallFindPoint(i);
+    if (done) {
+      oval(g, x, y, 5, 5, "#0f1a28cc");
+      g.strokeStyle = C.butter;
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.moveTo(x - 2.5, y);
+      g.lineTo(x - 0.5, y + 2);
+      g.lineTo(x + 3, y - 2.5);
+      g.stroke();
+      return;
+    }
+    const pulse = reduced ? 0.5 : (Math.sin(t * 0.08 + i * 2) + 1) / 2;
+    const glow = g.createRadialGradient(x, y, 0, x, y, 12);
+    glow.addColorStop(0, `rgba(242,211,125,${0.35 + pulse * 0.35})`);
+    glow.addColorStop(1, "rgba(242,211,125,0)");
+    g.fillStyle = glow;
+    g.fillRect(x - 12, y - 12, 24, 24);
+    const r = 4 + pulse * 1.5;
+    poly(g, [[x, y - r - 2], [x + 1.5, y - 1.5], [x + r + 2, y], [x + 1.5, y + 1.5], [x, y + r + 2], [x - 1.5, y + 1.5], [x - r - 2, y], [x - 1.5, y - 1.5]], "#fff6d6");
+    px(g, x - 1, y - 1, 2, 2, C.butter);
+    label(g, String(i + 1), x + 7, y - 5, "#fff6d6", 6);
+  });
+}
+
 export function drawIndoor(g: G, cal: { month: string; day: number }) {
   px(g, 0, 0, W, H, "#1a2230");
   drawCeiling(g);

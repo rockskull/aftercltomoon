@@ -98,8 +98,77 @@ export type ClubSyncResponse =
       me: { statusText: string | null } | null;
       /** false while the database has no session table yet (everyone then shows OFF). */
       presence: boolean;
+      /** My play window (server clock), or null when it can't be told (no session table yet). */
+      play: { endsAt: number } | null;
+      /** Server time of this answer, so the browser can count down without trusting its own clock. */
+      now: number;
     }
+  /** The play window is over: the game ends (the 4-minute kick) and re-entry waits until `until`. */
+  | { ok: false; reason: "cooldown"; until: number; now: number }
   | { ok: false; reason: "login" | "suspended" | "unavailable" | "bad-request" };
+
+// ---------------------------------------------------------------------------
+// Time in the club (decided 2026-11-19): one play window is 4 minutes from entering, kept on the
+// server, and it keeps running while you are away (a problem page, another tab, closing the tab).
+// When it ends the game sends you out (the only moment a screenshot PNG is made by itself), and you
+// can come back 10 minutes after that.
+// ---------------------------------------------------------------------------
+
+export const PLAY_MS = 4 * 60_000;
+export const COOLDOWN_MS = 10 * 60_000;
+
+/** fresh = may start a new window · playing = inside one · cooldown = waiting to come back. */
+export type ClubPlay = { phase: "fresh" } | { phase: "playing"; endsAt: number } | { phase: "cooldown"; until: number };
+
+/** The window that started at `startedAt` (epoch ms; 0 = never), as of `now`. */
+export function playPhase(startedAt: number, now: number): ClubPlay {
+  if (!startedAt || startedAt > now + 60_000) return { phase: "fresh" };
+  if (now < startedAt + PLAY_MS) return { phase: "playing", endsAt: startedAt + PLAY_MS };
+  if (now < startedAt + PLAY_MS + COOLDOWN_MS) return { phase: "cooldown", until: startedAt + PLAY_MS + COOLDOWN_MS };
+  return { phase: "fresh" };
+}
+
+/** "3:07" */
+export function clockText(ms: number): string {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+// ---------------------------------------------------------------------------
+// THE LIVING CLUB (MVP 01): three real MOON PROBLEMS to find on the wall
+// ---------------------------------------------------------------------------
+
+export const WALL_FINDS = 3;
+export const DEFAULT_WALL_MESSAGE = "THE WALL REMEMBERS. DO YOU?";
+export const WALL_MESSAGE_MAX = 60;
+
+/**
+ * The crew's pick, as typed in the settings ("1, 4, 7" or "MOON 001 / 004"): MOON numbers, at
+ * most three, no repeats. "" → [] (then the newest active problems are used). null = not a list.
+ */
+export function parseWallNumbers(input: string): number[] | null {
+  const text = input.replace(/moon/gi, " ").trim();
+  if (!text) return [];
+  const parts = text.split(/[\s,/·]+/).filter(Boolean);
+  if (!parts.every((p) => /^\d{1,4}$/.test(p))) return null;
+  const numbers = [...new Set(parts.map(Number).filter((n) => n > 0))];
+  return numbers.length && numbers.length <= WALL_FINDS ? numbers : null;
+}
+
+/** A wall card: only what the problem page itself shows everyone (never the hidden Tips). */
+export interface WallProblem {
+  no: number;
+  code: string;
+  title: string;
+  grade: string;
+  wall: string;
+  setterName: string;
+  setterNote: string;
+  /** Real reactions only (0 / null when there are none yet). */
+  reviews: number;
+  sends: number;
+  funAverage: number | null;
+}
 
 /** The tag over a rabbit: "별명 · MBTI", or "별명 · MBTI · ON/OFF" in the game. */
 export const nameTag = (nickname: string, mbti: string, online?: boolean) =>

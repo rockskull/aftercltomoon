@@ -7,6 +7,7 @@ import { Logo, NotReady } from "@/components/ui";
 import { requestNow } from "@/lib/club-data";
 import { littleClubGate, loadLittleClub } from "@/server/little-club";
 import { storeMode } from "@/server/store";
+import { ClubWait } from "./club-wait";
 import { LittleClub } from "./little-club";
 
 export const metadata: Metadata = {
@@ -18,7 +19,8 @@ export const metadata: Metadata = {
 /**
  * THE LITTLE CLUB (anyone signed in, except suspended accounts). The gate runs
  * here on the server before anything of the game or the visitor's data is sent;
- * the profile save re-checks it against the live data.
+ * the profile save re-checks it against the live data. Within the 10-minute wait
+ * after a 4-minute play window the page shows the wait instead of the game.
  */
 export default function LittleClubPage() {
   return (
@@ -66,6 +68,8 @@ async function Club() {
     );
   }
   const data = await loadLittleClub(gate.viewer, gate.member, gate.profileKey, now);
+  // Back within the 10 minutes after a play window: the wait, not the game (the APIs refuse too).
+  if (data.play.phase === "cooldown") return <ClubWait until={data.play.until} serverNow={now} />;
   return <LittleClub data={data} />;
 }
 

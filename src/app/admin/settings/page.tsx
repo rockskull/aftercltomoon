@@ -4,6 +4,7 @@ import { Suspense, type ReactNode } from "react";
 import { SiteFooter, SiteHeader } from "@/components/site";
 import { NotReady } from "@/components/ui";
 import { requestNow } from "@/lib/club-data";
+import { WALL_MESSAGE_MAX } from "@/lib/little-club";
 import { stampImageSrc } from "@/lib/stamps";
 import { requireOperator } from "@/server/auth/viewer";
 import { formatWon, toSettings } from "@/server/domain/model";
@@ -49,11 +50,12 @@ async function Settings() {
     return (
       <AdminFrame tab="settings" title="Settings" who={viewer.member}>
         <div className="flex flex-col gap-6">
-          <p className="text-[14px] text-ink-soft">운영자는 설정 중 아지트 공지만 바꿀 수 있어요. 회원권 상품·사이트 설정·스탬프 정의는 admin이 맡아요.</p>
+          <p className="text-[14px] text-ink-soft">운영자는 설정 중 아지트 공지와 리틀 클럽 벽 문제만 바꿀 수 있어요. 회원권 상품·사이트 설정·스탬프 정의는 admin이 맡아요.</p>
           <Box title="아지트 공지">
             <p className="mb-3 text-[13px] text-ink-soft">홈과 MY 화면의 &lsquo;아지트 공지&rsquo;예요. 항목을 고치고 추가·삭제·순서 변경을 한 뒤 저장하면 바로 반영돼요.</p>
             <NoticeEditor initial={settings.clubNotice} />
           </Box>
+          <WallSettings wall={settings.littleClubWall} message={settings.littleClubWallMessage} />
         </div>
       </AdminFrame>
     );
@@ -142,6 +144,8 @@ async function Settings() {
           <p className="mb-3 text-[13px] text-ink-soft">홈과 MY 화면의 &lsquo;아지트 공지&rsquo;예요. 항목을 고치고 추가·삭제·순서 변경을 한 뒤 저장하면 바로 반영돼요.</p>
           <NoticeEditor initial={settings.clubNotice} />
         </Box>
+
+        <WallSettings wall={settings.littleClubWall} message={settings.littleClubWallMessage} />
 
         <Box title="MOON STAMPS">
           <p className="mb-3 text-[13px] text-ink-soft">스탬프는 7종으로 고정이에요. 그림 속 글자는 바뀌지 않고, 이름과 설명(발급 조건)은 목록과 공유 이미지에 쓰여요. 끄면 아직 받지 않은 회원에게는 보이지 않아요.</p>
@@ -248,5 +252,31 @@ function PlanForm({ plan }: { plan: Row | null }) {
         </button>
       </div>
     </ActionForm>
+  );
+}
+
+/** THE LIVING CLUB: which real MOON PROBLEMS members find on the Little Club's wall (admins and operators). */
+function WallSettings({ wall, message }: { wall: number[]; message: string }) {
+  return (
+    <Box title="리틀 클럽 · 벽에서 찾는 문제">
+      <p className="mb-3 text-[13px] text-ink-soft">
+        THE LITTLE CLUB 볼더링 벽에 숨겨 둘 실제 MOON PROBLEMS예요. MOON 번호를 3개까지 쉼표로 적어 주세요. 비우면 최신 활성 문제 3개가 나와요. 보관·삭제된 문제는 빠지고, 없는 문제는 채우지 않아요.
+      </p>
+      <ActionForm action={saveSettings} className="grid gap-3 sm:grid-cols-2">
+        <label className={label}>
+          MOON 번호 (예: 1, 4, 7)
+          <input name="little_club_wall" defaultValue={wall.join(", ")} inputMode="numeric" placeholder="비우면 최신 문제" className={smallInput} />
+        </label>
+        <label className={label}>
+          세 문제를 다 찾았을 때 문구
+          <input name="little_club_wall_message" defaultValue={message} maxLength={WALL_MESSAGE_MAX} className={smallInput} />
+        </label>
+        <div className="sm:col-span-2">
+          <button type="submit" className={smallPrimary}>
+            저장
+          </button>
+        </div>
+      </ActionForm>
+    </Box>
   );
 }

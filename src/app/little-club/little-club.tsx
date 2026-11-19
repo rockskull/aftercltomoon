@@ -2,12 +2,29 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ClubCalendar } from "@/components/calendar/club-calendar";
 import { BANNER_COPY } from "@/components/member-banner-client";
 import { buttonPrimary, cn } from "@/components/ui";
 import { toDateKey } from "@/lib/dates";
-import { BUBBLE_MAX, cleanBubble, cleanNickname, MBTI_MOTIONS, MBTI_TYPES, nameTag, NICKNAME_MAX, SYNC_BACKOFF_MS, type ClubMember, type ClubSyncResponse, type Mbti } from "@/lib/little-club";
+import {
+  BUBBLE_MAX,
+  cleanBubble,
+  cleanNickname,
+  clockText,
+  COOLDOWN_MS,
+  MBTI_MOTIONS,
+  MBTI_TYPES,
+  nameTag,
+  NICKNAME_MAX,
+  PLAY_MS,
+  SYNC_BACKOFF_MS,
+  type ClubMember,
+  type ClubSyncResponse,
+  type Mbti,
+  type WallProblem,
+} from "@/lib/little-club";
 import { gradeInfo, gradeLabel } from "@/lib/problems";
 import type { ClubProfile } from "@/server/domain/little-club";
 import type { ClubNotice, ClubNotices, LittleClubData, StatusResult } from "@/server/little-club";
@@ -15,6 +32,7 @@ import { markAllRead } from "../me/actions";
 import { RadioStation } from "../radio/radio-station";
 import { refreshClubNotices, saveClubProfile } from "./actions";
 import { BGM_TITLES, ClubBgm, type BgmTrack } from "./bgm";
+import { ClubWait } from "./club-wait";
 import {
   clampToFloor,
   depthScale,
@@ -29,6 +47,7 @@ import {
   drawRabbit,
   drawRabbitTile,
   drawTable,
+  drawWallFinds,
   bubbleSize,
   tagSize,
   type TagState,
@@ -37,6 +56,8 @@ import {
   spotAt,
   TABLE_DEPTH,
   W,
+  wallFindAt,
+  wallFindStand,
   wallPoint,
   type Pose,
   type SceneId,
@@ -48,9 +69,21 @@ import {
  * the browser grants access. Rabbits with a name tag are the other people in the club (everyone with
  * a rabbit is shown; their status line and ON/OFF come from the one 30-second sync); where they stand and how they move is
  * decided here in the browser only. Untagged rabbits and the two dogs are scenery.
+ *
+ * Time: one play window is 4 minutes from entering (kept on the server; it keeps running while you
+ * are away). When it runs out the game ends by itself — the ONLY moment a PNG of the game is made,
+ * saved and shown without asking — and the server keeps the door closed for 10 minutes. Leaving
+ * earlier (the exit button, a problem page, back, reload, closing the tab, logging out) never makes a
+ * PNG; the 📷 button makes one only when pressed.
+ *
+ * THE LIVING CLUB (MVP 01): three real MOON PROBLEMS hidden at three spots on the wall. Opening a
+ * card counts it (this visit only, never stored on the server); all found → a one-time message.
  */
 
-type ModalId = "profile" | "problems" | "stamps" | "calendar" | "notices" | null;
+type ModalId = "profile" | "problems" | "stamps" | "calendar" | "notices" | "find" | null;
+
+/** Why the game ended. Only "timeout" (the 4 minutes ran out and the system sends you out) makes a PNG by itself. */
+type EndReason = "timeout" | "exit";
 
 const START: Record<SceneId, [number, number]> = { indoor: [220, 290], outdoor: [62, 272] };
 
@@ -150,6 +183,60 @@ const SPOT_TEXT: Record<SpotId, { label: string; hint: string; going: string }> 
 
 const PRESETS = ["오늘은 슬랩 연습", "쉬는 중 ☕", "같이 볼더링?", "불멍 중", "다음엔 같이 올라요"];
 
+const SEOUL = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+function seoulStamp(ms: number) {
+  const p = Object.fromEntries(SEOUL.formatToParts(ms).map((x) => [x.type, x.value]));
+  return { text: `${p.year}.${p.month}.${p.day} ${p.hour}:${p.minute}`, file: `${p.year}${p.month}${p.day}-${p.hour}${p.minute}` };
+}
+
+/** The game canvas as a PNG, with a thin caption band (club, time, my tag). */
+async function snapshotPng(canvas: HTMLCanvasElement, caption: string): Promise<Blob | null> {
+  try {
+    const band = Math.max(18, Math.round(canvas.height * 0.07));
+    const out = document.createElement("canvas");
+    out.width = canvas.width;
+    out.height = canvas.height + band;
+    const g = out.getContext("2d");
+    if (!g) return null;
+    g.drawImage(canvas, 0, 0);
+    g.fillStyle = "#0f1a28";
+    g.fillRect(0, canvas.height, out.width, band);
+    g.fillStyle = "#f2d37d";
+    g.font = `bold ${Math.round(band * 0.42)}px "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif`;
+    g.textBaseline = "middle";
+    g.fillText(caption, Math.round(band * 0.5), canvas.height + band / 2, out.width - band);
+    return await new Promise((resolve) => out.toBlob((b) => resolve(b), "image/png"));
+  } catch {
+    return null;
+  }
+}
+
+/** Hands the file to the browser's downloads (the person keeps it on their device). */
+function saveFile(url: string, filename: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+/** Wall progress for this play window only (so a trip to a problem page and back keeps it; a new window starts at 0). */
+const wallKey = (endsAt: number) => `acm-little-club-wall:${endsAt}`;
+function readWall(endsAt: number): { found: boolean[]; done: boolean } | null {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(wallKey(endsAt)) ?? "null") as { found?: unknown; done?: unknown } | null;
+    return v && Array.isArray(v.found) ? { found: v.found.map(Boolean), done: Boolean(v.done) } : null;
+  } catch {
+    return null;
+  }
+}
+function writeWall(endsAt: number, found: boolean[], done: boolean) {
+  try {
+    sessionStorage.setItem(wallKey(endsAt), JSON.stringify({ found, done }));
+  } catch {}
+}
+
 async function postJson<T>(url: string, method: "POST" | "PATCH", body: unknown): Promise<T> {
   const res = await fetch(url, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body), cache: "no-store" });
   return (await res.json()) as T;
@@ -181,7 +268,8 @@ interface GameState {
   night: boolean;
   x: number;
   y: number;
-  target: { x: number; y: number; spot: SpotId | null } | null;
+  /** Walking somewhere: to a spot, to a wall find point, or just to a place on the floor. */
+  target: { x: number; y: number; spot: SpotId | null; find?: number } | null;
   pose: Pose;
   poseUntil: number;
   climbStart: number;
@@ -192,6 +280,10 @@ interface GameState {
   dirty: boolean;
   /** The wall calendar's month and today. */
   cal: { month: string; day: number };
+  /** THE LIVING CLUB: which find points were opened this visit, and the one-time message. */
+  finds: boolean[];
+  wallDone: boolean;
+  wallNote: { text: string; until: number } | null;
 }
 
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
@@ -247,6 +339,15 @@ function playChime() {
 
 export function LittleClub({ data }: { data: LittleClubData }) {
   const reduced = usePrefersReducedMotion();
+  const router = useRouter();
+  const wallProblems: WallProblem[] = data.wall?.problems ?? [];
+  const wallMessage = data.wall?.message ?? "";
+  const [found, setFound] = useState<boolean[]>(() => wallProblems.map(() => false));
+  const [wallDone, setWallDone] = useState(false);
+  const [findIndex, setFindIndex] = useState<number | null>(null);
+  // The play window's end (server clock) and the server time it was told at.
+  const [clock, setClock] = useState<{ endsAt: number; serverNow: number } | null>(data.play.phase === "playing" ? { endsAt: data.play.endsAt, serverNow: data.now } : null);
+  const [kicked, setKicked] = useState<{ until: number; serverNow: number; shot: { url: string; filename: string } | null } | null>(null);
   const [profile, setProfile] = useState<ClubProfile | null>(data.profile);
   const [modal, setModal] = useState<ModalId>(data.profile ? null : "profile");
   const [scene, setScene] = useState<SceneId>("indoor");
@@ -278,6 +379,9 @@ export function LittleClub({ data }: { data: LittleClubData }) {
     mbti: profile?.mbti ?? "INFP",
     dirty: true,
     cal: wallCalendar(data.now),
+    finds: (data.wall?.problems ?? []).map(() => false),
+    wallDone: false,
+    wallNote: null,
   });
 
   // ---- membership notices: the in-game bell ----
@@ -347,6 +451,29 @@ export function LittleClub({ data }: { data: LittleClubData }) {
   /** Bumped by every status save (and true while one is on its way), so a sync answer can't undo it. */
   const statusSeq = useRef(0);
   const statusSaving = useRef(false);
+  /** Stops the sync for good and drops this tab's ON entry (set by the sync effect). */
+  const stopSyncRef = useRef<() => void>(() => {});
+  /** The play window this page is in (server endsAt), for the wall progress. */
+  const windowKeyRef = useRef<number | null>(null);
+  const kickedRef = useRef(false);
+  const windowNoteShown = useRef(false);
+  const endGameRef = useRef<(reason: EndReason, info?: { until: number; now: number }) => void>(() => {});
+  const applyWindow = useCallback((endsAt: number, serverNow: number) => {
+    setClock((c) => (c && c.endsAt === endsAt ? c : { endsAt, serverNow }));
+    if (windowKeyRef.current === endsAt) return;
+    windowKeyRef.current = endsAt;
+    // Back from a problem page in the same window: the finds so far are still yours.
+    const saved = readWall(endsAt);
+    if (!saved) return;
+    const g = game.current;
+    g.finds = g.finds.map((v, i) => v || Boolean(saved.found[i]));
+    g.dirty = true;
+    setFound(g.finds);
+    if (saved.done) {
+      g.wallDone = true;
+      setWallDone(true);
+    }
+  }, []);
   useEffect(() => {
     seedRef.current = browserSeed();
     game.current.dirty = true;
@@ -399,7 +526,15 @@ export function LittleClub({ data }: { data: LittleClubData }) {
         const res = await postJson<ClubSyncResponse>("/api/little-club/sync", "POST", { sessionId });
         if (res.ok) {
           ok = true;
-          if (!stopped) applySync(res, seq);
+          if (!stopped) {
+            applySync(res, seq);
+            if (res.play) applyWindow(res.play.endsAt, res.now);
+          }
+        } else if (res.reason === "cooldown") {
+          // The server says the 4 minutes are over: the same timeout as the clock running out.
+          ok = true;
+          stopped = true;
+          endGameRef.current("timeout", { until: res.until, now: res.now });
         } else if (res.reason === "login" || res.reason === "suspended") {
           stopped = true;
         }
@@ -437,15 +572,60 @@ export function LittleClub({ data }: { data: LittleClubData }) {
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", onPageHide);
     window.addEventListener("pageshow", onPageShow);
+    stopSyncRef.current = () => {
+      stopped = true;
+      leave();
+    };
     void run(); // right away on entry
     return () => {
       stopped = true;
       leave();
+      stopSyncRef.current = () => {};
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
       window.removeEventListener("pageshow", onPageShow);
     };
-  }, [syncOn, applySync]);
+  }, [syncOn, applySync, applyWindow]);
+
+  // Wall progress belongs to this play window (kept in this tab only, never on the server).
+  useEffect(() => {
+    const key = windowKeyRef.current;
+    if (key !== null) writeWall(key, found, wallDone);
+  }, [found, wallDone]);
+
+  // ---- the end of the game ----
+  const endGame = useCallback(
+    async (reason: EndReason, info?: { until: number; now: number }) => {
+      if (reason === "exit") {
+        // Leaving on purpose: no PNG. The 4 minutes keep running on the server.
+        stopSyncRef.current();
+        router.push("/");
+        return;
+      }
+      // "timeout": the system sends the person out. Requests stop now, then the PNG.
+      if (kickedRef.current) return;
+      kickedRef.current = true;
+      stopSyncRef.current();
+      bgmRef.current?.stop();
+      let shot: { url: string; filename: string } | null = null;
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const at = seoulStamp(Date.now());
+        const blob = await snapshotPng(canvas, `AFTER HOURS — THE LITTLE CLUB · ${at.text}${game.current.tag ? ` · ${game.current.tag}` : ""}`);
+        if (blob) {
+          shot = { url: URL.createObjectURL(blob), filename: `little-club-${at.file}.png` };
+          saveFile(shot.url, shot.filename);
+        }
+      }
+      const until = info?.until ?? Date.now() + COOLDOWN_MS;
+      setKicked({ until, serverNow: info?.now ?? until - COOLDOWN_MS, shot });
+    },
+    [router],
+  );
+  useEffect(() => {
+    endGameRef.current = (reason, info) => void endGame(reason, info);
+  });
+
   useEffect(() => {
     game.current.bubble = bubble;
     game.current.dirty = true;
@@ -489,6 +669,19 @@ export function LittleClub({ data }: { data: LittleClubData }) {
 
   // ---- actions ----
   const say = useCallback((main: string, sub?: string) => setStatus({ main, sub }), []);
+
+  /** 📷: only when pressed (never by itself). */
+  const takeShot = useCallback(async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const at = seoulStamp(Date.now());
+    const blob = await snapshotPng(canvas, `AFTER HOURS — THE LITTLE CLUB · ${at.text}${game.current.tag ? ` · ${game.current.tag}` : ""}`);
+    if (!blob) return say("화면을 저장하지 못했어요.");
+    const url = URL.createObjectURL(blob);
+    saveFile(url, `little-club-${at.file}.png`);
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    say("지금 화면을 PNG로 저장했어요.");
+  }, [say]);
 
   const changeScene = useCallback(
     (next: SceneId) => {
@@ -575,6 +768,50 @@ export function LittleClub({ data }: { data: LittleClubData }) {
     [say],
   );
 
+  const wallCount = wallProblems.length;
+  const walkToFind = useCallback(
+    (i: number) => {
+      const g = game.current;
+      if (g.scene !== "indoor") return;
+      const [x, y] = wallFindStand(i);
+      g.pose = "stand";
+      g.target = { x, y, spot: null, find: i };
+      g.dirty = true;
+      say(`벽의 발견 지점 ${i + 1}(으)로 가는 중…`);
+    },
+    [say],
+  );
+  /** Opening a card is what counts (not walking past). Each point counts once. */
+  const openFind = useCallback(
+    (i: number) => {
+      const g = game.current;
+      setFindIndex(i);
+      setModal("find");
+      if (!g.finds[i]) {
+        g.finds = g.finds.map((v, k) => v || k === i);
+        g.dirty = true;
+        setFound(g.finds);
+        if (g.finds.length > 0 && g.finds.every(Boolean) && !g.wallDone) {
+          g.wallDone = true;
+          setWallDone(true);
+        }
+      }
+      say(`발견 지점 ${i + 1}: 실제 MOON PROBLEMS예요.`, "자세히 보기를 누르면 문제 화면으로 가요. 다녀와도 4분 시간은 계속 흘러요.");
+    },
+    [say],
+  );
+  const closeFind = useCallback(() => {
+    setModal(null);
+    const g = game.current;
+    // The one-time message, by the wall, after the last card closes.
+    if (g.wallDone && wallMessage && !g.wallNote && !windowNoteShown.current) {
+      windowNoteShown.current = true;
+      g.wallNote = { text: wallMessage, until: performance.now() + 7000 };
+      g.dirty = true;
+      say(wallMessage, "세 문제를 모두 찾았어요. 다음에 암장에서 직접 만나 봐요.");
+    }
+  }, [say, wallMessage]);
+
   const interact = useCallback(() => {
     const g = game.current;
     let best: SpotId | null = null;
@@ -586,9 +823,16 @@ export function LittleClub({ data }: { data: LittleClubData }) {
         best = s.id;
       }
     }
+    if (g.scene === "indoor") {
+      for (let i = 0; i < wallCount; i++) {
+        const [fx, fy] = wallFindStand(i);
+        const d = Math.hypot(g.x - fx, g.y - fy);
+        if (d < 30 && d < dist) return openFind(i);
+      }
+    }
     if (best && dist < 70) arrive(best);
     else say("조금 더 가까이 가 보세요.", "장면을 누르거나 오른쪽 버튼을 써도 돼요.");
-  }, [arrive, say]);
+  }, [arrive, say, wallCount, openFind]);
 
   function startClimb() {
     const g = game.current;
@@ -638,9 +882,10 @@ export function LittleClub({ data }: { data: LittleClubData }) {
   }
 
   // ---- the game loop ----
+  const ended = kicked !== null;
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || ended) return;
     const g2 = canvas.getContext("2d", { alpha: false });
     if (!g2) return;
     // The scene is laid out in 512 × 320 units but drawn at 2–4× (the screen's real pixels),
@@ -698,9 +943,10 @@ export function LittleClub({ data }: { data: LittleClubData }) {
       } else if (g.target) {
         const d = Math.hypot(g.target.x - g.x, g.target.y - g.y);
         if (d < 4) {
-          const spot = g.target.spot;
+          const { spot, find } = g.target;
           g.target = null;
-          if (spot) arrive(spot);
+          if (find !== undefined) openFind(find);
+          else if (spot) arrive(spot);
         } else {
           const speed = Math.min(d, 150 * dt);
           [g.x, g.y] = clampToFloor(g.scene, g.x + ((g.target.x - g.x) / d) * speed, g.y + ((g.target.y - g.y) / d) * speed);
@@ -709,6 +955,10 @@ export function LittleClub({ data }: { data: LittleClubData }) {
       }
       if (g.pose === "workout" && now > g.poseUntil) {
         g.pose = "stand";
+        g.dirty = true;
+      }
+      if (g.wallNote && now > g.wallNote.until) {
+        g.wallNote = null;
         g.dirty = true;
       }
       // the others: a spot each, picked here (moving never sends anything)
@@ -729,7 +979,7 @@ export function LittleClub({ data }: { data: LittleClubData }) {
       io.disconnect();
       ro.disconnect();
     };
-  }, [arrive, reduced]);
+  }, [arrive, openFind, reduced, ended]);
 
   // ---- input ----
   useEffect(() => {
@@ -765,6 +1015,13 @@ export function LittleClub({ data }: { data: LittleClubData }) {
     const x = ((e.clientX - rect.left) / rect.width) * W;
     const y = ((e.clientY - rect.top) / rect.height) * H;
     const g = game.current;
+    if (g.scene === "indoor") {
+      const f = wallFindAt(x, y, wallCount);
+      if (f !== null) {
+        walkToFind(f);
+        return;
+      }
+    }
     const spot = spotAt(g.scene, x, y);
     if (spot) {
       walkTo(spot.id);
@@ -795,10 +1052,21 @@ export function LittleClub({ data }: { data: LittleClubData }) {
 
   const spots = SPOTS[scene];
   const earned = data.stamps ?? [];
+  const foundCount = found.filter(Boolean).length;
+
+  // The 4 minutes are over: the game is gone (radio and music stop with it); the PNG and the wait.
+  if (kicked) return <ClubWait until={kicked.until} serverNow={kicked.serverNow} shot={kicked.shot} />;
 
   return (
     <div id="play" className="mx-auto max-w-6xl scroll-mt-2 px-4 pb-24 md:px-6">
       <div className="flex flex-wrap items-center gap-2 pb-4">
+        {clock ? (
+          <PlayClock endsAt={clock.endsAt} serverNow={clock.serverNow} onExpire={() => void endGame("timeout", { until: clock.endsAt + COOLDOWN_MS, now: clock.endsAt })} />
+        ) : (
+          <span className="rounded-sm border border-cream/25 px-3 py-2 font-mono text-[12px] text-cream/70" title="들어오면 4분이 시작돼요">
+            ⏱ {clockText(PLAY_MS)}
+          </span>
+        )}
         <ToolButton onClick={() => setModal("profile")} label="내 토끼 설정">
           ☾ {profile ? nameTag(profile.nickname, profile.mbti) : "MY RABBIT"}
         </ToolButton>
@@ -831,6 +1099,12 @@ export function LittleClub({ data }: { data: LittleClubData }) {
         <ToolButton onClick={toggleBgm} label={bgmOn ? "배경음악 끄기" : "배경음악 켜기"} active={bgmOn}>
           ♫ BGM {bgmOn ? "ON" : "OFF"}
         </ToolButton>
+        <ToolButton onClick={() => void takeShot()} label="지금 화면을 PNG로 저장">
+          📷 PNG
+        </ToolButton>
+        <ToolButton onClick={() => void endGame("exit")} label="리틀 클럽에서 나가기 (4분 시간은 계속 흘러요)">
+          나가기
+        </ToolButton>
         {bgmOn && (
           <label className="flex items-center gap-2 font-label text-[10px] uppercase tracking-[0.16em] text-cream/60">
             <span className="hidden sm:inline">{radioPlaying ? "Radio on air" : BGM_TITLES[track]}</span>
@@ -858,6 +1132,11 @@ export function LittleClub({ data }: { data: LittleClubData }) {
             <span className="pointer-events-none absolute left-2 top-2 rounded-sm bg-midnight/75 px-2 py-1 font-label text-[9px] font-semibold uppercase tracking-[0.2em] text-cream/85">
               {scene === "indoor" ? (night ? "Inside · Night lights" : "Inside the club") : "The campfire"}
               {onlineCount > 0 && <span className="ml-1.5 text-[#8fe3b0]">· ON {onlineCount}</span>}
+              {scene === "indoor" && wallCount > 0 && (
+                <span className="ml-1.5 text-butter">
+                  · 발견 {foundCount}/{wallCount}
+                </span>
+              )}
             </span>
             <ul className="sr-only" aria-label="클럽의 다른 멤버">
               {roster.map((m) => (
@@ -929,6 +1208,37 @@ export function LittleClub({ data }: { data: LittleClubData }) {
               </button>
             ))}
           </div>
+
+          {scene === "indoor" && data.wall && (
+            <div className="mt-4 border-t border-cream/15 pt-4">
+              <p className="font-label text-[10px] font-semibold uppercase tracking-[0.2em] text-butter">
+                The living club · 발견 {foundCount}/{wallCount}
+              </p>
+              {wallCount > 0 ? (
+                <>
+                  <p className="mt-1 text-[11px] leading-relaxed text-cream/55">볼더링 벽의 ✦ {wallCount}곳에 실제 MOON PROBLEMS가 숨어 있어요. 가까이 가서 열어 보세요.</p>
+                  <div className="mt-2 grid grid-cols-3 gap-2 lg:grid-cols-1">
+                    {wallProblems.map((p, i) => (
+                      <button
+                        key={p.no}
+                        type="button"
+                        onClick={() => walkToFind(i)}
+                        className={cn("flex min-h-11 flex-col items-start rounded-md border px-3 py-2 text-left transition-colors", found[i] ? "border-butter/60 bg-[#3a3424]" : "border-cream/25 bg-midnight-700 hover:bg-midnight-500")}
+                      >
+                        <span className="text-[12px] font-bold text-cream">
+                          {found[i] ? "✓" : "✦"} 발견 지점 {i + 1}
+                        </span>
+                        <span className="line-clamp-1 text-[11px] text-cream/60">{found[i] ? `${p.code} · ${p.title}` : "아직 못 찾았어요"}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {wallDone && wallMessage && <p className="mt-2 font-label text-[11px] font-semibold uppercase tracking-[0.12em] text-butter">✦ {wallMessage}</p>}
+                </>
+              ) : (
+                <p className="mt-1 text-[11px] leading-relaxed text-cream/55">지금은 벽에 숨겨 둔 문제가 없어요. 운영진이 MOON PROBLEMS를 정하면 나타나요.</p>
+              )}
+            </div>
+          )}
 
           <form
             className="mt-4 border-t border-cream/15 pt-4"
@@ -1002,6 +1312,9 @@ export function LittleClub({ data }: { data: LittleClubData }) {
         />
       )}
       {modal === "problems" && <ProblemsModal problems={data.problems} onClose={() => setModal(null)} onClimb={startClimb} />}
+      {modal === "find" && findIndex !== null && wallProblems[findIndex] && (
+        <WallCardModal problem={wallProblems[findIndex]} index={findIndex} found={foundCount} total={wallCount} done={wallDone} message={wallMessage} onClose={closeFind} />
+      )}
       {modal === "stamps" && <StampsModal profile={profile} stamps={data.stamps} onClose={() => setModal(null)} />}
       {modal === "calendar" && (
         <Modal kicker="Club calendar" title="Our calendar." wide onClose={() => setModal(null)}>
@@ -1071,6 +1384,7 @@ export function LittleClub({ data }: { data: LittleClubData }) {
 // ---------------------------------------------------------------------------
 
 function render(g: CanvasRenderingContext2D, s: GameState, t: number, now: number, moving: boolean, reduced: boolean, members: ClubMember[], placed: Map<string, [number, number]>) {
+  // (the find points and the wall's message are drawn after the lighting, below)
   const indoor = s.scene === "indoor";
   if (indoor) drawIndoor(g, s.cal);
   else drawOutdoor(g, t);
@@ -1133,6 +1447,7 @@ function render(g: CanvasRenderingContext2D, s: GameState, t: number, now: numbe
   if (indoor) {
     if (s.night) drawNight(g, t, reduced);
     else drawDay(g);
+    if (s.finds.length) drawWallFinds(g, s.finds, t, reduced);
   }
 
   // Tags and bubbles stay readable at night. Mine keeps its place; a nearby label moves up
@@ -1157,6 +1472,7 @@ function render(g: CanvasRenderingContext2D, s: GameState, t: number, now: numbe
     const bubbleTop = fit(x, tagTop - bs.h - 1, bs.w, bs.h);
     drawBubble(g, x, bubbleTop + 26, bubble);
   };
+  if (indoor && s.wallNote) drawBubble(g, 420, 44, s.wallNote.text);
   drawLabel(px, py, scale, s.tag, "ON", s.bubble);
   for (const l of labels) drawLabel(l.x, l.y, l.scale, l.tag, l.state, l.bubble);
 }
@@ -1164,6 +1480,60 @@ function render(g: CanvasRenderingContext2D, s: GameState, t: number, now: numbe
 // ---------------------------------------------------------------------------
 // UI pieces
 // ---------------------------------------------------------------------------
+
+/** The time left in this play window (server numbers, counted on this device). Calls onExpire at 0. */
+function PlayClock({ endsAt, serverNow, onExpire }: { endsAt: number; serverNow: number; onExpire: () => void }) {
+  const [left, setLeft] = useState(endsAt - serverNow);
+  const expire = useRef(onExpire);
+  useEffect(() => {
+    expire.current = onExpire;
+  });
+  useEffect(() => {
+    const deadline = Date.now() + (endsAt - serverNow);
+    const tick = () => {
+      const l = deadline - Date.now();
+      setLeft(l);
+      if (l <= 0) expire.current();
+    };
+    const id = window.setInterval(tick, 500);
+    return () => window.clearInterval(id);
+  }, [endsAt, serverNow]);
+  const low = left <= 30_000;
+  return (
+    <span role="timer" aria-label={`남은 시간 ${clockText(left)}`} className={cn("rounded-sm border px-3 py-2 font-mono text-[12px] font-semibold", low ? "border-[#e8895a] bg-[#4a2a22] text-[#ffb08a]" : "border-cream/35 text-cream")}>
+      ⏱ {clockText(left)}
+    </span>
+  );
+}
+
+/** THE LIVING CLUB card: a real MOON PROBLEM, with only what its own page shows everyone. */
+function WallCardModal({ problem: p, index, found, total, done, message, onClose }: { problem: WallProblem; index: number; found: number; total: number; done: boolean; message: string; onClose: () => void }) {
+  const info = gradeInfo(p.grade);
+  return (
+    <Modal kicker={`The living club · 발견 지점 ${index + 1} · ${found}/${total}`} title={p.title} onClose={onClose}>
+      {done && message && <p className="mt-3 rounded-sm bg-midnight px-3 py-2 font-label text-[12px] font-semibold uppercase tracking-[0.14em] text-butter">✦ {message}</p>}
+      <div className="mt-3 flex items-center gap-3">
+        <span aria-hidden="true" className="h-9 w-2 shrink-0 rounded-sm border border-midnight/30" style={{ background: info?.swatch ?? "#a88d64" }} />
+        <p className="font-mono text-[12px] text-brown">
+          {p.code}
+          {p.grade ? ` · ${gradeLabel(p.grade)}` : ""}
+          {p.wall ? ` · ${p.wall}` : ""}
+          {p.setterName ? ` · Setter ${p.setterName}` : ""}
+        </p>
+      </div>
+      {p.setterNote && <blockquote className="mt-3 whitespace-pre-line border-l-4 border-plywood-400 pl-3 text-[14px] leading-relaxed">{p.setterNote}</blockquote>}
+      <p className="mt-3 text-[13px] text-ink-soft">
+        {p.reviews > 0 ? `회원 후기 ${p.reviews}개 · 완등 ${p.sends}명${p.funAverage !== null ? ` · 재미 ${p.funAverage.toFixed(1)}` : ""}` : "아직 회원 반응이 없어요."}
+      </p>
+      <Link href={`/problems/${p.no}`} className={cn(buttonPrimary, "mt-4 w-full")}>
+        자세히 보기 →
+      </Link>
+      <p className="mt-3 rounded-sm bg-plywood-200 px-3 py-2 text-[11px] leading-relaxed text-ink-soft">
+        벽의 ✦ 표시는 게임 속 발견 지점이에요. 실제 벽에서 이 문제가 있는 자리를 뜻하지 않아요. 완등·평가·후기는 문제 화면에서만 남겨요. 문제 화면에 다녀와도 4분 시간은 계속 흘러요.
+      </p>
+    </Modal>
+  );
+}
 
 function ToolButton({ onClick, label, active, children }: { onClick: () => void; label: string; active?: boolean; children: ReactNode }) {
   return (

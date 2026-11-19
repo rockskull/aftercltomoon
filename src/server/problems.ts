@@ -1,5 +1,6 @@
 import "server-only";
 import type { BlockReason } from "@/lib/access";
+import type { WallProblem } from "@/lib/little-club";
 import { viewerAccess } from "./auth/access";
 import { readSession } from "./auth/session";
 import { getViewer, isOperator } from "./auth/viewer";
@@ -124,6 +125,35 @@ export async function loadRecentProblems(limit: number): Promise<ProblemCard[]> 
     .sort((a, b) => b.no - a.no)
     .slice(0, limit)
     .map((p) => card(p, reviews));
+}
+
+/**
+ * THE LIVING CLUB: the (up to) three problems to find on the game's wall. The crew's pick by MOON
+ * number (settings), else the newest active ones. Only active problems, never invented ones; a pick
+ * that was archived or deleted is simply left out. Only what the problem page shows everyone: no Tips
+ * (they are hidden behind a tap there), no individual reviews — just the real counts.
+ */
+export async function loadWallProblems(numbers: number[], limit: number): Promise<WallProblem[]> {
+  const { problems, reviews } = await readProblems();
+  const active = problems.filter((p) => p.status === "active");
+  const picked = numbers.length
+    ? numbers.map((n) => active.find((p) => p.no === n)).filter((p): p is (typeof active)[number] => p !== undefined)
+    : [...active].sort((a, b) => b.no - a.no);
+  return picked.slice(0, limit).map((p) => {
+    const stats = problemStats(reviews, p.id);
+    return {
+      no: p.no,
+      code: problemCode(p.no),
+      title: p.title,
+      grade: p.grade,
+      wall: p.wall,
+      setterName: p.setterName,
+      setterNote: p.setterNote,
+      reviews: stats.reviews,
+      sends: stats.sends,
+      funAverage: stats.funAverage,
+    };
+  });
 }
 
 /** One problem by its number ("12") or id. Deleted ones only for the crew. */

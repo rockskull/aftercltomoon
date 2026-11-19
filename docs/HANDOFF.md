@@ -20,6 +20,13 @@
 - Vercel 환경변수의 `CLUB_API_URL`·`CLUB_API_SECRET`은 이전이 끝났으니 지워도 돼요(남아 있어도 DB가 우선).
 - ⚠️ 로컬 `.env.local`에 `DATABASE_URL`이 있으면 `npm run dev`도 **실제 DB**를 써요. 시험은 Neon 개발 브랜치나 데모(DATABASE_URL 없이)로.
 
+### THE LITTLE CLUB v8.1 (2026-11-19): 4분 · 강퇴 때만 PNG · 10분 · THE LIVING CLUB
+
+- 요구사항: `docs/little-club/handoff-v8.1/`(05가 PNG 정정). 문서는 "v6에 4분 제한·PNG·10분 제한이 이미 있다"고 했지만 실제로는 없어서, 사용자 결정(11-19)으로 이번에 새로 만들었어요. 동기화(작업 A)는 v7에서 이미 구현돼 있어 4분 종료 경로에만 연결했어요.
+- ⚠️ **DB:** `club_sessions.play_started_at` 열 추가(`npm run db:migrate -- --schema-only`, 없는 열만 추가).
+- 문제 지정: ADMIN → 설정 → 리틀 클럽 · 벽에서 찾는 문제(MOON 번호, 운영자도 가능). 비우면 최신 활성 3개.
+- 시간 정책을 바꾸려면 `PLAY_MS` / `COOLDOWN_MS`(src/lib/little-club.ts). 판정은 서버(`playStateOf`), 브라우저 시계는 표시용.
+
 ### THE LITTLE CLUB (`/little-club`, 2026-11-16 · v7 동기화 2026-11-17)
 
 - 로그인하면 들어오는 픽셀 아지트. 홈 **아지트 들어가기**·MY 메뉴에서 들어가요. 자세한 규칙은 README "THE LITTLE CLUB", 요구사항은 `docs/little-club/handoff-v7/`(정본, 처음 버전은 `handoff/`), 검수 결과는 `docs/little-club/VALIDATION.md`.

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { bannerKind, type BannerKind } from "@/lib/access";
 import { getClubData } from "@/lib/club-data";
 import { parseMoment } from "@/lib/dates";
-import { cleanBubble, cleanNickname, type ClubMember, type ClubSyncResponse } from "@/lib/little-club";
+import { cleanBubble, cleanNickname, WALL_FINDS, type ClubMember, type ClubPlay, type ClubSyncResponse, type WallProblem } from "@/lib/little-club";
 import type { RadioState } from "@/lib/radio";
 import type { MyStamp } from "@/lib/stamps";
 import type { ClubEvent, Enrollment } from "@/lib/types";
@@ -11,9 +11,9 @@ import { viewerAccess } from "./auth/access";
 import { readSession } from "./auth/session";
 import { getViewer, type Viewer } from "./auth/viewer";
 import type { Member } from "./domain/model";
-import { CLUB_TABLE_MISSING, clubMembersOf, clubProfileOf, GUEST_KEY_PREFIX, isGuestKey, littleClubVerdict, planClubStatus, planSessionSignal, type ClubBlock, type ClubProfile } from "./domain/little-club";
+import { CLUB_TABLE_MISSING, clubMembersOf, clubProfileOf, GUEST_KEY_PREFIX, isGuestKey, littleClubVerdict, planClubStatus, planSessionSignal, playStateOf, type ClubBlock, type ClubProfile } from "./domain/little-club";
 import { memberStamps } from "./domain/stamps";
-import { loadProblemList } from "./problems";
+import { loadProblemList, loadWallProblems } from "./problems";
 import { loadRadio } from "./radio";
 import { readTables, runCommit } from "./store";
 import { LITTLE_CLUB_TABLES, STAMP_TABLES, SYNC_TABLES, type Tables } from "./store/schema";
@@ -105,23 +105,27 @@ export async function syncClub(gate: OpenGate, sessionId: string, now: number): 
   const key = gate.profileKey;
   const allowed = allowedIn(gate.viewer);
   const seen: { data?: Tables } = {};
+  let play: ClubPlay | null = null;
   try {
-    const outcome = await runCommit(SYNC_TABLES, (data) => {
+    const outcome = await runCommit<ClubPlay>(SYNC_TABLES, (data) => {
       seen.data = data;
       return planSessionSignal(data, { now, key, session: tabKey(key, sessionId) });
     });
     if (!outcome.ok && outcome.message !== CLUB_TABLE_MISSING) console.warn("[little-club] sync signal not saved:", outcome.message);
+    if (outcome.ok) play = outcome.result ?? (seen.data ? playStateOf(seen.data, key, now) : null);
   } catch (error) {
     console.error("[little-club] sync failed", error); // e.g. no session table yet
     seen.data = undefined;
   }
+  // The 4 minutes are over: the game ends here, whatever the browser thinks.
+  if (play?.phase === "cooldown") return { ok: false, reason: "cooldown", until: play.until, now };
   if (seen.data?.ClubProfiles !== undefined && seen.data.ClubSessions !== undefined) {
-    return { ok: true, presence: true, members: toMembers(seen.data, key, now, allowed), me: meOf(seen.data, key) };
+    return { ok: true, presence: true, members: toMembers(seen.data, key, now, allowed), me: meOf(seen.data, key), play: play?.phase === "playing" ? { endsAt: play.endsAt } : null, now };
   }
   // Without the session table: status lines still come through, everyone shows OFF.
   const { tables, profilesReady } = await readClubTables();
   if (!profilesReady) return { ok: false, reason: "unavailable" };
-  return { ok: true, presence: false, members: toMembers({ ClubProfiles: tables.ClubProfiles }, key, now, allowed), me: meOf(tables, key) };
+  return { ok: true, presence: false, members: toMembers({ ClubProfiles: tables.ClubProfiles }, key, now, allowed), me: meOf(tables, key), play: null, now };
 }
 
 /** Best effort when a tab is hidden or closed: drop that tab's own entry (other tabs stay ON; the TTL covers a lost request). */
@@ -139,7 +143,8 @@ export type StatusResult = { ok: true; statusText: string | null } | { ok: false
 /** Save or clear the caller's own status line (on the save / clear button only). */
 export async function saveClubStatus(gate: OpenGate, status: string, now: number): Promise<StatusResult> {
   try {
-    const outcome = await runCommit<{ statusText: string | null }>(LITTLE_CLUB_TABLES, (data) => planClubStatus(data, { now, key: gate.profileKey, status }));
+    // With the sessions, so a line can't be changed while the person is waiting to come back.
+    const outcome = await runCommit<{ statusText: string | null }>(SYNC_TABLES, (data) => planClubStatus(data, { now, key: gate.profileKey, status }));
     if (!outcome.ok) return { ok: false, message: outcome.message };
     // noop (unchanged) has no result: the line is already what was sent.
     return { ok: true, statusText: outcome.result ? outcome.result.statusText : cleanBubble(status) || null };
@@ -223,6 +228,10 @@ export interface LittleClubData extends ClubNotices {
   presenceReady: boolean;
   /** Everyone else in the club, ON or OFF, with their status line (the first sync refreshes it). */
   members: ClubMember[];
+  /** My play window as of `now` (4 minutes, then a 10-minute wait). */
+  play: ClubPlay;
+  /** THE LIVING CLUB: the real problems to find on the wall (0–3) and the message once all are opened. */
+  wall: { problems: WallProblem[]; message: string } | null;
   /** Request time (server), so the wall calendar shows the same day. */
   now: number;
   /** The club calendar (the same public schedule as the home page). */
@@ -230,12 +239,13 @@ export interface LittleClubData extends ClubNotices {
 }
 
 export async function loadLittleClub(viewer: Viewer, member: Member | null, profileKey: string, now: number): Promise<LittleClubData> {
-  const [profile, stamps, problems, radio, calendar] = await Promise.all([
+  const [profile, stamps, problems, radio, calendar, wall] = await Promise.all([
     readClubTables().then(({ tables, profilesReady, presenceReady }) => ({
       ready: profilesReady,
       profile: profilesReady ? clubProfileOf(tables, profileKey) : null,
       presenceReady,
       members: profilesReady ? toMembers(tables, profileKey, now, allowedIn(viewer)) : [],
+      play: presenceReady ? playStateOf(tables, profileKey, now) : ({ phase: "fresh" } as ClubPlay),
     })),
     (member ? readTables(STAMP_TABLES) : Promise.resolve(null))
       .then((t) => (t && member ? memberStamps(t, member.id).filter((s) => s.awardedAt !== null) : []))
@@ -262,6 +272,13 @@ export async function loadLittleClub(viewer: Viewer, member: Member | null, prof
     getClubData()
       .then((d) => (d.source === "error" ? null : { events: d.events, enrollments: d.enrollments, now }))
       .catch(() => null),
+    // Read once with the page (never with the 30-second sync).
+    loadWallProblems(viewer.club.settings.littleClubWall, WALL_FINDS)
+      .then((problems) => ({ problems, message: viewer.club.settings.littleClubWallMessage }))
+      .catch((error) => {
+        console.error("[little-club] wall problems read failed", error);
+        return null;
+      }),
   ]);
   return {
     profile: profile.profile,
@@ -269,6 +286,8 @@ export async function loadLittleClub(viewer: Viewer, member: Member | null, prof
     profileStoreReady: profile.ready,
     presenceReady: profile.presenceReady,
     members: profile.members,
+    play: profile.play,
+    wall,
     stamps,
     problems,
     radio,

@@ -149,15 +149,32 @@ describe("site settings", () => {
     expect(data.AuditLog!.at(-1)).toMatchObject({ action: "settings.edit", target_id: "club_notice" });
   });
 
-  it("operators may change the club notice, and nothing else in the settings", () => {
+  it("operators may change the club notice and the Little Club wall, and nothing else in the settings", () => {
     const data = tables();
     const notice = JSON.stringify([{ title: "청소", body: "마지막 사람이 정리" }]);
     const planned = planSettingsSave(data, { ...operator, values: { club_notice: notice } });
     if ("refuse" in planned) throw new Error(planned.refuse);
     expect(applyCommit(data, planned.commit)).toEqual({ ok: true });
-    expect(planSettingsSave(data, { ...operator, values: { radio_player: "on" } })).toEqual({ refuse: expect.stringContaining("아지트 공지만") });
+    expect(planSettingsSave(data, { ...operator, values: { radio_player: "on" } })).toEqual({ refuse: expect.stringContaining("아지트 공지와 리틀 클럽 벽 문제만") });
+    const wall = planSettingsSave(data, { ...operator, values: { little_club_wall: "MOON 004 / 1,7", little_club_wall_message: "  벽이   기억해요 " } });
+    if ("refuse" in wall) throw new Error(wall.refuse);
+    applyCommit(data, wall.commit);
+    expect(toSettings(data.Settings)).toMatchObject({ littleClubWall: [4, 1, 7], littleClubWallMessage: "벽이 기억해요" });
     expect(planSettingsSave(data, { ...operator, values: { club_notice: notice, apply_notice: "x" } })).toHaveProperty("refuse");
     expect(planStampDefinitionSave(data, { ...operator, stampId: "ST-01", name: "X", description: "", active: true, imageKey: "st-01" })).toHaveProperty("refuse");
+  });
+});
+
+describe("the Little Club wall setting", () => {
+  it("takes up to three MOON numbers (or nothing = the newest problems) and a short message", () => {
+    const data = tables();
+    expect(planSettingsSave(data, { ...admin, values: { little_club_wall: "1, 2, 3, 4" } })).toHaveProperty("refuse");
+    expect(planSettingsSave(data, { ...admin, values: { little_club_wall: "투자자의 코" } })).toHaveProperty("refuse");
+    expect(planSettingsSave(data, { ...admin, values: { little_club_wall_message: "가".repeat(61) } })).toHaveProperty("refuse");
+    const cleared = planSettingsSave(data, { ...admin, values: { little_club_wall: "" } });
+    if ("refuse" in cleared) throw new Error(cleared.refuse);
+    applyCommit(data, cleared.commit);
+    expect(toSettings(data.Settings)).toMatchObject({ littleClubWall: [], littleClubWallMessage: "THE WALL REMEMBERS. DO YOU?" });
   });
 });
 

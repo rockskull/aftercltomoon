@@ -1,3 +1,4 @@
+import { parseWallNumbers, WALL_MESSAGE_MAX } from "@/lib/little-club";
 import { normalizeNotices, noticeProblem, serializeNotices, type NoticeItem } from "@/lib/club-notice";
 import { toDateKey } from "@/lib/dates";
 import { monthBounds, overlapping } from "@/lib/membership";
@@ -371,20 +372,41 @@ export const SETTING_KEYS = {
   consent_member_url: "회원 등록 동의서 (Google 설문)",
   radio_player: "AFTER HOURS RADIO 아지트 플레이어 (on/off)",
   club_notice: "아지트 공지 (홈·MY에 공개, JSON 목록: title/body)",
+  little_club_wall: "THE LITTLE CLUB 벽에서 찾는 문제 (MOON 번호 3개까지, 쉼표로. 비우면 최신 문제)",
+  little_club_wall_message: "THE LITTLE CLUB 세 문제를 다 찾았을 때 문구",
 } as const;
+
+/** Settings the crew who run MOON PROBLEMS may change (the rest are admin-only, except the notice). */
+const PROBLEM_SETTING_KEYS: readonly string[] = ["little_club_wall", "little_club_wall_message"];
 export type SettingKey = keyof typeof SETTING_KEYS;
 
 export function planSettingsSave(data: Tables, ctx: Ctx & { values: Partial<Record<SettingKey, string>> }): Planned {
   // Operators may change the club notice only; everything else is for admins (src/lib/permissions.ts).
   const keys = Object.keys(ctx.values);
-  const allowed = keys.every((k) => (k === "club_notice" ? can({ role: ctx.actorRole, status: "active" }, "notice") : can({ role: ctx.actorRole, status: "active" }, "settings")));
-  if (!keys.length || !allowed) return { refuse: ctx.actorRole === "operator" ? "운영자는 설정 중 아지트 공지만 바꿀 수 있어요." : ADMIN_ONLY };
+  const allowed = keys.every((k) =>
+    k === "club_notice"
+      ? can({ role: ctx.actorRole, status: "active" }, "notice")
+      : PROBLEM_SETTING_KEYS.includes(k)
+        ? can({ role: ctx.actorRole, status: "active" }, "problems")
+        : can({ role: ctx.actorRole, status: "active" }, "settings"),
+  );
+  if (!keys.length || !allowed) return { refuse: ctx.actorRole === "operator" ? "운영자는 설정 중 아지트 공지와 리틀 클럽 벽 문제만 바꿀 수 있어요." : ADMIN_ONLY };
   const values = Object.fromEntries(Object.entries(ctx.values).map(([k, v]) => [k, (v ?? "").trim()])) as Partial<Record<SettingKey, string>>;
   if (values.apply_notice !== undefined && values.apply_notice.length > 500) return { refuse: "안내 문구는 500자까지 쓸 수 있어요." };
   for (const key of ["consent_daily_url", "consent_member_url"] as const) {
     if (values[key] !== undefined && !isHttpsUrl(values[key]!)) return { refuse: "동의서 링크는 https:// 로 시작하는 주소여야 해요." };
   }
   if (values.radio_player !== undefined && !["on", "off"].includes(values.radio_player)) return { refuse: "라디오 플레이어는 on 또는 off예요." };
+  if (values.little_club_wall !== undefined) {
+    const numbers = parseWallNumbers(values.little_club_wall);
+    if (numbers === null) return { refuse: "벽 문제는 MOON 번호를 3개까지 쉼표로 적어 주세요. 예: 1, 4, 7 (비우면 최신 문제)" };
+    values.little_club_wall = numbers.join(", ");
+  }
+  if (values.little_club_wall_message !== undefined) {
+    const message = values.little_club_wall_message.replace(/[\p{Cc}\p{Cf}]/gu, "").replace(/\s+/g, " ").trim();
+    if ([...message].length > WALL_MESSAGE_MAX) return { refuse: `발견 문구는 ${WALL_MESSAGE_MAX}자까지 쓸 수 있어요.` };
+    values.little_club_wall_message = message;
+  }
   if (values.club_notice !== undefined) {
     // Stored in a normal form, and never anything that must not be public (door code, account, amounts).
     let items: NoticeItem[];
