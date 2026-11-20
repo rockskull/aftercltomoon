@@ -28,7 +28,7 @@ export function NoticeEditor({ initial }: { initial: NoticeItem[] }) {
     });
 
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <ActionForm action={saveSettings} className="flex flex-col gap-3">
         <input type="hidden" name="club_notice" value={JSON.stringify(clean)} />
         <ol className="flex flex-col gap-3">

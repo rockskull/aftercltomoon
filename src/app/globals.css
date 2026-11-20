@@ -58,6 +58,51 @@
     outline: 2px solid var(--color-orange);
     outline-offset: 2px;
   }
+
+  /*
+   * A form field never makes its box (or the page) wider than the screen. Fields without a width keep
+   * their built-in size (~20 characters), which sticks out on narrow phones, and phones with a larger
+   * page zoom or text size are narrower in CSS pixels (280–320px). A percentage max-width also lets
+   * grid and flex rows shrink around them.
+   */
+  input,
+  select,
+  textarea {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* …and the boxes around them may shrink too (a grid or flex item won't go below its content's
+     built-in width otherwise; fieldsets even default to min-content). Text inside simply wraps. */
+  label,
+  fieldset {
+    min-width: 0;
+  }
+}
+
+/*
+ * Outside the layers on purpose, so it wins over the text-[15px] / text-[13px] utilities: on touch
+ * screens fields use 16px text. iPhone browsers zoom in when a field under 16px is tapped and often
+ * stay zoomed, so the field and the page look wider than the screen.
+ */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* iOS date / time fields: drop the native box so they take the width they are given. */
+@supports (-webkit-touch-callout: none) {
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="month"] {
+    -webkit-appearance: none;
+    appearance: none;
+    text-align: left;
+  }
 }
 
 @layer components {

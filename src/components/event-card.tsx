@@ -79,7 +79,8 @@ export function EventCard({ event, status }: { event: ClubEvent; status: EventDi
           </p>
         )}
         <EventMeta event={event} className="mt-2.5" />
-        <div className="relative z-10 mt-3.5 flex gap-2">
+        {/* Side by side when they fit; on a narrow phone JOIN goes to the next line instead of pushing the card wider. */}
+        <div className="relative z-10 mt-3.5 flex flex-wrap gap-2">
           <Link href={eventHref(event)} className={cn(buttonSecondary, "h-10 flex-1 px-3 text-[12px]")}>
             View event
           </Link>

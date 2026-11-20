@@ -1113,7 +1113,7 @@ export function LittleClub({ data }: { data: LittleClubData }) {
         )}
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
         <div className="min-w-0">
           <div className="relative overflow-hidden rounded-md border-2 border-cream/30 bg-[#091324] shadow-[0_10px_0_#08111b]">
             <canvas
@@ -1636,7 +1636,7 @@ function RabbitTile({ type, reduced }: { type: Mbti; reduced: boolean }) {
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
   }, [type, reduced]);
-  return <canvas ref={ref} width={64} height={64} aria-hidden="true" className="mx-auto block h-14 w-14 [image-rendering:pixelated]" />;
+  return <canvas ref={ref} width={64} height={64} aria-hidden="true" className="mx-auto block aspect-square h-auto w-full max-w-14 [image-rendering:pixelated]" />;
 }
 
 function ProfileModal({
